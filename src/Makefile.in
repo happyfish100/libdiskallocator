@@ -1,0 +1,54 @@
+.SUFFIXES: .c .lo
+
+COMPILE = $(CC) $(CFLAGS) -fPIC
+INC_PATH = -Iinclude -I/usr/local/include
+LIB_PATH = $(LIBS) -lfastcommon 
+TARGET_LIB = $(TARGET_PREFIX)/$(LIB_VERSION)
+
+TOP_HEADERS =
+
+STORAGE_HEADER =
+
+DIO_HEADER =
+
+ALL_HEADERS  = $(TOP_HEADERS) $(STORAGE_HEADER) $(DIO_HEADER)
+
+SHARED_OBJS = storage/storage_config.o storage/store_path_index.o \
+              storage/trunk_allocator.o storage/storage_allocator.o \
+              storage/trunk_maker.o storage/trunk_prealloc.o  \
+              storage/trunk_reclaim.o storage/trunk_id_info.o \
+              storage/trunk_freelist.o dio/trunk_write_thread.o  \
+              dio/trunk_read_thread.o dio/trunk_fd_cache.o \
+              dio/read_buffer_pool.o
+
+ALL_OBJS = $(SHARED_OBJS)
+ALL_LIBS = libdiskallocator.so
+
+all: $(ALL_LIBS)
+
+libdiskallocator.so: $(SHARED_OBJS)
+
+	cc -shared -o $@ $^ $(LIB_PATH)
+
+.lo:
+	$(COMPILE) -o $@ $<  $(SHARED_OBJS) $(LIB_PATH) $(INC_PATH)
+.c:
+	$(COMPILE) -o $@ $<  $(ALL_OBJS) $(LIB_PATH) $(INC_PATH)
+.c.lo:
+	$(COMPILE) -c -o $@ $<  $(INC_PATH)
+install:
+	mkdir -p $(TARGET_LIB)
+	mkdir -p $(TARGET_PREFIX)/lib
+	mkdir -p $(TARGET_PREFIX)/include/diskallocator/storage
+	mkdir -p $(TARGET_PREFIX)/include/diskallocator/dio
+
+	install -m 755 $(ALL_LIBS) $(TARGET_LIB)
+	cp -f $(TOP_HEADERS) $(TARGET_PREFIX)/include/diskallocator/
+	cp -f $(STORAGE_HEADER) $(TARGET_PREFIX)/include/diskallocator/storage/
+	cp -f $(DIO_HEADER) $(TARGET_PREFIX)/include/diskallocator/dio/
+
+	@BUILDROOT=$$(echo "$(TARGET_PREFIX)" | grep BUILDROOT); \
+	if [ -z "$$BUILDROOT" ] && [ ! -e $(TARGET_PREFIX)/lib/libdiskallocator.so ]; then ln -s $(TARGET_LIB)/libdiskallocator.so $(TARGET_PREFIX)/lib/libdiskallocator.so; fi
+clean:
+	rm -f $(ALL_OBJS) $(ALL_LIBS)
+
