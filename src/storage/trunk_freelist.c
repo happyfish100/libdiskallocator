@@ -19,7 +19,7 @@
 #include "fastcommon/logger.h"
 #include "fastcommon/fast_mblock.h"
 #include "fastcommon/sched_thread.h"
-#include "../server_global.h"
+#include "sf/sf_global.h"
 #include "trunk_maker.h"
 #include "storage_allocator.h"
 #include "trunk_freelist.h"

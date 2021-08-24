@@ -18,7 +18,8 @@
 #define _READ_BUFFER_POOL_H
 
 #include "fastcommon/fc_list.h"
-#include "../../common/fs_types.h"
+#include "sf/sf_types.h"
+#include "sf/sf_global.h"
 
 typedef struct aligned_read_buffer {
     char *buff;  //aligned by device block size

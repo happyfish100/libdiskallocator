@@ -121,6 +121,8 @@ typedef struct {
 
     int my_server_id;
     string_t data_path;
+    int binlog_buffer_size;
+    int file_block_size;
 
 } FSStorageConfig;
 
@@ -132,7 +134,8 @@ extern "C" {
 
     int storage_config_load(FSStorageConfig *storage_cfg,
             const char *storage_filename, const int my_server_id,
-            string_t *data_path);
+            const int file_block_size, const string_t *data_path,
+            const int binlog_buffer_size);
 
     int storage_config_calc_path_avail_space(FSStoragePathInfo *path_info);
 

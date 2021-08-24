@@ -443,11 +443,11 @@ static int load_global_items(FSStorageConfig *storage_cfg,
                 (int64_t)FS_TRUNK_FILE_MAX_SIZE);
         storage_cfg->trunk_file_size = FS_TRUNK_FILE_MAX_SIZE;
     }
-    if (storage_cfg->trunk_file_size <= FS_FILE_BLOCK_SIZE) {
+    if (storage_cfg->trunk_file_size <= storage_cfg->file_block_size) {
         logError("file: "__FILE__", line: %d, "
                 "trunk_file_size: %"PRId64" is too small, "
                 "<= block size %d", __LINE__, storage_cfg->
-                trunk_file_size, FS_FILE_BLOCK_SIZE);
+                trunk_file_size, storage_cfg->file_block_size);
         return EINVAL;
     }
 
@@ -674,7 +674,8 @@ static int load_store_path_indexes(FSStorageConfig *storage_cfg,
 
 int storage_config_load(FSStorageConfig *storage_cfg,
         const char *storage_filename, const int my_server_id,
-        string_t *data_path)
+        const int file_block_size, const string_t *data_path,
+        const int binlog_buffer_size)
 {
     IniContext ini_context;
     IniFullContext ini_ctx;
@@ -688,14 +689,17 @@ int storage_config_load(FSStorageConfig *storage_cfg,
         return result;
     }
 
+    storage_cfg->my_server_id = my_server_id;
+    storage_cfg->file_block_size = file_block_size;
+    storage_cfg->data_path = *data_path;
+    storage_cfg->binlog_buffer_size = binlog_buffer_size;
+
     FAST_INI_SET_FULL_CTX_EX(ini_ctx, storage_filename, NULL, &ini_context);
     result = load_from_config_file(storage_cfg, &ini_ctx);
     iniFreeContext(&ini_context);
     if (result == 0) {
         result = load_store_path_indexes(storage_cfg, storage_filename);
     }
-    storage_cfg->my_server_id = my_server_id;
-    storage_cfg->data_path = *data_path;
     return result;
 }
 

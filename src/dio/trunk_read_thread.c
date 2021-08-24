@@ -34,7 +34,6 @@
 #include "fastcommon/uniq_skiplist.h"
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
-#include "../server_global.h"
 #include "../binlog/trunk_binlog.h"
 #include "trunk_fd_cache.h"
 #ifdef OS_LINUX
@@ -299,12 +298,13 @@ void trunk_read_thread_terminate()
 }
 
 #ifdef OS_LINUX
-    int trunk_read_thread_push(OBSliceEntry *slice, AlignedReadBuffer
-            **aligned_buffer, trunk_read_io_notify_func notify_func,
-            void *notify_arg)
+int trunk_read_thread_push(const FSTrunkSpaceInfo *space,
+        const int read_bytes, AlignedReadBuffer **aligned_buffer,
+        trunk_read_io_notify_func notify_func, void *notify_arg)
 #else
-int trunk_read_thread_push(OBSliceEntry *slice, char *buff,
-            trunk_read_io_notify_func notify_func, void *notify_arg)
+int trunk_read_thread_push(const FSTrunkSpaceInfo *space,
+        const int read_bytes, char *buff, trunk_read_io_notify_func
+        notify_func, void *notify_arg)
 #endif
 {
     TrunkReadPathContext *path_ctx;
@@ -312,15 +312,16 @@ int trunk_read_thread_push(OBSliceEntry *slice, char *buff,
     TrunkReadIOBuffer *iob;
 
     path_ctx = trunk_io_ctx.path_ctx_array.paths +
-        slice->space.store->index;
-    thread_ctx = path_ctx->reads.contexts + slice->
-        space.id_info.id % path_ctx->reads.count;
+        space->store->index;
+    thread_ctx = path_ctx->reads.contexts + space->
+        id_info.id % path_ctx->reads.count;
     iob = (TrunkReadIOBuffer *)fast_mblock_alloc_object(&thread_ctx->mblock);
     if (iob == NULL) {
         return ENOMEM;
     }
 
-    iob->slice = slice;
+    iob->space = *space;
+    iob->read_bytes = read_bytes;
 #ifdef OS_LINUX
     iob->aligned_buffer = aligned_buffer;
 #else
@@ -382,30 +383,30 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
     int result;
     int fd;
 
-    new_offset = MEM_ALIGN_FLOOR(iob->slice->space.offset, ctx->block_size);
-    read_bytes = MEM_ALIGN_CEIL(iob->slice->ssize.length, ctx->block_size);
-    offset = iob->slice->space.offset - new_offset;
+    new_offset = MEM_ALIGN_FLOOR(iob->space.offset, ctx->block_size);
+    read_bytes = MEM_ALIGN_CEIL(iob->read_bytes, ctx->block_size);
+    offset = iob->space.offset - new_offset;
     if (offset > 0) {
-        if (new_offset + read_bytes < iob->slice->space.offset +
-                iob->slice->ssize.length)
+        if (new_offset + read_bytes < iob->space.offset +
+                iob->read_bytes)
         {
             read_bytes += ctx->block_size;
         }
     }
 
     *(iob->aligned_buffer) = aligned_buffer_new(ctx->indexes.path,
-            offset, iob->slice->ssize.length, read_bytes);
+            offset, iob->read_bytes, read_bytes);
     if (*(iob->aligned_buffer) == NULL) {
         return ENOMEM;
     }
 
     /*
     logInfo("space.offset: %"PRId64", new_offset: %"PRId64", "
-            "offset: %d, read_bytes: %d, size: %d", iob->slice->space.offset,
+            "offset: %d, read_bytes: %d, size: %d", iob->space.offset,
             new_offset, offset, read_bytes, *(iob->aligned_buffer)->size);
             */
 
-    if ((result=get_read_fd(ctx, &iob->slice->space, &fd)) != 0) {
+    if ((result=get_read_fd(ctx, &iob->space, &fd)) != 0) {
         read_buffer_pool_free(*(iob->aligned_buffer));
         *(iob->aligned_buffer) = NULL;
         return result;
@@ -531,20 +532,20 @@ static int process_aio(TrunkReadThreadContext *ctx)
             result = 0;
         } else {
             trunk_fd_cache_delete(&ctx->fd_cache,
-                    iob->slice->space.id_info.id);
+                    iob->space.id_info.id);
 
             if ((int)event->res < 0) {
                 result = -1 * event->res;
             } else {
                 result = EBUSY;
             }
-            get_trunk_filename(&iob->slice->space, trunk_filename,
+            get_trunk_filename(&iob->space, trunk_filename,
                     sizeof(trunk_filename));
             logError("file: "__FILE__", line: %d, "
                     "read trunk file: %s fail, offset: %"PRId64", "
                     "expect length: %d, read return: %d, errno: %d, "
                     "error info: %s", __LINE__, trunk_filename,
-                    iob->slice->space.offset - (*(iob->aligned_buffer))->offset,
+                    iob->space.offset - (*(iob->aligned_buffer))->offset,
                     (*(iob->aligned_buffer))->read_bytes, (int)event->res, result,
                     STRERROR(result));
         }
@@ -582,15 +583,15 @@ static int do_read_slice(TrunkReadThreadContext *ctx, TrunkReadIOBuffer *iob)
     int data_len;
     int result;
 
-    if ((result=get_read_fd(ctx, &iob->slice->space, &fd)) != 0) {
+    if ((result=get_read_fd(ctx, &iob->space, &fd)) != 0) {
         return result;
     }
 
     data_len = 0;
-    remain = iob->slice->ssize.length;
+    remain = iob->read_bytes;
     while (remain > 0) {
         if ((bytes=pread(fd, iob->data + data_len, remain,
-                        iob->slice->space.offset + data_len)) <= 0)
+                        iob->space.offset + data_len)) <= 0)
         {
             char trunk_filename[PATH_MAX];
 
@@ -600,14 +601,14 @@ static int do_read_slice(TrunkReadThreadContext *ctx, TrunkReadIOBuffer *iob)
             }
 
             trunk_fd_cache_delete(&ctx->fd_cache,
-                    iob->slice->space.id_info.id);
+                    iob->space.id_info.id);
 
-            get_trunk_filename(&iob->slice->space, trunk_filename,
+            get_trunk_filename(&iob->space, trunk_filename,
                     sizeof(trunk_filename));
             logError("file: "__FILE__", line: %d, "
                     "read trunk file: %s fail, offset: %"PRId64", "
                     "errno: %d, error info: %s", __LINE__, trunk_filename,
-                    iob->slice->space.offset + data_len,
+                    iob->space.offset + data_len,
                     result, STRERROR(result));
             return result;
         }

@@ -225,7 +225,7 @@ static bool can_add_to_freelist(FSTrunkFileInfo *trunk_info)
     }
 
     remain_size = FS_TRUNK_AVAIL_SPACE(trunk_info);
-    if (remain_size < FS_FILE_BLOCK_SIZE) {
+    if (remain_size < g_storage_cfg.file_block_size) {
         return false;
     }
 

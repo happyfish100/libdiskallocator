@@ -22,9 +22,6 @@
 #include "fastcommon/uniq_skiplist.h"
 #include "sf/sf_types.h"
 
-//TODO
-#define FS_FILE_BLOCK_SIZE    (4 * 1024 * 1024)
-
 #define FS_SPACE_ALIGN_SIZE  8
 #define FS_TRUNK_BINLOG_MAX_RECORD_SIZE    128
 #define FS_TRUNK_BINLOG_SUBDIR_NAME      "trunk"

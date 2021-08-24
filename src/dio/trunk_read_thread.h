@@ -21,9 +21,7 @@
 #ifdef OS_LINUX
 #include <libaio.h>
 #endif
-#include "../../common/fs_types.h"
 #include "../storage/storage_config.h"
-#include "../storage/object_block_index.h"
 #include "../storage/trunk_allocator.h"
 #include "../storage/storage_allocator.h"
 #ifdef OS_LINUX
@@ -37,7 +35,8 @@ typedef void (*trunk_read_io_notify_func)(struct trunk_read_io_buffer
         *record, const int result);
 
 typedef struct trunk_read_io_buffer {
-    OBSliceEntry *slice;     //for slice op
+    FSTrunkSpaceInfo space;
+    int read_bytes;
     char *data;
 
 #ifdef OS_LINUX
@@ -61,9 +60,9 @@ extern "C" {
     void trunk_read_thread_terminate();
 
 #ifdef OS_LINUX
-    int trunk_read_thread_push(OBSliceEntry *slice, AlignedReadBuffer
-            **aligned_buffer, trunk_read_io_notify_func notify_func,
-            void *notify_arg);
+    int trunk_read_thread_push(const FSTrunkSpaceInfo *space,
+            const int read_bytes, AlignedReadBuffer **aligned_buffer,
+            trunk_read_io_notify_func notify_func, void *notify_arg);
 
     static inline AlignedReadBuffer *aligned_buffer_new(const short pindex,
             const int offset, const int length, const int read_bytes)
@@ -83,8 +82,9 @@ extern "C" {
 
 #else
 
-    int trunk_read_thread_push(OBSliceEntry *slice, char *buff,
-            trunk_read_io_notify_func notify_func, void *notify_arg);
+    int trunk_read_thread_push(const FSTrunkSpaceInfo *space,
+            const int read_bytes, char *buff, trunk_read_io_notify_func
+            notify_func, void *notify_arg);
 
 #endif
 

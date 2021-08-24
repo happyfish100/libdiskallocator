@@ -20,7 +20,6 @@
 #include "fastcommon/logger.h"
 #include "fastcommon/fast_mblock.h"
 #include "sf/sf_global.h"
-#include "../server_global.h"
 #include "trunk_fd_cache.h"
 
 int trunk_fd_cache_init(TrunkFDCacheContext *cache_ctx, const int capacity)

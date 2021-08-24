@@ -7,19 +7,24 @@ TARGET_LIB = $(TARGET_PREFIX)/$(LIB_VERSION)
 
 TOP_HEADERS =
 
-STORAGE_HEADER =
-
 DIO_HEADER =
 
-ALL_HEADERS  = $(TOP_HEADERS) $(STORAGE_HEADER) $(DIO_HEADER)
+STORAGE_HEADER =
 
-SHARED_OBJS = storage/storage_config.o storage/store_path_index.o \
-              storage/trunk_allocator.o storage/storage_allocator.o \
-              storage/trunk_maker.o storage/trunk_prealloc.o  \
-              storage/trunk_reclaim.o storage/trunk_id_info.o \
-              storage/trunk_freelist.o dio/trunk_write_thread.o  \
-              dio/trunk_read_thread.o dio/trunk_fd_cache.o \
-              dio/read_buffer_pool.o
+ALL_HEADERS  = $(TOP_HEADERS) $(DIO_HEADER) $(STORAGE_HEADER)
+
+BINLOG_OBJS = binlog/trunk_binlog.o
+
+DIO_OBJS =  dio/trunk_write_thread.o dio/trunk_read_thread.o \
+            dio/trunk_fd_cache.o dio/read_buffer_pool.o
+
+STORAGE_OBJS = storage/storage_config.o storage/store_path_index.o   \
+               storage/trunk_allocator.o storage/storage_allocator.o \
+               storage/trunk_id_info.o storage/trunk_freelist.o  \
+               storage/trunk_maker.o storage/trunk_prealloc.o    \
+               storage/trunk_reclaim.o
+
+SHARED_OBJS = $(BINLOG_OBJS) $(DIO_OBJS) $(STORAGE_OBJS)
 
 ALL_OBJS = $(SHARED_OBJS)
 ALL_LIBS = libdiskallocator.so

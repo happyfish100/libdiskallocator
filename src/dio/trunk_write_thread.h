@@ -34,12 +34,7 @@ typedef void (*trunk_write_io_notify_func)(struct trunk_write_io_buffer
 
 typedef struct trunk_write_io_buffer {
     int type;
-
-    union {
-        FSTrunkSpaceInfo space;  //for trunk op
-        OBSliceEntry *slice;     //for slice op
-    };
-
+    FSTrunkSpaceInfo space;
     int64_t version; //for write in order
 
     union {
@@ -62,9 +57,8 @@ extern "C" {
     void trunk_write_thread_terminate();
 
     int trunk_write_thread_push(const int type, const int64_t version,
-            const int path_index, const uint64_t hash_code, void *entry,
-            void *data, trunk_write_io_notify_func notify_func,
-            void *notify_arg);
+            const FSTrunkSpaceInfo *space, void *data,
+            trunk_write_io_notify_func notify_func, void *notify_arg);
 
     static inline int trunk_write_thread_push_trunk_op(const int type,
             const FSTrunkSpaceInfo *space, trunk_write_io_notify_func
@@ -73,29 +67,26 @@ extern "C" {
         FSTrunkAllocator *allocator;
         allocator = g_allocator_mgr->allocator_ptr_array.
             allocators[space->store->index];
-        return trunk_write_thread_push(type, __sync_add_and_fetch(&allocator->
-                    allocate.current_version, 1), space->store->index,
-                space->id_info.id, (void *)space, NULL,
-                notify_func, notify_arg);
+        return trunk_write_thread_push(type, __sync_add_and_fetch(
+                    &allocator->allocate.current_version, 1), space,
+                NULL, notify_func, notify_arg);
     }
 
     static inline int trunk_write_thread_push_slice_by_buff(
-            const int64_t version, OBSliceEntry *slice, char *buff,
+            const int64_t version, FSTrunkSpaceInfo *space, char *buff,
             trunk_write_io_notify_func notify_func, void *notify_arg)
     {
         return trunk_write_thread_push(FS_IO_TYPE_WRITE_SLICE_BY_BUFF,
-                version, slice->space.store->index, slice->space.id_info.id,
-                slice, buff, notify_func, notify_arg);
+                version, space, buff, notify_func, notify_arg);
     }
 
     static inline int trunk_write_thread_push_slice_by_iovec(
-            const int64_t version, OBSliceEntry *slice, iovec_array_t
+            const int64_t version, FSTrunkSpaceInfo *space, iovec_array_t
             *iovec_array, trunk_write_io_notify_func notify_func,
             void *notify_arg)
     {
         return trunk_write_thread_push(FS_IO_TYPE_WRITE_SLICE_BY_IOVEC,
-                version, slice->space.store->index, slice->space.id_info.id,
-                slice, iovec_array, notify_func, notify_arg);
+                version, space, iovec_array, notify_func, notify_arg);
     }
 
 #ifdef __cplusplus
