@@ -225,15 +225,15 @@ static bool can_add_to_freelist(FSTrunkFileInfo *trunk_info)
     }
 
     remain_size = FS_TRUNK_AVAIL_SPACE(trunk_info);
-    if (remain_size < g_storage_cfg.file_block_size) {
+    if (remain_size < FILE_BLOCK_SIZE) {
         return false;
     }
 
     if (trunk_info->allocator->path_info->space_stat.used_ratio <=
-            g_storage_cfg.reclaim_trunks_on_path_usage)
+            STORAGE_CFG.reclaim_trunks_on_path_usage)
     {
         return ((double)trunk_info->free_start / (double)trunk_info->size
-                <= (1.00 -  g_storage_cfg.reclaim_trunks_on_path_usage));
+                <= (1.00 -  STORAGE_CFG.reclaim_trunks_on_path_usage));
     }
 
     ratio_thredhold = trunk_allocator_calc_reclaim_ratio_thredhold(

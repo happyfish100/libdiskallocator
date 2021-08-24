@@ -44,6 +44,8 @@ extern "C" {
             FSTrunkFreelist *freelist, const uint32_t blk_hc, const int size,
             FSTrunkSpaceWithVersion *spaces, int *count, const bool is_normal);
 
+    int trunk_freelist_free_space(const FSTrunkSpaceInfo *space);
+
 #ifdef __cplusplus
 }
 #endif

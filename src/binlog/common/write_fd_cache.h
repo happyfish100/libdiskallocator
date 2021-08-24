@@ -13,23 +13,29 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#ifndef _WRITE_FD_CACHE_H
+#define _WRITE_FD_CACHE_H
 
-#ifndef _TRUNK_BINLOG_H
-#define _TRUNK_BINLOG_H
-
-#include "../storage/storage_config.h"
+#include "binlog_fd_cache.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int trunk_binlog_init();
-    void trunk_binlog_destroy();
+    extern BinlogFDCacheContext g_write_cache_ctx;
 
-    int trunk_sf_binlog_get_current_write_index();
+    int write_fd_cache_init(const int max_idle_time, const int capacity);
 
-    int trunk_binlog_write(const char op_type, const int path_index,
-            const FSTrunkIdInfo *id_info, const int64_t file_size);
+    //return fd, < 0 for error
+    static inline int write_fd_cache_get(const uint64_t binlog_id)
+    {
+        return binlog_fd_cache_get(&g_write_cache_ctx, binlog_id);
+    }
+
+    static inline int write_fd_cache_remove(const uint64_t binlog_id)
+    {
+        return binlog_fd_cache_remove(&g_write_cache_ctx, binlog_id);
+    }
 
 #ifdef __cplusplus
 }

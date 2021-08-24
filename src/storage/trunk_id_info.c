@@ -21,6 +21,7 @@
 #include "fastcommon/fast_mblock.h"
 #include "fastcommon/uniq_skiplist.h"
 #include "sf/sf_global.h"
+#include "../global.h"
 #include "trunk_id_info.h"
 
 #define TRUNK_ID_DATA_FILENAME  ".trunk_id.dat"
@@ -59,8 +60,7 @@ static TrunkIdInfoContext id_info_context = {0, 0, 0, 0, {0, NULL}};
 static inline void get_trunk_id_dat_filename(
         char *full_filename, const int size)
 {
-    snprintf(full_filename, size, "%s/%s",
-            g_storage_cfg.data_path.str,
+    snprintf(full_filename, size, "%s/%s", DATA_PATH_STR,
             TRUNK_ID_DATA_FILENAME);
 }
 
@@ -149,7 +149,7 @@ static int alloc_sorted_subdirs()
 {
     int bytes;
 
-    id_info_context.subdir_array.count = g_storage_cfg.max_store_path_index + 1;
+    id_info_context.subdir_array.count = STORAGE_CFG.max_store_path_index + 1;
     bytes = sizeof(SortedSubdirs) * id_info_context.subdir_array.count;
     id_info_context.subdir_array.subdirs = (SortedSubdirs *)fc_malloc(bytes);
     if (id_info_context.subdir_array.subdirs == NULL) {
@@ -249,10 +249,10 @@ int trunk_id_info_init()
     if ((result=alloc_sorted_subdirs()) != 0) {
         return result;
     }
-    if ((result=init_sorted_subdirs(&g_storage_cfg.write_cache)) != 0) {
+    if ((result=init_sorted_subdirs(&STORAGE_CFG.write_cache)) != 0) {
         return result;
     }
-    if ((result=init_sorted_subdirs(&g_storage_cfg.store_path)) != 0) {
+    if ((result=init_sorted_subdirs(&STORAGE_CFG.store_path)) != 0) {
         return result;
     }
 
@@ -298,7 +298,7 @@ int trunk_id_info_add(const int path_index, const FSTrunkIdInfo *id_info)
                 sorted_subdirs->all.skiplist, &target);
         if (subdir != NULL) {
             subdir->file_count++;
-            if (subdir->file_count >= g_storage_cfg.max_trunk_files_per_subdir) {
+            if (subdir->file_count >= STORAGE_CFG.max_trunk_files_per_subdir) {
                 uniq_skiplist_delete(sorted_subdirs->
                         freelist.skiplist, subdir);
             }
@@ -315,7 +315,7 @@ int trunk_id_info_add(const int path_index, const FSTrunkIdInfo *id_info)
             {
                 break;
             }
-            if (subdir->file_count < g_storage_cfg.max_trunk_files_per_subdir) {
+            if (subdir->file_count < STORAGE_CFG.max_trunk_files_per_subdir) {
                 result = uniq_skiplist_insert(sorted_subdirs->
                         freelist.skiplist, subdir);
             }
@@ -346,7 +346,7 @@ int trunk_id_info_delete(const int path_index, const FSTrunkIdInfo *id_info)
         subdir = (StoreSubdirInfo *)uniq_skiplist_find(
                 sorted_subdirs->all.skiplist, &target);
         if (subdir != NULL) {
-            if (subdir->file_count >= g_storage_cfg.max_trunk_files_per_subdir) {
+            if (subdir->file_count >= STORAGE_CFG.max_trunk_files_per_subdir) {
                 uniq_skiplist_insert(sorted_subdirs->
                         freelist.skiplist, subdir);
             }

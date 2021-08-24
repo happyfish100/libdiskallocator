@@ -21,9 +21,10 @@
 #include "fastcommon/sched_thread.h"
 #include "sf/sf_global.h"
 #include "sf/sf_binlog_writer.h"
-#include "../dio/trunk_write_thread.h"
-#include "../storage/storage_allocator.h"
-#include "../storage/trunk_id_info.h"
+#include "../../global.h"
+#include "../../dio/trunk_write_thread.h"
+#include "../../storage/storage_allocator.h"
+#include "../../storage/trunk_id_info.h"
 #include "trunk_binlog.h"
 
 static SFBinlogWriterContext binlog_writer;
@@ -146,7 +147,7 @@ int trunk_sf_binlog_get_current_write_index()
 static int init_binlog_writer()
 {
     return sf_binlog_writer_init(&binlog_writer, FS_TRUNK_BINLOG_SUBDIR_NAME,
-            g_storage_cfg.binlog_buffer_size, FS_TRUNK_BINLOG_MAX_RECORD_SIZE);
+            BINLOG_BUFFER_SIZE, FS_TRUNK_BINLOG_MAX_RECORD_SIZE);
 }
 
 int trunk_binlog_init()

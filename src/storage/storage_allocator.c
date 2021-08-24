@@ -19,6 +19,7 @@
 #include "fastcommon/logger.h"
 #include "fastcommon/fc_memory.h"
 #include "sf/sf_global.h"
+#include "../global.h"
 #include "trunk_maker.h"
 #include "storage_allocator.h"
 
@@ -78,7 +79,7 @@ int storage_allocator_init()
     int element_size;
 
     memset(g_allocator_mgr, 0, sizeof(FSStorageAllocatorManager));
-    count = g_storage_cfg.max_store_path_index + 1;
+    count = STORAGE_CFG.max_store_path_index + 1;
     bytes = sizeof(FSTrunkAllocator *) * count;
     g_allocator_mgr->allocator_ptr_array.allocators =
         (FSTrunkAllocator **)fc_malloc(bytes);
@@ -103,12 +104,12 @@ int storage_allocator_init()
     }
 
     if ((result=init_allocator_context(&g_allocator_mgr->write_cache,
-                    &g_storage_cfg.write_cache)) != 0)
+                    &STORAGE_CFG.write_cache)) != 0)
     {
         return result;
     }
     if ((result=init_allocator_context(&g_allocator_mgr->store_path,
-                    &g_storage_cfg.store_path)) != 0)
+                    &STORAGE_CFG.store_path)) != 0)
     {
         return result;
     }
@@ -296,7 +297,7 @@ int init_allocator_ptr_array(FSStorageAllocatorContext *allocator_ctx)
         } else {
             allocator->path_info->trunk_stat.last_used = __sync_add_and_fetch(
                     &allocator->path_info->trunk_stat.used, 0) +
-                g_storage_cfg.trunk_file_size;  //for trigger check trunk avail
+                STORAGE_CFG.trunk_file_size;  //for trigger check trunk avail
             aptr_array = (FSTrunkAllocatorPtrArray *)allocator_ctx->full;
         }
         add_to_aptr_array(aptr_array, allocator);
@@ -333,13 +334,13 @@ static int check_trunk_avail(FSStorageAllocatorContext *allocator_ctx)
             used_bytes = __sync_add_and_fetch(&(*pp)->
                     path_info->trunk_stat.used, 0);
             if ((*pp)->path_info->trunk_stat.last_used - used_bytes >=
-                    g_storage_cfg.trunk_file_size)
+                    STORAGE_CFG.trunk_file_size)
             {
                 (*pp)->path_info->trunk_stat.last_used = used_bytes;
                 trunk_maker_allocate_ex(*pp, true, true, NULL, NULL);
             } else {
                 storage_config_calc_path_avail_space((*pp)->path_info);
-                if ((*pp)->path_info->space_stat.avail - g_storage_cfg.
+                if ((*pp)->path_info->space_stat.avail - STORAGE_CFG.
                         trunk_file_size > (*pp)->path_info->reserved_space.value)
                 {
                     trunk_maker_allocate(*pp);

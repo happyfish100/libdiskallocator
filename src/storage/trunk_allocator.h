@@ -20,7 +20,7 @@
 #include "fastcommon/uniq_skiplist.h"
 #include "fastcommon/fc_list.h"
 #include "trunk_freelist.h"
-#include "storage_config.h"
+#include "../global.h"
 
 #define FS_TRUNK_SKIPLIST_INIT_LEVEL_COUNT       6
 #define FS_TRUNK_SKIPLIST_MAX_LEVEL_COUNT       12
@@ -189,11 +189,11 @@ extern "C" {
         used_ratio = allocator->path_info->space_stat.used_ratio
             + allocator->path_info->reserved_space.ratio;
         if (used_ratio >= 1.00) {
-            return g_storage_cfg.never_reclaim_on_trunk_usage;
+            return STORAGE_CFG.never_reclaim_on_trunk_usage;
         } else {
-            return g_storage_cfg.never_reclaim_on_trunk_usage *
-                (used_ratio - g_storage_cfg.reclaim_trunks_on_path_usage) /
-                (1.00 -  g_storage_cfg.reclaim_trunks_on_path_usage);
+            return STORAGE_CFG.never_reclaim_on_trunk_usage *
+                (used_ratio - STORAGE_CFG.reclaim_trunks_on_path_usage) /
+                (1.00 -  STORAGE_CFG.reclaim_trunks_on_path_usage);
         }
     }
 

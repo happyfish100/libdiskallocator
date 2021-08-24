@@ -34,7 +34,7 @@
 #include "fastcommon/uniq_skiplist.h"
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
-#include "../binlog/trunk_binlog.h"
+#include "../global.h"
 #include "trunk_fd_cache.h"
 #ifdef OS_LINUX
 #include "read_buffer_pool.h"
@@ -95,7 +95,7 @@ static int alloc_path_contexts()
 {
     int bytes;
 
-    trunk_io_ctx.path_ctx_array.count = g_storage_cfg.max_store_path_index + 1;
+    trunk_io_ctx.path_ctx_array.count = STORAGE_CFG.max_store_path_index + 1;
     bytes = sizeof(TrunkReadPathContext) * trunk_io_ctx.path_ctx_array.count;
     trunk_io_ctx.path_ctx_array.paths = (TrunkReadPathContext *)fc_malloc(bytes);
     if (trunk_io_ctx.path_ctx_array.paths == NULL) {
@@ -139,7 +139,7 @@ static int init_thread_context(TrunkReadThreadContext *ctx,
     }
 
 
-    if ((result=trunk_fd_cache_init(&ctx->fd_cache, g_storage_cfg.
+    if ((result=trunk_fd_cache_init(&ctx->fd_cache, STORAGE_CFG.
                     fd_cache_capacity_per_read_thread)) != 0)
     {
         return result;
@@ -237,20 +237,20 @@ static int rbpool_init_start()
     int path_count;
     int result;
 
-    path_count = storage_config_path_count(&g_storage_cfg);
-    memory_watermark.low = g_storage_cfg.aio_read_buffer.
+    path_count = storage_config_path_count(&STORAGE_CFG);
+    memory_watermark.low = STORAGE_CFG.aio_read_buffer.
         memory_watermark_low.value / path_count;
-    memory_watermark.high = g_storage_cfg.aio_read_buffer.
+    memory_watermark.high = STORAGE_CFG.aio_read_buffer.
         memory_watermark_high.value / path_count;
-    if ((result=read_buffer_pool_init(g_storage_cfg.paths_by_index.count,
+    if ((result=read_buffer_pool_init(STORAGE_CFG.paths_by_index.count,
                     &memory_watermark)) != 0)
     {
         return result;
     }
 
-    end = g_storage_cfg.paths_by_index.paths +
-        g_storage_cfg.paths_by_index.count;
-    for (pp=g_storage_cfg.paths_by_index.paths; pp<end; pp++) {
+    end = STORAGE_CFG.paths_by_index.paths +
+        STORAGE_CFG.paths_by_index.count;
+    for (pp=STORAGE_CFG.paths_by_index.paths; pp<end; pp++) {
         if (*pp != NULL) {
             if ((result=read_buffer_pool_create((*pp)->store.index,
                             (*pp)->block_size)) != 0)
@@ -260,8 +260,8 @@ static int rbpool_init_start()
         }
     }
 
-    return read_buffer_pool_start(g_storage_cfg.aio_read_buffer.max_idle_time,
-            g_storage_cfg.aio_read_buffer.reclaim_interval);
+    return read_buffer_pool_start(STORAGE_CFG.aio_read_buffer.max_idle_time,
+            STORAGE_CFG.aio_read_buffer.reclaim_interval);
 }
 #endif
 
@@ -279,10 +279,10 @@ int trunk_read_thread_init()
         return result;
     }
 
-    if ((result=init_path_contexts(&g_storage_cfg.write_cache)) != 0) {
+    if ((result=init_path_contexts(&STORAGE_CFG.write_cache)) != 0) {
         return result;
     }
-    if ((result=init_path_contexts(&g_storage_cfg.store_path)) != 0) {
+    if ((result=init_path_contexts(&STORAGE_CFG.store_path)) != 0) {
         return result;
     }
 

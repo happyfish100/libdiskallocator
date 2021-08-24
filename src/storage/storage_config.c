@@ -22,10 +22,9 @@
 #include "fastcommon/sched_thread.h"
 #include "fastcommon/system_info.h"
 #include "sf/sf_global.h"
+#include "../global.h"
 #include "store_path_index.h"
 #include "storage_config.h"
-
-FSStorageConfig g_storage_cfg;
 
 static int load_one_path(FSStorageConfig *storage_cfg,
         IniFullContext *ini_ctx, string_t *path)
@@ -101,8 +100,8 @@ static int storage_config_calc_path_spaces(FSStoragePathInfo *path_info)
     path_info->prealloc_space.value = path_info->space_stat.total *
         path_info->prealloc_space.ratio;
     path_info->prealloc_space.trunk_count = (path_info->prealloc_space.
-            value + g_storage_cfg.trunk_file_size - 1) /
-        g_storage_cfg.trunk_file_size;
+            value + STORAGE_CFG.trunk_file_size - 1) /
+        STORAGE_CFG.trunk_file_size;
     if (sbuf.f_blocks > 0) {
         path_info->space_stat.used_ratio = (double)(sbuf.f_blocks -
                 sbuf.f_bavail) / (double)sbuf.f_blocks;
@@ -156,8 +155,8 @@ void storage_config_stat_path_spaces(SFSpaceStat *ss)
     int64_t disk_avail;
 
     stat.total = stat.used = stat.avail = 0;
-    end = g_storage_cfg.paths_by_index.paths + g_storage_cfg.paths_by_index.count;
-    for (pp=g_storage_cfg.paths_by_index.paths; pp<end; pp++) {
+    end = STORAGE_CFG.paths_by_index.paths + STORAGE_CFG.paths_by_index.count;
+    for (pp=STORAGE_CFG.paths_by_index.paths; pp<end; pp++) {
         if (*pp == NULL) {
             continue;
         }
@@ -443,11 +442,11 @@ static int load_global_items(FSStorageConfig *storage_cfg,
                 (int64_t)FS_TRUNK_FILE_MAX_SIZE);
         storage_cfg->trunk_file_size = FS_TRUNK_FILE_MAX_SIZE;
     }
-    if (storage_cfg->trunk_file_size <= storage_cfg->file_block_size) {
+    if (storage_cfg->trunk_file_size <= FILE_BLOCK_SIZE) {
         logError("file: "__FILE__", line: %d, "
                 "trunk_file_size: %"PRId64" is too small, "
                 "<= block size %d", __LINE__, storage_cfg->
-                trunk_file_size, storage_cfg->file_block_size);
+                trunk_file_size, FILE_BLOCK_SIZE);
         return EINVAL;
     }
 
@@ -673,9 +672,7 @@ static int load_store_path_indexes(FSStorageConfig *storage_cfg,
 }
 
 int storage_config_load(FSStorageConfig *storage_cfg,
-        const char *storage_filename, const int my_server_id,
-        const int file_block_size, const string_t *data_path,
-        const int binlog_buffer_size)
+        const char *storage_filename)
 {
     IniContext ini_context;
     IniFullContext ini_ctx;
@@ -688,11 +685,6 @@ int storage_config_load(FSStorageConfig *storage_cfg,
                 __LINE__, storage_filename, result);
         return result;
     }
-
-    storage_cfg->my_server_id = my_server_id;
-    storage_cfg->file_block_size = file_block_size;
-    storage_cfg->data_path = *data_path;
-    storage_cfg->binlog_buffer_size = binlog_buffer_size;
 
     FAST_INI_SET_FULL_CTX_EX(ini_ctx, storage_filename, NULL, &ini_context);
     result = load_from_config_file(storage_cfg, &ini_ctx);

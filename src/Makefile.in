@@ -2,10 +2,13 @@
 
 COMPILE = $(CC) $(CFLAGS) -fPIC
 INC_PATH = -Iinclude -I/usr/local/include
-LIB_PATH = $(LIBS) -lfastcommon 
+LIB_PATH = $(LIBS) -lfastcommon -lserverframe
 TARGET_LIB = $(TARGET_PREFIX)/$(LIB_VERSION)
 
-TOP_HEADERS =
+TOP_HEADERS = global.h
+
+BINLOG_HEADER = binlog/common/binlog_fd_cache.h binlog/common/read_fd_cache.h \
+                binlog/common/write_fd_cache.h
 
 DIO_HEADER =
 
@@ -13,18 +16,21 @@ STORAGE_HEADER =
 
 ALL_HEADERS  = $(TOP_HEADERS) $(DIO_HEADER) $(STORAGE_HEADER)
 
-BINLOG_OBJS = binlog/trunk_binlog.o
+TOP_OBJS = global.o
+
+BINLOG_OBJS = binlog/common/binlog_fd_cache.o binlog/common/read_fd_cache.o \
+              binlog/common/write_fd_cache.o binlog/trunk/trunk_binlog.o
 
 DIO_OBJS =  dio/trunk_write_thread.o dio/trunk_read_thread.o \
             dio/trunk_fd_cache.o dio/read_buffer_pool.o
 
 STORAGE_OBJS = storage/storage_config.o storage/store_path_index.o   \
                storage/trunk_allocator.o storage/storage_allocator.o \
-               storage/trunk_id_info.o storage/trunk_freelist.o  \
-               storage/trunk_maker.o storage/trunk_prealloc.o    \
-               storage/trunk_reclaim.o
+               storage/trunk_id_info.o storage/trunk_freelist.o
+#               storage/trunk_maker.o storage/trunk_prealloc.o    \
+#               storage/trunk_reclaim.o
 
-SHARED_OBJS = $(BINLOG_OBJS) $(DIO_OBJS) $(STORAGE_OBJS)
+SHARED_OBJS = $(TOP_OBJS) $(BINLOG_OBJS) $(DIO_OBJS) $(STORAGE_OBJS)
 
 ALL_OBJS = $(SHARED_OBJS)
 ALL_LIBS = libdiskallocator.so

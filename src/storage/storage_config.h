@@ -119,23 +119,14 @@ typedef struct {
     } aio_read_buffer;
 #endif
 
-    int my_server_id;
-    string_t data_path;
-    int binlog_buffer_size;
-    int file_block_size;
-
 } FSStorageConfig;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    extern FSStorageConfig g_storage_cfg;
-
     int storage_config_load(FSStorageConfig *storage_cfg,
-            const char *storage_filename, const int my_server_id,
-            const int file_block_size, const string_t *data_path,
-            const int binlog_buffer_size);
+            const char *storage_filename);
 
     int storage_config_calc_path_avail_space(FSStoragePathInfo *path_info);
 

@@ -21,6 +21,7 @@
 #include "fastcommon/sched_thread.h"
 #include "fastcommon/pthread_func.h"
 #include "fastcommon/fc_atomic.h"
+#include "../global.h"
 #include "../storage/storage_config.h"
 #include "read_buffer_pool.h"
 
@@ -109,7 +110,7 @@ static int init_allocators(ReadBufferPool *pool)
 
     size = pool->block_size;
     pool->mpool.count = 1;
-    while (size <= g_storage_cfg.file_block_size) {
+    while (size <= FILE_BLOCK_SIZE) {
         pool->mpool.count++;
         size *= 2;
     }
@@ -326,9 +327,9 @@ AlignedReadBuffer *read_buffer_pool_alloc(
         total_alloc = FC_ATOMIC_GET(pool->memory.alloc);
         if (total_alloc + allocator->size > rbpool_ctx.watermark.high) {
             if (total_alloc - FC_ATOMIC_GET(pool->memory.used) >
-                    g_storage_cfg.file_block_size)
+                    FILE_BLOCK_SIZE)
             {
-                reclaim(pool, g_storage_cfg.file_block_size, &reclaim_bytes);
+                reclaim(pool, FILE_BLOCK_SIZE, &reclaim_bytes);
                 logInfo("file: "__FILE__", line: %d, "
                         "reach max memory limit, reclaim %d bytes",
                         __LINE__, reclaim_bytes);

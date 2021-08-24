@@ -20,6 +20,7 @@
 #include "fastcommon/fast_mblock.h"
 #include "fastcommon/sched_thread.h"
 #include "sf/sf_global.h"
+#include "../global.h"
 #include "trunk_maker.h"
 #include "storage_allocator.h"
 #include "trunk_freelist.h"
@@ -243,7 +244,7 @@ int trunk_freelist_alloc_space(struct fs_trunk_allocator *allocator,
         TRUNK_ALLOC_SPACE(trunk_info, space_info, aligned_size);
         space_info++;
         if (FS_TRUNK_AVAIL_SPACE(trunk_info) <
-                g_storage_cfg.discard_remain_space_size)
+                STORAGE_CFG.discard_remain_space_size)
         {
             trunk_freelist_remove(freelist);
             __sync_sub_and_fetch(&trunk_info->allocator->path_info->

@@ -23,7 +23,7 @@
 #include "fastcommon/uniq_skiplist.h"
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
-#include "../binlog/trunk_binlog.h"
+#include "../binlog/trunk/trunk_binlog.h"
 #include "trunk_write_thread.h"
 
 #define IO_THREAD_IOB_MAX     256
@@ -89,7 +89,7 @@ static int alloc_path_contexts()
 {
     int bytes;
 
-    trunk_io_ctx.path_ctx_array.count = g_storage_cfg.max_store_path_index + 1;
+    trunk_io_ctx.path_ctx_array.count = STORAGE_CFG.max_store_path_index + 1;
     bytes = sizeof(TrunkWritePathContext) * trunk_io_ctx.path_ctx_array.count;
     trunk_io_ctx.path_ctx_array.paths = (TrunkWritePathContext *)
         fc_malloc(bytes);
@@ -238,10 +238,10 @@ int trunk_write_thread_init()
         return result;
     }
 
-    if ((result=init_path_contexts(&g_storage_cfg.write_cache)) != 0) {
+    if ((result=init_path_contexts(&STORAGE_CFG.write_cache)) != 0) {
         return result;
     }
-    if ((result=init_path_contexts(&g_storage_cfg.store_path)) != 0) {
+    if ((result=init_path_contexts(&STORAGE_CFG.store_path)) != 0) {
         return result;
     }
 
