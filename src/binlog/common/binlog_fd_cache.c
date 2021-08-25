@@ -20,9 +20,52 @@
 #include "fastcommon/logger.h"
 #include "binlog_fd_cache.h"
 
+static bool subdir_exists(const BinlogFDCacheContext *cache_ctx,
+        const int subdir_index)
+{
+    char filepath[PATH_MAX];
+
+    snprintf(filepath, sizeof(filepath), "%s/%s/%02X/%02X",
+            DATA_PATH_STR, cache_ctx->subdir_name,
+            subdir_index, subdir_index);
+    return isDir(filepath);
+}
+
+static int check_make_subdirs(const BinlogFDCacheContext *cache_ctx)
+{
+    int result;
+    int i, k;
+    char filepath1[PATH_MAX];
+    char filepath2[PATH_MAX];
+
+    if (subdir_exists(cache_ctx, 0) && subdir_exists(
+                cache_ctx, BINLOG_SUBDIRS - 1))
+    {
+        return 0;
+    }
+
+    for (i=0; i<BINLOG_SUBDIRS; i++) {
+        snprintf(filepath1, sizeof(filepath1), "%s/%s/%02X",
+                DATA_PATH_STR, cache_ctx->subdir_name, i);
+        if ((result=fc_check_mkdir(filepath1, 0755)) != 0) {
+            return result;
+        }
+
+        for (k=0; k<BINLOG_SUBDIRS; k++) {
+            snprintf(filepath2, sizeof(filepath2),
+                    "%s/%02X", filepath1, k);
+            if ((result=fc_check_mkdir(filepath2, 0755)) != 0) {
+                return result;
+            }
+        }
+    }
+
+    return 0;
+}
+
 int binlog_fd_cache_init(BinlogFDCacheContext *cache_ctx,
-        const int open_flags, const int max_idle_time,
-        const int capacity)
+        const char *subdir_name, const int open_flags,
+        const int max_idle_time, const int capacity)
 {
     int result;
     int bytes;
@@ -60,12 +103,14 @@ int binlog_fd_cache_init(BinlogFDCacheContext *cache_ctx,
         return result;
     }
 
+    snprintf(cache_ctx->subdir_name, sizeof(cache_ctx->subdir_name),
+            "%s", subdir_name);
     cache_ctx->open_flags = open_flags;
     cache_ctx->max_idle_time = max_idle_time;
     cache_ctx->lru.count = 0;
     cache_ctx->lru.capacity = capacity;
     FC_INIT_LIST_HEAD(&cache_ctx->lru.head);
-    return 0;
+    return check_make_subdirs(cache_ctx);
 }
 
 static int fd_cache_get(BinlogFDCacheContext *cache_ctx,
@@ -179,8 +224,8 @@ static inline int open_file(BinlogFDCacheContext *cache_ctx,
     int result;
     char full_filename[PATH_MAX];
 
-    if ((result=binlog_fd_cache_filename(binlog_id, full_filename,
-                    sizeof(full_filename))) != 0)
+    if ((result=binlog_fd_cache_filename(cache_ctx, binlog_id,
+                    full_filename, sizeof(full_filename))) != 0)
     {
         return -1 * result;
     }

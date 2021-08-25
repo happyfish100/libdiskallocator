@@ -22,19 +22,26 @@
 extern "C" {
 #endif
 
-    extern BinlogFDCacheContext g_write_cache_ctx;
-
-    int write_fd_cache_init(const int max_idle_time, const int capacity);
-
-    //return fd, < 0 for error
-    static inline int write_fd_cache_get(const uint64_t binlog_id)
+    static inline int write_fd_cache_init(BinlogFDCacheContext *cache_ctx,
+            const char *subdir_name, const int max_idle_time,
+            const int capacity)
     {
-        return binlog_fd_cache_get(&g_write_cache_ctx, binlog_id);
+        const int open_flags =  O_WRONLY | O_CREAT | O_APPEND;
+        return binlog_fd_cache_init(cache_ctx, subdir_name,
+                open_flags, max_idle_time, capacity);
     }
 
-    static inline int write_fd_cache_remove(const uint64_t binlog_id)
+    //return fd, < 0 for error
+    static inline int write_fd_cache_get(BinlogFDCacheContext *cache_ctx,
+            const uint64_t binlog_id)
     {
-        return binlog_fd_cache_remove(&g_write_cache_ctx, binlog_id);
+        return binlog_fd_cache_get(cache_ctx, binlog_id);
+    }
+
+    static inline int write_fd_cache_remove(BinlogFDCacheContext *cache_ctx,
+            const uint64_t binlog_id)
+    {
+        return binlog_fd_cache_remove(cache_ctx, binlog_id);
     }
 
 #ifdef __cplusplus

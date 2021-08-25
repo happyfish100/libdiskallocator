@@ -39,6 +39,7 @@ typedef struct {
 
 typedef struct {
     BinlogFDCacheHashtable htable;
+    char subdir_name[64];
     int open_flags;
     int max_idle_time;
     struct {
@@ -55,8 +56,8 @@ extern "C" {
 #endif
 
     int binlog_fd_cache_init(BinlogFDCacheContext *cache_ctx,
-            const int open_flags, const int max_idle_time,
-            const int capacity);
+            const char *subdir_name, const int open_flags,
+            const int max_idle_time, const int capacity);
 
     //return fd, < 0 for error
     int binlog_fd_cache_get(BinlogFDCacheContext *cache_ctx,
@@ -65,24 +66,14 @@ extern "C" {
     int binlog_fd_cache_remove(BinlogFDCacheContext *cache_ctx,
             const uint64_t binlog_id);
 
-    static inline int binlog_fd_cache_filename(const uint64_t binlog_id,
-            char *full_filename, const int size)
+    static inline int binlog_fd_cache_filename(const char *subdir_name,
+            const uint64_t binlog_id, char *full_filename, const int size)
     {
         int path_index;
 
         path_index = binlog_id % BINLOG_SUBDIRS;
-
-        /*
-        //TODO: check and mkdirs on init
-        len = snprintf(full_filename, size, "%s/%02X/%02X",
-                STORAGE_PATH_STR, path_index);
-        if ((result=fc_check_mkdir(full_filename, 0755)) != 0) {
-            return result;
-        }
-        */
-
-        snprintf(full_filename, size, "%s/%02X/%02X/binlog.%08"PRIX64,
-                DATA_PATH_STR, path_index, path_index, binlog_id);
+        snprintf(full_filename, size, "%s/%s/%02X/%02X/binlog.%08"PRIX64,
+                DATA_PATH_STR, subdir_name, path_index, path_index, binlog_id);
         return 0;
     }
 

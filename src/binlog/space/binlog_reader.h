@@ -15,20 +15,18 @@
 
 //binlog_reader.h
 
-#ifndef _INODE_BINLOG_READER_H_
-#define _INODE_BINLOG_READER_H_
+#ifndef _BINLOG_READER_H_
+#define _BINLOG_READER_H_
 
-#include "inode_types.h"
+typedef int (*binlog_parse_record_func)(const string_t *line,
+        void *args, char *error_info);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int binlog_reader_load(FDIRInodeSegmentIndexInfo *segment);
-
-int binlog_reader_get_first_inode(const uint64_t binlog_id, int64_t *inode);
-
-int binlog_reader_get_last_inode(const uint64_t binlog_id, int64_t *inode);
+int binlog_reader_load(const char *subdir_name, const int64_t binlog_id,
+        binlog_parse_record_func parse_record, void *args);
 
 #ifdef __cplusplus
 }
