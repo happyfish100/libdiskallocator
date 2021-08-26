@@ -18,8 +18,8 @@
 #include "../common/binlog_fd_cache.h"
 #include "binlog_reader.h"
 
-static int load(const BinlogIdTypePair *bkey, binlog_parse_record_func
-        parse_record, void *args, const string_t *context)
+static int load(const DABinlogIdTypePair *bkey,
+        void *args, const string_t *context)
 {
     int result;
     string_t line;
@@ -40,7 +40,9 @@ static int load(const BinlogIdTypePair *bkey, binlog_parse_record_func
         ++line_end;
         line.str = line_start;
         line.len = line_end - line_start;
-        if ((result=parse_record(&line, args, error_info)) != 0) {
+        if ((result=g_write_cache_ctx.type_subdir_array.pairs[bkey->type].
+                    unpack_record(&line, args, error_info)) != 0)
+        {
             char filename[PATH_MAX];
             write_fd_cache_filename(bkey, filename, sizeof(filename));
             logError("file: "__FILE__", line: %d, "
@@ -56,8 +58,7 @@ static int load(const BinlogIdTypePair *bkey, binlog_parse_record_func
     return result;
 }
 
-int binlog_reader_load(const BinlogIdTypePair *bkey,
-        binlog_parse_record_func parse_record, void *args)
+int binlog_reader_load(const DABinlogIdTypePair *bkey, void *args)
 {
     int result;
     char filename[PATH_MAX];
@@ -83,7 +84,7 @@ int binlog_reader_load(const BinlogIdTypePair *bkey,
     }
     context.len = file_size;
 
-    result = load(bkey, parse_record, args, &context);
+    result = load(bkey, args, &context);
     free(context.str);
     return result;
 }

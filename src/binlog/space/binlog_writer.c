@@ -28,15 +28,12 @@
 #include "fastcommon/logger.h"
 #include "fastcommon/shared_func.h"
 #include "fastcommon/pthread_func.h"
+#include "fastcommon/fc_atomic.h"
 #include "fastcommon/sched_thread.h"
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
-#include "../../server_global.h"
-#include "write_fd_cache.h"
-#include "inode_index_array.h"
+#include "../common/write_fd_cache.h"
 #include "binlog_reader.h"
-#include "bid_journal.h"
-#include "segment_index.h"
 #include "binlog_writer.h"
 
 #define BINLOG_RECORD_BATCH_SIZE  1024
@@ -46,11 +43,11 @@ typedef struct binlog_writer_synchronize_args {
         bool done;
         pthread_lock_cond_pair_t lcp;
     } notify;
-    FDIRInodeSegmentIndexInfo *segment;
+    DABinlogWriter *writer;
 } BWriterSynchronizeArgs;
 
 typedef struct binlog_writer_shrink_task {
-    FDIRInodeSegmentIndexInfo *segment;
+    DABinlogWriter *writer;
     struct binlog_writer_shrink_task *next;
 } BinlogWriterShrinkTask;
 
@@ -70,7 +67,7 @@ typedef struct {
 } BinlogWriterContext;
 
 typedef struct {
-    uint64_t binlog_id;
+    DABinlogIdTypePair key;
     char buff[8 * 1024];
     char *current;
     char *buff_end;
@@ -92,7 +89,8 @@ static inline void notify(BWriterSynchronizeArgs *sync_args)
 
 static inline void cache_init(BinlogWriterCache *cache)
 {
-    cache->binlog_id = 0;
+    cache->key.id = 0;
+    cache->key.type = 0;
     cache->fd = -1;
     cache->current = cache->buff;
     cache->buff_end = cache->buff + sizeof(cache->buff);
@@ -110,82 +108,48 @@ static inline int cache_write(BinlogWriterCache *cache)
     return fc_safe_write(cache->fd, cache->buff, len);
 }
 
-static inline int log4create(const FDIRStorageInodeIndexInfo *index,
-        BinlogWriterCache *cache)
+static int log(DABinlogRecord *record, BinlogWriterCache *cache)
 {
     int result;
 
-    if (cache->buff_end - cache->current <
-            FDIR_INODE_BINLOG_RECORD_MAX_SIZE)
+    if (!DA_BINLOG_ID_TYPE_EQUALS(record->writer->key,
+                cache->key) || cache->fd < 0)
     {
         if ((result=cache_write(cache)) != 0) {
             return result;
         }
-    }
-
-    cache->current += sprintf(cache->current,
-            "%"PRId64" %"PRId64" %c %"PRId64" %d\n",
-            index->version, index->inode,
-            inode_index_op_type_create,
-            index->file_id, index->offset);
-    return 0;
-}
-
-static inline int log4remove(const FDIRStorageInodeIndexInfo *index,
-        BinlogWriterCache *cache)
-{
-    int result;
-
-    if (cache->buff_end - cache->current <
-            FDIR_INODE_BINLOG_RECORD_MAX_SIZE)
-    {
-        if ((result=cache_write(cache)) != 0) {
-            return result;
-        }
-    }
-
-    cache->current += sprintf(cache->current,
-            "%"PRId64" %"PRId64" %c\n",
-            index->version, index->inode,
-            inode_index_op_type_remove);
-    return 0;
-}
-
-static int log(FDIRInodeBinlogRecord *record, BinlogWriterCache *cache)
-{
-    int result;
-
-    if (record->binlog_id != cache->binlog_id || cache->fd < 0) {
-        if ((result=cache_write(cache)) != 0) {
-            return result;
-        }
-        cache->binlog_id = record->binlog_id;
-        if ((cache->fd=write_fd_cache_get(record->binlog_id)) < 0) {
+        cache->key = record->writer->key;
+        if ((cache->fd=write_fd_cache_get(&cache->key)) < 0) {
             return -1 * cache->fd;
         }
     }
 
-    if (record->op_type == inode_index_op_type_create) {
-        return log4create(&record->inode_index, cache);
-    } else {
-        return log4remove(&record->inode_index, cache);
+    if (cache->buff_end - cache->current < DA_BINLOG_RECORD_MAX_SIZE) {
+        if ((result=cache_write(cache)) != 0) {
+            return result;
+        }
     }
+
+    cache->current += g_write_cache_ctx.type_subdir_array.pairs[
+        record->writer->key.type].pack_record(record->args, cache->current,
+                cache->buff_end - cache->current);
+    return 0;
 }
 
-#define update_segment_index(start, end)  \
-    inode_segment_index_update((FDIRInodeSegmentIndexInfo *) \
-            (*start)->args, start, end - start)
+#define batch_update_index(start, end)  \
+    g_write_cache_ctx.type_subdir_array.pairs[(*start)->writer->key.type]. \
+    batch_update((*start)->writer, start, end - start)
 
-#define dec_segment_updating_count(start, end)  \
-    FC_ATOMIC_DEC_EX(((FDIRInodeSegmentIndexInfo *)(*start)-> \
-                args)->inodes.updating_count, end - start)
+#define dec_writer_updating_count(start, end)  \
+    FC_ATOMIC_DEC_EX(((DABinlogWriter *)(*start)-> \
+                args)->updating_count, end - start)
 
-static int deal_sorted_record(FDIRInodeBinlogRecord **records,
+static int deal_sorted_record(DABinlogRecord **records,
         const int count)
 {
-    FDIRInodeBinlogRecord **record;
-    FDIRInodeBinlogRecord **end;
-    FDIRInodeBinlogRecord **start;
+    DABinlogRecord **record;
+    DABinlogRecord **end;
+    DABinlogRecord **start;
     BinlogWriterCache cache;
     int r;
     int result;
@@ -197,7 +161,7 @@ static int deal_sorted_record(FDIRInodeBinlogRecord **records,
     for (record=records; record<end; record++) {
         if ((*record)->op_type == inode_index_op_type_synchronize) {
             if (start != NULL) {
-                if ((result=update_segment_index(start, record)) != 0) {
+                if ((result=batch_update_index(start, record)) != 0) {
                     break;
                 }
                 start = NULL;
@@ -206,8 +170,10 @@ static int deal_sorted_record(FDIRInodeBinlogRecord **records,
         } else {
             if (start == NULL) {
                 start = record;
-            } else if ((*record)->binlog_id != (*start)->binlog_id) {
-                if ((result=update_segment_index(start, record)) != 0) {
+            } else if (!DA_BINLOG_ID_TYPE_EQUALS((*record)->
+                        writer->key, (*start)->writer->key))
+            {
+                if ((result=batch_update_index(start, record)) != 0) {
                     break;
                 }
                 start = record;
@@ -221,7 +187,7 @@ static int deal_sorted_record(FDIRInodeBinlogRecord **records,
     r = cache_write(&cache);
     if (record == end) {
         if (start != NULL) {
-            if ((result=update_segment_index(start, end)) != 0) {
+            if ((result=batch_update_index(start, end)) != 0) {
                 return result;
             }
         }
@@ -237,11 +203,19 @@ static int deal_sorted_record(FDIRInodeBinlogRecord **records,
     return result;
 }
 
-static int record_compare(const FDIRInodeBinlogRecord **record1,
-        const FDIRInodeBinlogRecord **record2)
+static int record_compare(const DABinlogRecord **record1,
+        const DABinlogRecord **record2)
 {
     int sub;
-    sub = fc_compare_int64((*record1)->binlog_id, (*record2)->binlog_id);
+
+    sub = fc_compare_int64((*record1)->writer->key.id,
+            (*record2)->writer->key.id);
+    if (sub != 0) {
+        return sub;
+    }
+
+    sub = (int)(*record1)->writer->key.type -
+        (int)(*record2)->writer->key.type;
     if (sub == 0) {
         return fc_compare_int64((*record1)->version, (*record2)->version);
     } else {
@@ -249,43 +223,45 @@ static int record_compare(const FDIRInodeBinlogRecord **record1,
     }
 }
 
-static void dec_updating_count(FDIRInodeBinlogRecord **records,
+static void dec_updating_count(DABinlogRecord **records,
         const int count)
 {
-    FDIRInodeBinlogRecord **record;
-    FDIRInodeBinlogRecord **end;
-    FDIRInodeBinlogRecord **start;
+    DABinlogRecord **record;
+    DABinlogRecord **end;
+    DABinlogRecord **start;
 
     start = NULL;
     end = records + count;
     for (record=records; record<end; record++) {
         if ((*record)->op_type == inode_index_op_type_synchronize) {
             if (start != NULL) {
-                dec_segment_updating_count(start, record);
+                dec_writer_updating_count(start, record);
                 start = NULL;
             }
         } else {
             if (start == NULL) {
                 start = record;
-            } else if ((*record)->binlog_id != (*start)->binlog_id) {
-                dec_segment_updating_count(start, record);
+            } else if (!DA_BINLOG_ID_TYPE_EQUALS((*record)->
+                        writer->key, (*start)->writer->key))
+            {
+                dec_writer_updating_count(start, record);
                 start = record;
             }
         }
     }
 
     if (start != NULL) {
-        dec_segment_updating_count(start, end);
+        dec_writer_updating_count(start, end);
     }
 }
 
-static int deal_binlog_records(FDIRInodeBinlogRecord *head)
+static int deal_binlog_records(DABinlogRecord *head)
 {
     int result;
     int count;
-    FDIRInodeBinlogRecord *records[BINLOG_RECORD_BATCH_SIZE];
-    FDIRInodeBinlogRecord **pp;
-    FDIRInodeBinlogRecord *record;
+    DABinlogRecord *records[BINLOG_RECORD_BATCH_SIZE];
+    DABinlogRecord **pp;
+    DABinlogRecord *record;
     struct fast_mblock_node *node;
     struct fast_mblock_chain chain;
 
@@ -309,7 +285,7 @@ static int deal_binlog_records(FDIRInodeBinlogRecord *head)
 
     count = pp - records;
     if (count > 1) {
-        qsort(records, count, sizeof(FDIRInodeBinlogRecord *),
+        qsort(records, count, sizeof(DABinlogRecord *),
                 (int (*)(const void *, const void *))record_compare);
     }
 
@@ -317,72 +293,6 @@ static int deal_binlog_records(FDIRInodeBinlogRecord *head)
     dec_updating_count(records, count);
     fast_mblock_batch_free(&binlog_writer_ctx.allocators.record, &chain);
     return result;
-}
-
-static int shrink(FDIRInodeSegmentIndexInfo *segment)
-{
-    int result;
-    BinlogWriterCache cache;
-    FDIRStorageInodeIndexInfo *inode;
-    FDIRStorageInodeIndexInfo *end;
-    char full_filename[PATH_MAX];
-    char tmp_filename[PATH_MAX];
-
-    if ((result=inode_segment_index_shrink(segment)) != 0) {
-        return result;
-    }
-
-    binlog_fd_cache_filename(segment->binlog_id,
-            full_filename, sizeof(full_filename));
-    if (segment->inodes.array.counts.total == 0) {
-        if ((result=fc_delete_file_ex(full_filename, "inode binlog")) != 0) {
-            return result;
-        } else {
-            return bid_journal_log(segment->binlog_id,
-                    inode_binlog_id_op_type_remove);
-        }
-    }
-
-    snprintf(tmp_filename, sizeof(tmp_filename),
-            "%s.tmp", full_filename);
-    cache_init(&cache);
-    if ((cache.fd=open(tmp_filename, O_WRONLY |
-                    O_CREAT | O_TRUNC, 0755)) < 0)
-    {
-        result = errno != 0 ? errno : ENOENT;
-        logError("file: "__FILE__", line: %d, "
-                "open file %s fail, errno: %d, error info: %s",
-                __LINE__, tmp_filename, result, strerror(result));
-        return result;
-    }
-
-    end = segment->inodes.array.inodes + segment->inodes.array.counts.total;
-    for (inode=segment->inodes.array.inodes; inode<end; inode++) {
-        if (inode->status == FDIR_STORAGE_INODE_STATUS_NORMAL) {
-            if ((result=log4create(inode, &cache)) != 0) {
-                close(cache.fd);
-                return result;
-            }
-        }
-    }
-
-    result = cache_write(&cache);
-    close(cache.fd);
-    if (result != 0) {
-        return result;
-    }
-
-    if (rename(tmp_filename, full_filename) != 0) {
-        result = errno != 0 ? errno : EIO;
-        logError("file: "__FILE__", line: %d, "
-                "rename file \"%s\" to \"%s\" fail, "
-                "errno: %d, error info: %s",
-                __LINE__, tmp_filename, full_filename,
-                result, STRERROR(result));
-        return result;
-    }
-
-    return 0;
 }
 
 static void deal_shrink_queue()
@@ -411,10 +321,10 @@ static void deal_shrink_queue()
 
     binlog_writer_ctx.last_shrink_time = g_current_time;
 
-    write_fd_cache_remove(stask->segment->binlog_id);
-    PTHREAD_MUTEX_LOCK(&stask->segment->lcp.lock);
-    result = shrink(stask->segment);
-    PTHREAD_MUTEX_UNLOCK(&stask->segment->lcp.lock);
+    //write_fd_cache_remove(stask->writer->binlog_id);
+    //result = shrink(stask->writer);
+    //TODO
+    result = 0;
     if (result != 0) {
         logCrit("file: "__FILE__", line: %d, "
                 "deal_shrink_queue fail, "
@@ -425,7 +335,7 @@ static void deal_shrink_queue()
 
 static void *binlog_writer_func(void *arg)
 {
-    FDIRInodeBinlogRecord *head;
+    DABinlogRecord *head;
     bool blocked;
 
 #ifdef OS_LINUX
@@ -435,7 +345,7 @@ static void *binlog_writer_func(void *arg)
     binlog_writer_ctx.running = true;
     while (SF_G_CONTINUE_FLAG) {
         blocked = fc_queue_empty(&WRITER_SHRINK_QUEUE);
-        if ((head=(FDIRInodeBinlogRecord *)fc_queue_pop_all_ex(
+        if ((head=(DABinlogRecord *)fc_queue_pop_all_ex(
                         &WRITER_NORMAL_QUEUE, blocked)) == NULL)
         {
             deal_shrink_queue();
@@ -462,7 +372,7 @@ static int sargs_alloc_init_func(BWriterSynchronizeArgs *element, void *args)
     return init_pthread_lock_cond_pair(&element->notify.lcp);
 }
 
-int inode_binlog_writer_init()
+int da_binlog_writer_init()
 {
     int result;
     pthread_t tid;
@@ -476,7 +386,7 @@ int inode_binlog_writer_init()
     }
 
     if ((result=fast_mblock_init_ex1(&binlog_writer_ctx.allocators.record,
-                    "inode-binlog-record", sizeof(FDIRInodeBinlogRecord),
+                    "inode-binlog-record", sizeof(DABinlogRecord),
                     BINLOG_RECORD_BATCH_SIZE, BINLOG_RECORD_BATCH_SIZE,
                     NULL, NULL, true)) != 0)
     {
@@ -493,7 +403,7 @@ int inode_binlog_writer_init()
     }
 
     if ((result=fc_queue_init(&WRITER_NORMAL_QUEUE, (unsigned long)
-                    (&((FDIRInodeBinlogRecord *)NULL)->next))) != 0)
+                    (&((DABinlogRecord *)NULL)->next))) != 0)
     {
         return result;
     }
@@ -508,41 +418,34 @@ int inode_binlog_writer_init()
             NULL, SF_G_THREAD_STACK_SIZE);
 }
 
-static inline int push_to_normal_queue(const uint64_t binlog_id,
-        const FDIRStorageInodeIndexOpType op_type,
-        const FDIRStorageInodeIndexInfo *inode_index,
-        void *args)
+static inline int push_to_normal_queue(DABinlogWriter *writer,
+        const DABinlogOpType op_type, void *args)
 {
-    FDIRInodeBinlogRecord *record;
+    DABinlogRecord *record;
 
-    if ((record=(FDIRInodeBinlogRecord *)fast_mblock_alloc_object(
+    if ((record=(DABinlogRecord *)fast_mblock_alloc_object(
                     &binlog_writer_ctx.allocators.record)) == NULL)
     {
         return ENOMEM;
     }
 
-    record->binlog_id = binlog_id;
+    record->writer = writer;
     record->version = __sync_add_and_fetch(&binlog_writer_ctx.
             current_version, 1);
     record->op_type = op_type;
-    if (inode_index != NULL) {
-        record->inode_index = *inode_index;
-    }
     record->args = args;
     fc_queue_push(&WRITER_NORMAL_QUEUE, record);
     return 0;
 }
 
-int inode_binlog_writer_log(FDIRInodeSegmentIndexInfo *segment,
-        const FDIRStorageInodeIndexOpType op_type,
-        const FDIRStorageInodeIndexInfo *inode_index)
+int da_binlog_writer_log(DABinlogWriter *writer, void *args)
 {
-    FC_ATOMIC_INC(segment->inodes.updating_count);
-    return push_to_normal_queue(segment->binlog_id,
-            op_type, inode_index, segment);
+    FC_ATOMIC_INC(writer->updating_count);
+    return push_to_normal_queue(writer,
+            inode_index_op_type_log, args);
 }
 
-int inode_binlog_writer_shrink(FDIRInodeSegmentIndexInfo *segment)
+int da_binlog_writer_shrink(DABinlogWriter *writer)
 {
     BinlogWriterShrinkTask *stask;
 
@@ -552,12 +455,12 @@ int inode_binlog_writer_shrink(FDIRInodeSegmentIndexInfo *segment)
         return ENOMEM;
     }
 
-    stask->segment = segment;
+    stask->writer = writer;
     fc_queue_push(&WRITER_SHRINK_QUEUE, stask);
     return 0;
 }
 
-int inode_binlog_writer_synchronize(FDIRInodeSegmentIndexInfo *segment)
+int da_binlog_writer_synchronize(DABinlogWriter *writer)
 {
     BWriterSynchronizeArgs *sync_args;
     int result;
@@ -567,11 +470,12 @@ int inode_binlog_writer_synchronize(FDIRInodeSegmentIndexInfo *segment)
     {
         return ENOMEM;
     }
-    sync_args->segment = segment;
+    sync_args->writer = writer;
 
     do {
-        result = push_to_normal_queue(segment->binlog_id,
-                inode_index_op_type_synchronize, NULL, sync_args);
+        result = push_to_normal_queue(writer,
+                inode_index_op_type_synchronize,
+                sync_args);
         if (result != 0) {
             break;
         }
@@ -590,6 +494,6 @@ int inode_binlog_writer_synchronize(FDIRInodeSegmentIndexInfo *segment)
     return result;
 }
 
-void inode_binlog_writer_finish()
+void da_binlog_writer_finish()
 {
 }

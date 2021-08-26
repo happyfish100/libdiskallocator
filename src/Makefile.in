@@ -20,7 +20,8 @@ ALL_HEADERS  = $(TOP_HEADERS) $(DIO_HEADER) $(STORAGE_HEADER)
 TOP_OBJS = global.o
 
 BINLOG_OBJS = binlog/common/binlog_fd_cache.o binlog/common/write_fd_cache.o \
-              binlog/trunk/trunk_binlog.o binlog/space/binlog_reader.o
+              binlog/trunk/trunk_binlog.o binlog/space/binlog_reader.o \
+              binlog/space/binlog_writer.o
 
 DIO_OBJS =  dio/trunk_write_thread.o dio/trunk_read_thread.o \
             dio/trunk_fd_cache.o dio/read_buffer_pool.o

@@ -35,17 +35,17 @@ extern "C" {
     }
 
     //return fd, < 0 for error
-    static inline int write_fd_cache_get(const BinlogIdTypePair *key)
+    static inline int write_fd_cache_get(const DABinlogIdTypePair *key)
     {
         return binlog_fd_cache_get(&g_write_cache_ctx, key);
     }
 
-    static inline int write_fd_cache_remove(const BinlogIdTypePair *key)
+    static inline int write_fd_cache_remove(const DABinlogIdTypePair *key)
     {
         return binlog_fd_cache_remove(&g_write_cache_ctx, key);
     }
 
-    static inline int write_fd_cache_filename(const BinlogIdTypePair *key,
+    static inline int write_fd_cache_filename(const DABinlogIdTypePair *key,
             char *full_filename, const int size)
     {
         return binlog_fd_cache_filename(&g_write_cache_ctx,

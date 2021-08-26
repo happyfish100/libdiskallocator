@@ -15,26 +15,24 @@
 
 //binlog_writer.h
 
-#ifndef _INODE_BINLOG_WRITER_H_
-#define _INODE_BINLOG_WRITER_H_
+#ifndef _DA_BINLOG_WRITER_H_
+#define _DA_BINLOG_WRITER_H_
 
-#include "../storage_types.h"
+#include "../common/binlog_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int inode_binlog_writer_init();
+int da_binlog_writer_init();
 
-int inode_binlog_writer_log(FDIRInodeSegmentIndexInfo *segment,
-        const FDIRStorageInodeIndexOpType op_type,
-        const FDIRStorageInodeIndexInfo *inode_index);
+int da_binlog_writer_log(DABinlogWriter *writer, void *args);
 
-int inode_binlog_writer_synchronize(FDIRInodeSegmentIndexInfo *segment);
+int da_binlog_writer_synchronize(DABinlogWriter *writer);
 
-int inode_binlog_writer_shrink(FDIRInodeSegmentIndexInfo *segment);
+int da_binlog_writer_shrink(DABinlogWriter *writer);
 
-void inode_binlog_writer_finish();
+void da_binlog_writer_finish();
 
 #ifdef __cplusplus
 }

@@ -20,15 +20,14 @@
 #include "fastcommon/fast_mblock.h"
 #include "fastcommon/shared_func.h"
 #include "../../global.h"
-
-typedef struct binlog_id_type_pair {
-    uint64_t id;
-    int type;
-} BinlogIdTypePair;
+#include "binlog_types.h"
 
 typedef struct binlog_type_subdir_pair {
     int type;
     char subdir_name[64];
+    da_binlog_pack_record_func pack_record;
+    da_binlog_unpack_record_func unpack_record;
+    da_binlog_batch_update_func batch_update;
 } BinlogTypeSubdirPair;
 
 typedef struct binlog_type_subdir_array {
@@ -37,7 +36,7 @@ typedef struct binlog_type_subdir_array {
 } BinlogTypeSubdirArray;
 
 typedef struct binlog_id_fd_pair {
-    BinlogIdTypePair key;
+    DABinlogIdTypePair key;
     int fd;
 } BinlogIdFDPair;
 
@@ -65,9 +64,6 @@ typedef struct {
     struct fast_mblock_man allocator;
 } BinlogFDCacheContext;
 
-#define BINLOG_ID_TYPE_EQUALS(key1, key2) \
-    ((key1).id == (key2).id && (key1).type == (key2).type)
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -79,13 +75,13 @@ extern "C" {
 
     //return fd, < 0 for error
     int binlog_fd_cache_get(BinlogFDCacheContext *cache_ctx,
-            const BinlogIdTypePair *key);
+            const DABinlogIdTypePair *key);
 
     int binlog_fd_cache_remove(BinlogFDCacheContext *cache_ctx,
-            const BinlogIdTypePair *key);
+            const DABinlogIdTypePair *key);
 
     static inline int binlog_fd_cache_filename(BinlogFDCacheContext
-            *cache_ctx, const BinlogIdTypePair *key,
+            *cache_ctx, const DABinlogIdTypePair *key,
             char *full_filename, const int size)
     {
         int path_index;
