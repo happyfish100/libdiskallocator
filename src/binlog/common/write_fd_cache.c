@@ -13,25 +13,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-//binlog_reader.h
+#include "write_fd_cache.h"
 
-#ifndef _BINLOG_READER_H_
-#define _BINLOG_READER_H_
-
-#include "../common/write_fd_cache.h"
-
-typedef int (*binlog_parse_record_func)(const string_t *line,
-        void *args, char *error_info);
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-int binlog_reader_load(const BinlogIdTypePair *bkey,
-        binlog_parse_record_func parse_record, void *args);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif
+BinlogFDCacheContext g_write_cache_ctx;

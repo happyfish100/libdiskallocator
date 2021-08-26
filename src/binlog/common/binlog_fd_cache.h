@@ -21,8 +21,23 @@
 #include "fastcommon/shared_func.h"
 #include "../../global.h"
 
+typedef struct binlog_id_type_pair {
+    uint64_t id;
+    int type;
+} BinlogIdTypePair;
+
+typedef struct binlog_type_subdir_pair {
+    int type;
+    char subdir_name[64];
+} BinlogTypeSubdirPair;
+
+typedef struct binlog_type_subdir_array {
+    BinlogTypeSubdirPair *pairs;
+    int count;
+} BinlogTypeSubdirArray;
+
 typedef struct binlog_id_fd_pair {
-    uint64_t binlog_id;
+    BinlogIdTypePair key;
     int fd;
 } BinlogIdFDPair;
 
@@ -39,7 +54,7 @@ typedef struct {
 
 typedef struct {
     BinlogFDCacheHashtable htable;
-    char subdir_name[64];
+    BinlogTypeSubdirArray type_subdir_array;
     int open_flags;
     int max_idle_time;
     struct {
@@ -50,30 +65,35 @@ typedef struct {
     struct fast_mblock_man allocator;
 } BinlogFDCacheContext;
 
+#define BINLOG_ID_TYPE_EQUALS(key1, key2) \
+    ((key1).id == (key2).id && (key1).type == (key2).type)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
     int binlog_fd_cache_init(BinlogFDCacheContext *cache_ctx,
-            const char *subdir_name, const int open_flags,
-            const int max_idle_time, const int capacity);
+            const BinlogTypeSubdirArray *type_subdir_array,
+            const int open_flags, const int max_idle_time,
+            const int capacity);
 
     //return fd, < 0 for error
     int binlog_fd_cache_get(BinlogFDCacheContext *cache_ctx,
-            const uint64_t binlog_id);
+            const BinlogIdTypePair *key);
 
     int binlog_fd_cache_remove(BinlogFDCacheContext *cache_ctx,
-            const uint64_t binlog_id);
+            const BinlogIdTypePair *key);
 
-    static inline int binlog_fd_cache_filename(const char *subdir_name,
-            const uint64_t binlog_id, char *full_filename, const int size)
+    static inline int binlog_fd_cache_filename(BinlogFDCacheContext
+            *cache_ctx, const BinlogIdTypePair *key,
+            char *full_filename, const int size)
     {
         int path_index;
 
-        path_index = binlog_id % BINLOG_SUBDIRS;
+        path_index = key->id % BINLOG_SUBDIRS;
         snprintf(full_filename, size, "%s/%s/%02X/%02X/binlog.%08"PRIX64,
-                DATA_PATH_STR, subdir_name, path_index, path_index, binlog_id);
+                DATA_PATH_STR, cache_ctx->type_subdir_array.pairs
+                [key->type].subdir_name, path_index, path_index, key->id);
         return 0;
     }
 

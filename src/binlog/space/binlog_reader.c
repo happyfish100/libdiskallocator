@@ -18,9 +18,8 @@
 #include "../common/binlog_fd_cache.h"
 #include "binlog_reader.h"
 
-static int load(const char *subdir_name, const int64_t binlog_id,
-        binlog_parse_record_func parse_record, void *args,
-        const string_t *context)
+static int load(const BinlogIdTypePair *bkey, binlog_parse_record_func
+        parse_record, void *args, const string_t *context)
 {
     int result;
     string_t line;
@@ -43,11 +42,10 @@ static int load(const char *subdir_name, const int64_t binlog_id,
         line.len = line_end - line_start;
         if ((result=parse_record(&line, args, error_info)) != 0) {
             char filename[PATH_MAX];
-            binlog_fd_cache_filename(subdir_name, binlog_id,
-                    filename, sizeof(filename));
+            write_fd_cache_filename(bkey, filename, sizeof(filename));
             logError("file: "__FILE__", line: %d, "
                     "parse record fail, binlog id: %"PRId64", "
-                    "binlog file: %s%s%s", __LINE__, binlog_id, filename,
+                    "binlog file: %s%s%s", __LINE__, bkey->id, filename,
                     (*error_info != '\0' ? ", error info: " : ""), error_info);
             break;
         }
@@ -58,7 +56,7 @@ static int load(const char *subdir_name, const int64_t binlog_id,
     return result;
 }
 
-int binlog_reader_load(const char *subdir_name, const int64_t binlog_id,
+int binlog_reader_load(const BinlogIdTypePair *bkey,
         binlog_parse_record_func parse_record, void *args)
 {
     int result;
@@ -66,8 +64,7 @@ int binlog_reader_load(const char *subdir_name, const int64_t binlog_id,
     int64_t file_size;
     string_t context;
 
-    binlog_fd_cache_filename(subdir_name, binlog_id,
-            filename, sizeof(filename));
+    write_fd_cache_filename(bkey, filename, sizeof(filename));
     if (access(filename, F_OK) != 0) {
         result = errno != 0 ? errno : EPERM;
         if (result == ENOENT) {
@@ -75,7 +72,7 @@ int binlog_reader_load(const char *subdir_name, const int64_t binlog_id,
         } else {
             logError("file: "__FILE__", line: %d, "
                     "binlog id: %"PRId64", access binlog file %s fail, "
-                    "errno: %d, error info: %s", __LINE__, binlog_id,
+                    "errno: %d, error info: %s", __LINE__, bkey->id,
                     filename, result,STRERROR(result));
             return result;
         }
@@ -86,7 +83,7 @@ int binlog_reader_load(const char *subdir_name, const int64_t binlog_id,
     }
     context.len = file_size;
 
-    result = load(subdir_name, binlog_id, parse_record, args, &context);
+    result = load(bkey, parse_record, args, &context);
     free(context.str);
     return result;
 }

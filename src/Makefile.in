@@ -7,8 +7,7 @@ TARGET_LIB = $(TARGET_PREFIX)/$(LIB_VERSION)
 
 TOP_HEADERS = global.h
 
-BINLOG_COMMON_HEADER = binlog/common/binlog_fd_cache.h binlog/common/read_fd_cache.h \
-                binlog/common/write_fd_cache.h
+BINLOG_COMMON_HEADER = binlog/common/binlog_fd_cache.h binlog/common/write_fd_cache.h
 
 BINLOG_SPACE_HEADER = binlog/space/binlog_reader.h
 
@@ -20,7 +19,8 @@ ALL_HEADERS  = $(TOP_HEADERS) $(DIO_HEADER) $(STORAGE_HEADER)
 
 TOP_OBJS = global.o
 
-BINLOG_OBJS = binlog/trunk/trunk_binlog.o binlog/space/binlog_reader.o
+BINLOG_OBJS = binlog/common/binlog_fd_cache.o binlog/common/write_fd_cache.o \
+              binlog/trunk/trunk_binlog.o binlog/space/binlog_reader.o
 
 DIO_OBJS =  dio/trunk_write_thread.o dio/trunk_read_thread.o \
             dio/trunk_fd_cache.o dio/read_buffer_pool.o
