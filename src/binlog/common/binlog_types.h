@@ -13,8 +13,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef _BINLOG_TYPES_H
-#define _BINLOG_TYPES_H
+#ifndef _DA_BINLOG_TYPES_H
+#define _DA_BINLOG_TYPES_H
 
 #include "fastcommon/common_define.h"
 #include "fastcommon/fc_list.h"
@@ -28,8 +28,9 @@ typedef struct da_binlog_id_type_pair {
 } DABinlogIdTypePair;
 
 typedef enum da_binlog_op_type {
-    inode_index_op_type_log = 'l',
-    inode_index_op_type_synchronize = 's'
+    da_binlog_op_type_create = 'c',
+    da_binlog_op_type_remove = 'd',
+    da_binlog_op_type_synchronize = 's'
 } DABinlogOpType;
 
 typedef struct da_binlog_writer {
@@ -46,13 +47,18 @@ typedef struct da_binlog_record {
 } DABinlogRecord;
 
 typedef int (*da_binlog_pack_record_func)(void *args,
-        char *buff, const int size);
+        const DABinlogOpType op_type, char *buff, const int size);
 
 typedef int (*da_binlog_unpack_record_func)(const string_t *line,
         void *args, char *error_info);
 
 typedef int (*da_binlog_batch_update_func)(DABinlogWriter *writer,
             DABinlogRecord **records, const int count);
+
+typedef int (*da_binlog_shrink_func)(DABinlogWriter *writer);
+
+#define DA_DECLARE_BINLOG_ID_TYPE_VAR(var, bid, tp) \
+    DABinlogIdTypePair var = {bid, tp}
 
 #define DA_BINLOG_ID_TYPE_EQUALS(key1, key2) \
     ((key1).id == (key2).id && (key1).type == (key2).type)

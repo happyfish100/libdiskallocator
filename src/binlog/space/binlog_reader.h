@@ -15,8 +15,8 @@
 
 //binlog_reader.h
 
-#ifndef _BINLOG_READER_H_
-#define _BINLOG_READER_H_
+#ifndef _DA_BINLOG_READER_H_
+#define _DA_BINLOG_READER_H_
 
 #include "../common/write_fd_cache.h"
 
@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-int binlog_reader_load(const DABinlogIdTypePair *bkey, void *args);
+int da_binlog_reader_load(const DABinlogIdTypePair *bkey, void *args);
 
 #ifdef __cplusplus
 }

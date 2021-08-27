@@ -15,4 +15,4 @@
 
 #include "write_fd_cache.h"
 
-BinlogFDCacheContext g_write_cache_ctx;
+DABinlogFDCacheContext g_da_write_cache_ctx;

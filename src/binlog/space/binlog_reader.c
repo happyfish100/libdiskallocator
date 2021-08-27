@@ -40,11 +40,11 @@ static int load(const DABinlogIdTypePair *bkey,
         ++line_end;
         line.str = line_start;
         line.len = line_end - line_start;
-        if ((result=g_write_cache_ctx.type_subdir_array.pairs[bkey->type].
+        if ((result=g_da_write_cache_ctx.type_subdir_array.pairs[bkey->type].
                     unpack_record(&line, args, error_info)) != 0)
         {
             char filename[PATH_MAX];
-            write_fd_cache_filename(bkey, filename, sizeof(filename));
+            da_write_fd_cache_filename(bkey, filename, sizeof(filename));
             logError("file: "__FILE__", line: %d, "
                     "parse record fail, binlog id: %"PRId64", "
                     "binlog file: %s%s%s", __LINE__, bkey->id, filename,
@@ -58,14 +58,14 @@ static int load(const DABinlogIdTypePair *bkey,
     return result;
 }
 
-int binlog_reader_load(const DABinlogIdTypePair *bkey, void *args)
+int da_binlog_reader_load(const DABinlogIdTypePair *bkey, void *args)
 {
     int result;
     char filename[PATH_MAX];
     int64_t file_size;
     string_t context;
 
-    write_fd_cache_filename(bkey, filename, sizeof(filename));
+    da_write_fd_cache_filename(bkey, filename, sizeof(filename));
     if (access(filename, F_OK) != 0) {
         result = errno != 0 ? errno : EPERM;
         if (result == ENOENT) {

@@ -61,11 +61,11 @@ static int check_make_subdirs(const char *subdir_name)
     return 0;
 }
 
-static int check_make_all_subdirs(const BinlogFDCacheContext *cache_ctx)
+static int check_make_all_subdirs(const DABinlogFDCacheContext *cache_ctx)
 {
     int result;
-    BinlogTypeSubdirPair *pair;
-    BinlogTypeSubdirPair *end;
+    DABinlogTypeSubdirPair *pair;
+    DABinlogTypeSubdirPair *end;
 
     end = cache_ctx->type_subdir_array.pairs +
         cache_ctx->type_subdir_array.count;
@@ -78,7 +78,7 @@ static int check_make_all_subdirs(const BinlogFDCacheContext *cache_ctx)
     return 0;
 }
 
-static int init_htable_and_allocator(BinlogFDCacheContext
+static int init_htable_and_allocator(DABinlogFDCacheContext
         *cache_ctx, const int capacity)
 {
     int bytes;
@@ -91,8 +91,8 @@ static int init_htable_and_allocator(BinlogFDCacheContext
         cache_ctx->htable.size = capacity;
     }
 
-    bytes = sizeof(BinlogFDCacheEntry *) * cache_ctx->htable.size;
-    cache_ctx->htable.buckets = (BinlogFDCacheEntry **)fc_malloc(bytes);
+    bytes = sizeof(DABinlogFDCacheEntry *) * cache_ctx->htable.size;
+    cache_ctx->htable.buckets = (DABinlogFDCacheEntry **)fc_malloc(bytes);
     if (cache_ctx->htable.buckets == NULL) {
         return ENOMEM;
     }
@@ -110,18 +110,18 @@ static int init_htable_and_allocator(BinlogFDCacheContext
         alloc_elements_once = 8 * 1024;
     }
     return fast_mblock_init_ex1(&cache_ctx->allocator,
-            "binlog-fd-cache", sizeof(BinlogFDCacheEntry),
+            "binlog-fd-cache", sizeof(DABinlogFDCacheEntry),
             alloc_elements_once, 0, NULL, NULL, false);
 }
 
-static int duplicate_type_subdir_array(BinlogFDCacheContext *cache_ctx,
-        const BinlogTypeSubdirArray *type_subdir_array)
+static int duplicate_type_subdir_array(DABinlogFDCacheContext *cache_ctx,
+        const DABinlogTypeSubdirArray *type_subdir_array)
 {
     int bytes;
 
-    bytes = sizeof(BinlogTypeSubdirPair) * type_subdir_array->count;
+    bytes = sizeof(DABinlogTypeSubdirPair) * type_subdir_array->count;
     cache_ctx->type_subdir_array.pairs =
-        (BinlogTypeSubdirPair *)fc_malloc(bytes);
+        (DABinlogTypeSubdirPair *)fc_malloc(bytes);
     if (cache_ctx->type_subdir_array.pairs == NULL) {
         return ENOMEM;
     }
@@ -133,8 +133,8 @@ static int duplicate_type_subdir_array(BinlogFDCacheContext *cache_ctx,
     return 0;
 }
 
-int binlog_fd_cache_init(BinlogFDCacheContext *cache_ctx,
-        const BinlogTypeSubdirArray *type_subdir_array,
+int da_binlog_fd_cache_init(DABinlogFDCacheContext *cache_ctx,
+        const DABinlogTypeSubdirArray *type_subdir_array,
         const int open_flags, const int max_idle_time,
         const int capacity)
 {
@@ -162,11 +162,11 @@ int binlog_fd_cache_init(BinlogFDCacheContext *cache_ctx,
     return 0;
 }
 
-static int fd_cache_get(BinlogFDCacheContext *cache_ctx,
+static int fd_cache_get(DABinlogFDCacheContext *cache_ctx,
         const DABinlogIdTypePair *key)
 {
-    BinlogFDCacheEntry **bucket;
-    BinlogFDCacheEntry *entry;
+    DABinlogFDCacheEntry **bucket;
+    DABinlogFDCacheEntry *entry;
 
     bucket = cache_ctx->htable.buckets +
         key->id % cache_ctx->htable.size;
@@ -194,12 +194,12 @@ static int fd_cache_get(BinlogFDCacheContext *cache_ctx,
     }
 }
 
-int binlog_fd_cache_remove(BinlogFDCacheContext *cache_ctx,
+int da_binlog_fd_cache_remove(DABinlogFDCacheContext *cache_ctx,
         const DABinlogIdTypePair *key)
 {
-    BinlogFDCacheEntry **bucket;
-    BinlogFDCacheEntry *previous;
-    BinlogFDCacheEntry *entry;
+    DABinlogFDCacheEntry **bucket;
+    DABinlogFDCacheEntry *previous;
+    DABinlogFDCacheEntry *entry;
 
     bucket = cache_ctx->htable.buckets +
         key->id % cache_ctx->htable.size;
@@ -236,21 +236,21 @@ int binlog_fd_cache_remove(BinlogFDCacheContext *cache_ctx,
     return 0;
 }
 
-static int fd_cache_add(BinlogFDCacheContext *cache_ctx,
+static int fd_cache_add(DABinlogFDCacheContext *cache_ctx,
         const DABinlogIdTypePair *key, const int fd)
 {
-    BinlogFDCacheEntry **bucket;
-    BinlogFDCacheEntry *entry;
+    DABinlogFDCacheEntry **bucket;
+    DABinlogFDCacheEntry *entry;
 
     if (cache_ctx->lru.count >= cache_ctx->lru.capacity) {
         if ((entry=fc_list_first_entry(&cache_ctx->lru.head,
-                        BinlogFDCacheEntry, dlink)) != NULL)
+                        DABinlogFDCacheEntry, dlink)) != NULL)
         {
-            binlog_fd_cache_remove(cache_ctx, &entry->pair.key);
+            da_binlog_fd_cache_remove(cache_ctx, &entry->pair.key);
         }
     }
 
-    entry = (BinlogFDCacheEntry *)fast_mblock_alloc_object(
+    entry = (DABinlogFDCacheEntry *)fast_mblock_alloc_object(
             &cache_ctx->allocator);
     if (entry == NULL) {
         return ENOMEM;
@@ -269,14 +269,14 @@ static int fd_cache_add(BinlogFDCacheContext *cache_ctx,
     return 0;
 }
 
-static inline int open_file(BinlogFDCacheContext *cache_ctx,
+static inline int open_file(DABinlogFDCacheContext *cache_ctx,
         const DABinlogIdTypePair *key)
 {
     int fd;
     int result;
     char full_filename[PATH_MAX];
 
-    if ((result=binlog_fd_cache_filename(cache_ctx, key,
+    if ((result=da_binlog_fd_cache_filename(cache_ctx, key,
                     full_filename, sizeof(full_filename))) != 0)
     {
         return -1 * result;
@@ -293,7 +293,7 @@ static inline int open_file(BinlogFDCacheContext *cache_ctx,
     return fd;
 }
 
-int binlog_fd_cache_get(BinlogFDCacheContext *cache_ctx,
+int da_binlog_fd_cache_get(DABinlogFDCacheContext *cache_ctx,
         const DABinlogIdTypePair *key)
 {
     int fd;

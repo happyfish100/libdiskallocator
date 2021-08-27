@@ -7,15 +7,21 @@ TARGET_LIB = $(TARGET_PREFIX)/$(LIB_VERSION)
 
 TOP_HEADERS = global.h
 
-BINLOG_COMMON_HEADER = binlog/common/binlog_fd_cache.h binlog/common/write_fd_cache.h
+BINLOG_COMMON_HEADER = binlog/common/binlog_types.h binlog/common/binlog_fd_cache.h \
+                       binlog/common/write_fd_cache.h
 
-BINLOG_SPACE_HEADER = binlog/space/binlog_reader.h
+BINLOG_SPACE_HEADER = binlog/space/binlog_reader.h binlog/space/binlog_writer.h
 
-DIO_HEADER =
+BINLOG_TRUNK_HEADER = binlog/trunk/trunk_binlog.h
 
-STORAGE_HEADER =
+DIO_HEADER = dio/read_buffer_pool.h dio/trunk_fd_cache.h \
+             dio/trunk_read_thread.h dio/trunk_write_thread.h
 
-ALL_HEADERS  = $(TOP_HEADERS) $(DIO_HEADER) $(STORAGE_HEADER)
+STORAGE_HEADER = storage/storage_allocator.h storage/storage_config.h \
+                 storage/storage_types.h storage/store_path_index.h \
+                 storage/trunk_allocator.h storage/trunk_freelist.h \
+                 storage/trunk_id_info.h storage/trunk_maker.h  \
+                 storage/trunk_prealloc.h storage/trunk_reclaim.h
 
 TOP_OBJS = global.o
 
@@ -52,11 +58,17 @@ libdiskallocator.so: $(SHARED_OBJS)
 install:
 	mkdir -p $(TARGET_LIB)
 	mkdir -p $(TARGET_PREFIX)/lib
+	mkdir -p $(TARGET_PREFIX)/include/diskallocator/binlog/common
+	mkdir -p $(TARGET_PREFIX)/include/diskallocator/binlog/space
+	mkdir -p $(TARGET_PREFIX)/include/diskallocator/binlog/trunk
 	mkdir -p $(TARGET_PREFIX)/include/diskallocator/storage
 	mkdir -p $(TARGET_PREFIX)/include/diskallocator/dio
 
 	install -m 755 $(ALL_LIBS) $(TARGET_LIB)
 	cp -f $(TOP_HEADERS) $(TARGET_PREFIX)/include/diskallocator/
+	cp -f $(BINLOG_COMMON_HEADER) $(TARGET_PREFIX)/include/diskallocator/binlog/common/
+	cp -f $(BINLOG_SPACE_HEADER) $(TARGET_PREFIX)/include/diskallocator/binlog/space/
+	cp -f $(BINLOG_TRUNK_HEADER) $(TARGET_PREFIX)/include/diskallocator/binlog/trunk/
 	cp -f $(STORAGE_HEADER) $(TARGET_PREFIX)/include/diskallocator/storage/
 	cp -f $(DIO_HEADER) $(TARGET_PREFIX)/include/diskallocator/dio/
 
