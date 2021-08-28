@@ -47,6 +47,7 @@ typedef struct binlog_writer_synchronize_args {
 
 typedef struct binlog_writer_shrink_task {
     DABinlogWriter *writer;
+    void *args;
     struct binlog_writer_shrink_task *next;
 } BinlogWriterShrinkTask;
 
@@ -291,7 +292,7 @@ static void deal_shrink_queue()
 
     binlog_writer_ctx.last_shrink_time = g_current_time;
     result = g_da_write_cache_ctx.type_subdir_array.pairs[
-        stask->writer->key.type].shrink(stask->writer);
+        stask->writer->key.type].shrink(stask->writer, stask->args);
     if (result != 0) {
         logCrit("file: "__FILE__", line: %d, "
                 "deal_shrink_queue fail, "
@@ -412,7 +413,7 @@ int da_binlog_writer_log(DABinlogWriter *writer,
     return push_to_normal_queue(writer, op_type, args);
 }
 
-int da_binlog_writer_shrink(DABinlogWriter *writer)
+int da_binlog_writer_shrink(DABinlogWriter *writer, void *args)
 {
     BinlogWriterShrinkTask *stask;
 
@@ -423,6 +424,7 @@ int da_binlog_writer_shrink(DABinlogWriter *writer)
     }
 
     stask->writer = writer;
+    stask->args = args;
     fc_queue_push(&WRITER_SHRINK_QUEUE, stask);
     return 0;
 }

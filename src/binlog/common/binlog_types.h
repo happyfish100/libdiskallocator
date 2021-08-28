@@ -55,10 +55,13 @@ typedef int (*da_binlog_unpack_record_func)(const string_t *line,
 typedef int (*da_binlog_batch_update_func)(DABinlogWriter *writer,
             DABinlogRecord **records, const int count);
 
-typedef int (*da_binlog_shrink_func)(DABinlogWriter *writer);
+typedef int (*da_binlog_shrink_func)(DABinlogWriter *writer, void *args);
 
 #define DA_DECLARE_BINLOG_ID_TYPE_VAR(var, bid, tp) \
     DABinlogIdTypePair var = {bid, tp}
+
+#define DA_SET_BINLOG_ID_TYPE(key, bid, tp) \
+    (key).id = bid; (key).type = tp
 
 #define DA_BINLOG_ID_TYPE_EQUALS(key1, key2) \
     ((key1).id == (key2).id && (key1).type == (key2).type)

@@ -61,7 +61,7 @@ int da_binlog_writer_log(DABinlogWriter *writer,
 
 int da_binlog_writer_synchronize(DABinlogWriter *writer);
 
-int da_binlog_writer_shrink(DABinlogWriter *writer);
+int da_binlog_writer_shrink(DABinlogWriter *writer, void *args);
 
 void da_binlog_writer_finish();
 
