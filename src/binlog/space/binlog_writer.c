@@ -107,9 +107,19 @@ static int log(DABinlogRecord *record, DABinlogWriterCache *cache)
     return 0;
 }
 
-#define batch_update_index(start, end)  \
-    g_da_write_cache_ctx.type_subdir_array.pairs[(*start)->writer->key.type]. \
-    batch_update((*start)->writer, start, end - start)
+static inline int batch_update_index(DABinlogRecord **start,
+        DABinlogRecord **end)
+{
+    da_binlog_batch_update_func callback;
+
+    callback = g_da_write_cache_ctx.type_subdir_array.pairs[
+        (*start)->writer->key.type].batch_update;
+    if (callback != NULL) {
+        return callback((*start)->writer, start, end - start);
+    } else {
+        return 0;
+    }
+}
 
 #define dec_writer_updating_count(start, end)  \
     FC_ATOMIC_DEC_EX(((DABinlogWriter *)(*start)-> \
