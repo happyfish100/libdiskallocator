@@ -30,6 +30,7 @@ typedef struct da_binlog_id_type_pair {
 typedef enum da_binlog_op_type {
     da_binlog_op_type_create = 'c',
     da_binlog_op_type_remove = 'd',
+    da_binlog_op_type_update = 'u',
     da_binlog_op_type_synchronize = 's'
 } DABinlogOpType;
 

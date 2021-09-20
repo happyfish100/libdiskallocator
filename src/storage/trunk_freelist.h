@@ -41,7 +41,7 @@ extern "C" {
             FSTrunkFileInfo *trunk_info);
 
     int trunk_freelist_alloc_space(struct fs_trunk_allocator *allocator,
-            FSTrunkFreelist *freelist, const uint32_t blk_hc, const int size,
+            FSTrunkFreelist *freelist, const uint64_t blk_hc, const int size,
             FSTrunkSpaceWithVersion *spaces, int *count, const bool is_normal);
 
     int trunk_freelist_free_space(const FSTrunkSpaceInfo *space);

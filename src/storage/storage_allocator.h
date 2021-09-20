@@ -90,7 +90,7 @@ extern "C" {
     }
 
     static inline int storage_allocator_normal_alloc_ex(
-            const uint32_t blk_hc, const int size,
+            const uint64_t blk_hc, const int size,
             FSTrunkSpaceWithVersion *spaces,
             int *count, const bool is_normal)
     {
@@ -116,7 +116,7 @@ extern "C" {
         return result;
     }
 
-    static inline int storage_allocator_reclaim_alloc(const uint32_t blk_hc,
+    static inline int storage_allocator_reclaim_alloc(const uint64_t blk_hc,
             const int size, FSTrunkSpaceWithVersion *spaces, int *count)
     {
         const bool is_normal = false;
