@@ -95,7 +95,7 @@ static int alloc_path_contexts()
 {
     int bytes;
 
-    trunk_io_ctx.path_ctx_array.count = STORAGE_CFG.max_store_path_index + 1;
+    trunk_io_ctx.path_ctx_array.count = DA_STORE_CFG.max_store_path_index + 1;
     bytes = sizeof(TrunkReadPathContext) * trunk_io_ctx.path_ctx_array.count;
     trunk_io_ctx.path_ctx_array.paths = (TrunkReadPathContext *)fc_malloc(bytes);
     if (trunk_io_ctx.path_ctx_array.paths == NULL) {
@@ -120,7 +120,7 @@ static TrunkReadThreadContext *alloc_thread_contexts(const int count)
 }
 
 static int init_thread_context(TrunkReadThreadContext *ctx,
-        const FSStoragePathInfo *path_info)
+        const DAStoragePathInfo *path_info)
 {
     int result;
     pthread_t tid;
@@ -139,7 +139,7 @@ static int init_thread_context(TrunkReadThreadContext *ctx,
     }
 
 
-    if ((result=trunk_fd_cache_init(&ctx->fd_cache, STORAGE_CFG.
+    if ((result=trunk_fd_cache_init(&ctx->fd_cache, DA_STORE_CFG.
                     fd_cache_capacity_per_read_thread)) != 0)
     {
         return result;
@@ -179,7 +179,7 @@ static int init_thread_context(TrunkReadThreadContext *ctx,
 }
 
 static int init_thread_contexts(TrunkReadThreadContextArray *ctx_array,
-        const FSStoragePathInfo *path_info)
+        const DAStoragePathInfo *path_info)
 {
     int result;
     TrunkReadThreadContext *ctx;
@@ -201,10 +201,10 @@ static int init_thread_contexts(TrunkReadThreadContextArray *ctx_array,
     return 0;
 }
 
-static int init_path_contexts(FSStoragePathArray *parray)
+static int init_path_contexts(DAStoragePathArray *parray)
 {
-    FSStoragePathInfo *p;
-    FSStoragePathInfo *end;
+    DAStoragePathInfo *p;
+    DAStoragePathInfo *end;
     TrunkReadThreadContext *thread_ctxs;
     TrunkReadPathContext *path_ctx;
     int result;
@@ -232,25 +232,25 @@ static int init_path_contexts(FSStoragePathArray *parray)
 static int rbpool_init_start()
 {
     SFMemoryWatermark memory_watermark;
-    FSStoragePathInfo **pp;
-    FSStoragePathInfo **end;
+    DAStoragePathInfo **pp;
+    DAStoragePathInfo **end;
     int path_count;
     int result;
 
-    path_count = storage_config_path_count(&STORAGE_CFG);
-    memory_watermark.low = STORAGE_CFG.aio_read_buffer.
+    path_count = storage_config_path_count(&DA_STORE_CFG);
+    memory_watermark.low = DA_STORE_CFG.aio_read_buffer.
         memory_watermark_low.value / path_count;
-    memory_watermark.high = STORAGE_CFG.aio_read_buffer.
+    memory_watermark.high = DA_STORE_CFG.aio_read_buffer.
         memory_watermark_high.value / path_count;
-    if ((result=read_buffer_pool_init(STORAGE_CFG.paths_by_index.count,
+    if ((result=read_buffer_pool_init(DA_STORE_CFG.paths_by_index.count,
                     &memory_watermark)) != 0)
     {
         return result;
     }
 
-    end = STORAGE_CFG.paths_by_index.paths +
-        STORAGE_CFG.paths_by_index.count;
-    for (pp=STORAGE_CFG.paths_by_index.paths; pp<end; pp++) {
+    end = DA_STORE_CFG.paths_by_index.paths +
+        DA_STORE_CFG.paths_by_index.count;
+    for (pp=DA_STORE_CFG.paths_by_index.paths; pp<end; pp++) {
         if (*pp != NULL) {
             if ((result=read_buffer_pool_create((*pp)->store.index,
                             (*pp)->block_size)) != 0)
@@ -260,8 +260,8 @@ static int rbpool_init_start()
         }
     }
 
-    return read_buffer_pool_start(STORAGE_CFG.aio_read_buffer.max_idle_time,
-            STORAGE_CFG.aio_read_buffer.reclaim_interval);
+    return read_buffer_pool_start(DA_STORE_CFG.aio_read_buffer.max_idle_time,
+            DA_STORE_CFG.aio_read_buffer.reclaim_interval);
 }
 #endif
 
@@ -279,10 +279,10 @@ int trunk_read_thread_init()
         return result;
     }
 
-    if ((result=init_path_contexts(&STORAGE_CFG.write_cache)) != 0) {
+    if ((result=init_path_contexts(&DA_STORE_CFG.write_cache)) != 0) {
         return result;
     }
-    if ((result=init_path_contexts(&STORAGE_CFG.store_path)) != 0) {
+    if ((result=init_path_contexts(&DA_STORE_CFG.store_path)) != 0) {
         return result;
     }
 
@@ -298,11 +298,11 @@ void trunk_read_thread_terminate()
 }
 
 #ifdef OS_LINUX
-int trunk_read_thread_push(const FSTrunkSpaceInfo *space,
+int trunk_read_thread_push(const DATrunkSpaceInfo *space,
         const int read_bytes, AlignedReadBuffer **aligned_buffer,
         trunk_read_io_notify_func notify_func, void *notify_arg)
 #else
-int trunk_read_thread_push(const FSTrunkSpaceInfo *space,
+int trunk_read_thread_push(const DATrunkSpaceInfo *space,
         const int read_bytes, char *buff, trunk_read_io_notify_func
         notify_func, void *notify_arg)
 #endif
@@ -334,7 +334,7 @@ int trunk_read_thread_push(const FSTrunkSpaceInfo *space,
     return 0;
 }
 
-static inline void get_trunk_filename(FSTrunkSpaceInfo *space,
+static inline void get_trunk_filename(DATrunkSpaceInfo *space,
         char *trunk_filename, const int size)
 {
     snprintf(trunk_filename, size, "%s/%04"PRId64"/%06"PRId64,
@@ -343,7 +343,7 @@ static inline void get_trunk_filename(FSTrunkSpaceInfo *space,
 }
 
 static int get_read_fd(TrunkReadThreadContext *ctx,
-        FSTrunkSpaceInfo *space, int *fd)
+        DATrunkSpaceInfo *space, int *fd)
 {
     char trunk_filename[PATH_MAX];
     int result;

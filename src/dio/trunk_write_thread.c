@@ -89,7 +89,7 @@ static int alloc_path_contexts()
 {
     int bytes;
 
-    trunk_io_ctx.path_ctx_array.count = STORAGE_CFG.max_store_path_index + 1;
+    trunk_io_ctx.path_ctx_array.count = DA_STORE_CFG.max_store_path_index + 1;
     bytes = sizeof(TrunkWritePathContext) * trunk_io_ctx.path_ctx_array.count;
     trunk_io_ctx.path_ctx_array.paths = (TrunkWritePathContext *)
         fc_malloc(bytes);
@@ -201,10 +201,10 @@ static int init_thread_contexts(TrunkWriteThreadContextArray *ctx_array,
     return 0;
 }
 
-static int init_path_contexts(FSStoragePathArray *parray)
+static int init_path_contexts(DAStoragePathArray *parray)
 {
-    FSStoragePathInfo *p;
-    FSStoragePathInfo *end;
+    DAStoragePathInfo *p;
+    DAStoragePathInfo *end;
     TrunkWriteThreadContext *thread_ctxs;
     TrunkWritePathContext *path_ctx;
     int result;
@@ -238,10 +238,10 @@ int trunk_write_thread_init()
         return result;
     }
 
-    if ((result=init_path_contexts(&STORAGE_CFG.write_cache)) != 0) {
+    if ((result=init_path_contexts(&DA_STORE_CFG.write_cache)) != 0) {
         return result;
     }
-    if ((result=init_path_contexts(&STORAGE_CFG.store_path)) != 0) {
+    if ((result=init_path_contexts(&DA_STORE_CFG.store_path)) != 0) {
         return result;
     }
 
@@ -257,7 +257,7 @@ void trunk_write_thread_terminate()
 }
 
 int trunk_write_thread_push(const int type, const int64_t version,
-        const FSTrunkSpaceInfo *space, void *data,
+        const DATrunkSpaceInfo *space, void *data,
         trunk_write_io_notify_func notify_func, void *notify_arg)
 {
     TrunkWritePathContext *path_ctx;
@@ -275,7 +275,7 @@ int trunk_write_thread_push(const int type, const int64_t version,
     iob->type = type;
     iob->version = version;
     iob->space = *space;
-    if (type == FS_IO_TYPE_WRITE_SLICE_BY_IOVEC) {
+    if (type == DA_IO_TYPE_WRITE_SLICE_BY_IOVEC) {
         iob->iovec_array = *((iovec_array_t *)data);
     } else {
         iob->buff = (char *)data;
@@ -286,7 +286,7 @@ int trunk_write_thread_push(const int type, const int64_t version,
     return 0;
 }
 
-static inline void get_trunk_filename(FSTrunkSpaceInfo *space,
+static inline void get_trunk_filename(DATrunkSpaceInfo *space,
         char *trunk_filename, const int size)
 {
     snprintf(trunk_filename, size, "%s/%04"PRId64"/%06"PRId64,
@@ -304,7 +304,7 @@ static inline void clear_write_fd(TrunkWriteThreadContext *ctx)
 }
 
 static int get_write_fd(TrunkWriteThreadContext *ctx,
-        FSTrunkSpaceInfo *space, int *fd)
+        DATrunkSpaceInfo *space, int *fd)
 {
     char trunk_filename[PATH_MAX];
     int result;
@@ -372,7 +372,7 @@ static int do_create_trunk(TrunkWriteThreadContext *ctx, TrunkWriteIOBuffer *iob
     }
 
     if (fc_fallocate(fd, iob->space.size) == 0) {
-        result = trunk_binlog_write(FS_IO_TYPE_CREATE_TRUNK,
+        result = trunk_binlog_write(DA_IO_TYPE_CREATE_TRUNK,
                 iob->space.store->index, &iob->space.id_info,
                 iob->space.size);
     } else {
@@ -393,7 +393,7 @@ static int do_delete_trunk(TrunkWriteThreadContext *ctx, TrunkWriteIOBuffer *iob
 
     get_trunk_filename(&iob->space, trunk_filename, sizeof(trunk_filename));
     if (unlink(trunk_filename) == 0) {
-        result = trunk_binlog_write(FS_IO_TYPE_DELETE_TRUNK,
+        result = trunk_binlog_write(DA_IO_TYPE_DELETE_TRUNK,
                 iob->space.store->index, &iob->space.id_info,
                 iob->space.size);
     } else {
@@ -633,14 +633,14 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
         }
 
         switch (iob->type) {
-            case FS_IO_TYPE_CREATE_TRUNK:
-            case FS_IO_TYPE_DELETE_TRUNK:
+            case DA_IO_TYPE_CREATE_TRUNK:
+            case DA_IO_TYPE_DELETE_TRUNK:
                 if (ctx->iovec_array.count > 0) {
                     batch_write(ctx);
                     ++io_count;
                 }
 
-                if (iob->type == FS_IO_TYPE_CREATE_TRUNK) {
+                if (iob->type == DA_IO_TYPE_CREATE_TRUNK) {
                     result = do_create_trunk(ctx, iob);
                 } else {
                     result = do_delete_trunk(ctx, iob);
@@ -651,8 +651,8 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
                 }
                 ++io_count;
                 break;
-            case FS_IO_TYPE_WRITE_SLICE_BY_BUFF:
-            case FS_IO_TYPE_WRITE_SLICE_BY_IOVEC:
+            case DA_IO_TYPE_WRITE_SLICE_BY_BUFF:
+            case DA_IO_TYPE_WRITE_SLICE_BY_IOVEC:
                 if (ctx->iob_array.count > 0) {
                     last = ctx->iob_array.iobs[ctx->iob_array.count - 1];
                     if (!(IOB_IS_SUCCESSIVE(last, iob) &&
@@ -665,7 +665,7 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
                     }
                 }
 
-                inc_count = (iob->type == FS_IO_TYPE_WRITE_SLICE_BY_BUFF ?
+                inc_count = (iob->type == DA_IO_TYPE_WRITE_SLICE_BY_BUFF ?
                         1 : iob->iovec_array.count);
                 if ((result=fc_check_realloc_iovec_array(&ctx->iovec_array,
                                 ctx->iovec_array.count + inc_count)) != 0)
@@ -673,7 +673,7 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
                     return;
                 }
 
-                if (iob->type == FS_IO_TYPE_WRITE_SLICE_BY_BUFF) {
+                if (iob->type == DA_IO_TYPE_WRITE_SLICE_BY_BUFF) {
                     current = ctx->iovec_array.iovs +
                         ctx->iovec_array.count++;
                     current->iov_base = iob->buff;
@@ -726,8 +726,8 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
             return;
         }
 
-        if (iob->type == FS_IO_TYPE_CREATE_TRUNK ||
-                iob->type == FS_IO_TYPE_DELETE_TRUNK)
+        if (iob->type == DA_IO_TYPE_CREATE_TRUNK ||
+                iob->type == DA_IO_TYPE_DELETE_TRUNK)
         {
             fast_mblock_free_object(&ctx->mblock, iob);
         }

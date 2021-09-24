@@ -30,23 +30,23 @@ typedef struct disk_allocator_global_vars {
 
     struct {
         int file_block_size;
-        FSStorageConfig cfg;
+        DAStorageConfig cfg;
     } storage;
 
     int my_server_id;
 
 } DiskAllocatorGlobalVars;
 
-#define DATA_PATH             g_disk_allocator_vars.data.path
-#define DATA_PATH_STR         DATA_PATH.str
-#define DATA_PATH_LEN         DATA_PATH.len
+#define DA_DATA_PATH           g_disk_allocator_vars.data.path
+#define DA_DATA_PATH_STR       DA_DATA_PATH.str
+#define DA_DATA_PATH_LEN       DA_DATA_PATH.len
 
-#define BINLOG_BUFFER_SIZE    g_disk_allocator_vars.data.binlog_buffer_size
-#define BINLOG_SUBDIRS        g_disk_allocator_vars.data.binlog_subdirs
+#define DA_BINLOG_BUFFER_SIZE  g_disk_allocator_vars.data.binlog_buffer_size
+#define DA_BINLOG_SUBDIRS      g_disk_allocator_vars.data.binlog_subdirs
 
-#define MY_SERVER_ID          g_disk_allocator_vars.my_server_id
-#define STORAGE_CFG           g_disk_allocator_vars.storage.cfg
-#define FILE_BLOCK_SIZE       g_disk_allocator_vars.storage.file_block_size
+#define DA_MY_SERVER_ID        g_disk_allocator_vars.my_server_id
+#define DA_STORE_CFG           g_disk_allocator_vars.storage.cfg
+#define DA_FILE_BLOCK_SIZE     g_disk_allocator_vars.storage.file_block_size
 
 #ifdef __cplusplus
 extern "C" {

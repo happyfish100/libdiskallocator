@@ -25,13 +25,13 @@ typedef struct {
     volatile int64_t avail;  //current available space
     volatile int64_t used;
     int64_t last_used;      //for avail allocator check
-} FSTrunkSpaceStat;
+} DATrunkSpaceStat;
 
 typedef struct {
 #ifdef OS_LINUX
     int block_size;
 #endif
-    FSStorePath store;
+    DAStorePath store;
     int write_thread_count;
     int read_thread_count;
     int prealloc_trunks;
@@ -54,24 +54,24 @@ typedef struct {
         double used_ratio;
     } space_stat;  //for disk space
 
-    FSTrunkSpaceStat trunk_stat;  //for trunk space
-} FSStoragePathInfo;
+    DATrunkSpaceStat trunk_stat;  //for trunk space
+} DAStoragePathInfo;
 
 typedef struct {
-    FSStoragePathInfo *paths;
+    DAStoragePathInfo *paths;
     int count;
-} FSStoragePathArray;
+} DAStoragePathArray;
 
 typedef struct {
-    FSStoragePathInfo **paths;
+    DAStoragePathInfo **paths;
     int count;
-} FSStoragePathPtrArray;
+} DAStoragePathPtrArray;
 
 typedef struct {
-    FSStoragePathArray store_path;
-    FSStoragePathArray write_cache;
-    FSStoragePathPtrArray paths_by_index;
-    int max_store_path_index;  //the max of FSStorePath->index from dat file
+    DAStoragePathArray store_path;
+    DAStoragePathArray write_cache;
+    DAStoragePathPtrArray paths_by_index;
+    int max_store_path_index;  //the max of DAStorePath->index from dat file
 
     struct {
         double on_usage;  //usage ratio
@@ -119,22 +119,22 @@ typedef struct {
     } aio_read_buffer;
 #endif
 
-} FSStorageConfig;
+} DAStorageConfig;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int storage_config_load(FSStorageConfig *storage_cfg,
+    int storage_config_load(DAStorageConfig *storage_cfg,
             const char *storage_filename);
 
-    int storage_config_calc_path_avail_space(FSStoragePathInfo *path_info);
+    int storage_config_calc_path_avail_space(DAStoragePathInfo *path_info);
 
     void storage_config_stat_path_spaces(SFSpaceStat *ss);
 
-    void storage_config_to_log(FSStorageConfig *storage_cfg);
+    void storage_config_to_log(DAStorageConfig *storage_cfg);
 
-    static inline int storage_config_path_count(FSStorageConfig *storage_cfg)
+    static inline int storage_config_path_count(DAStorageConfig *storage_cfg)
     {
         return storage_cfg->store_path.count + storage_cfg->write_cache.count;
     }

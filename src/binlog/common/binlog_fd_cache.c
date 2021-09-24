@@ -25,7 +25,7 @@ static bool subdir_exists(const char *subdir_name, const int subdir_index)
     char filepath[PATH_MAX];
 
     snprintf(filepath, sizeof(filepath), "%s/%s/%02X/%02X",
-            DATA_PATH_STR, subdir_name, subdir_index, subdir_index);
+            DA_DATA_PATH_STR, subdir_name, subdir_index, subdir_index);
     return isDir(filepath);
 }
 
@@ -37,19 +37,19 @@ static int check_make_subdirs(const char *subdir_name)
     char filepath2[PATH_MAX];
 
     if (subdir_exists(subdir_name, 0) && subdir_exists(
-                subdir_name, BINLOG_SUBDIRS - 1))
+                subdir_name, DA_BINLOG_SUBDIRS - 1))
     {
         return 0;
     }
 
-    for (i=0; i<BINLOG_SUBDIRS; i++) {
+    for (i=0; i<DA_BINLOG_SUBDIRS; i++) {
         snprintf(filepath1, sizeof(filepath1), "%s/%s/%02X",
-                DATA_PATH_STR, subdir_name, i);
+                DA_DATA_PATH_STR, subdir_name, i);
         if ((result=fc_check_mkdir(filepath1, 0755)) != 0) {
             return result;
         }
 
-        for (k=0; k<BINLOG_SUBDIRS; k++) {
+        for (k=0; k<DA_BINLOG_SUBDIRS; k++) {
             snprintf(filepath2, sizeof(filepath2),
                     "%s/%02X", filepath1, k);
             if ((result=fc_check_mkdir(filepath2, 0755)) != 0) {

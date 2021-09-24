@@ -22,41 +22,41 @@
 #include "trunk_freelist.h"
 #include "../global.h"
 
-#define FS_TRUNK_SKIPLIST_INIT_LEVEL_COUNT       6
-#define FS_TRUNK_SKIPLIST_MAX_LEVEL_COUNT       12
-#define FS_TRUNK_SKIPLIST_DELAY_FREE_SECONDS   600
+#define DA_TRUNK_SKIPLIST_INIT_LEVEL_COUNT       6
+#define DA_TRUNK_SKIPLIST_MAX_LEVEL_COUNT       12
+#define DA_TRUNK_SKIPLIST_DELAY_FREE_SECONDS   600
 
-#define FS_TRUNK_STATUS_NONE        0
-#define FS_TRUNK_STATUS_REPUSH      1  //intermediate state
-#define FS_TRUNK_STATUS_ALLOCING    2
-#define FS_TRUNK_STATUS_RECLAIMING  3
+#define DA_TRUNK_STATUS_NONE        0
+#define DA_TRUNK_STATUS_REPUSH      1  //intermediate state
+#define DA_TRUNK_STATUS_ALLOCING    2
+#define DA_TRUNK_STATUS_RECLAIMING  3
 
-#define FS_TRUNK_UTIL_EVENT_NONE      0
-#define FS_TRUNK_UTIL_EVENT_CREATE   'C'
-#define FS_TRUNK_UTIL_EVENT_UPDATE   'U'
+#define DA_TRUNK_UTIL_EVENT_NONE      0
+#define DA_TRUNK_UTIL_EVENT_CREATE   'C'
+#define DA_TRUNK_UTIL_EVENT_UPDATE   'U'
 
-#define FS_TRUNK_AVAIL_SPACE(trunk) ((trunk)->size - (trunk)->free_start)
+#define DA_TRUNK_AVAIL_SPACE(trunk) ((trunk)->size - (trunk)->free_start)
 
 typedef enum {
-    fs_freelist_type_none,
-    fs_freelist_type_normal,
-    fs_freelist_type_reclaim
-} FSTrunkFreelistType;
+    da_freelist_type_none,
+    da_freelist_type_normal,
+    da_freelist_type_reclaim
+} DATrunkFreelistType;
 
 typedef struct {
     int alloc;
     int count;
-    FSTrunkFileInfo **trunks;
-} FSTrunkInfoPtrArray;
+    DATrunkFileInfo **trunks;
+} DATrunkInfoPtrArray;
 
-typedef struct fs_trunk_allocator {
-    FSStoragePathInfo *path_info;
+typedef struct da_trunk_allocator {
+    DAStoragePathInfo *path_info;
     struct {
         UniqSkiplistPair by_id;   //order by id
         UniqSkiplistPair by_size; //order by used size and id
         pthread_mutex_t lock;
     } trunks;
-    FSTrunkFreelist freelist; //trunk freelist pool
+    DATrunkFreelist freelist; //trunk freelist pool
 
     struct {
         time_t last_trigger_time; //caller trigger create trunk
@@ -69,9 +69,9 @@ typedef struct fs_trunk_allocator {
         time_t last_deal_time;
         int last_errno;
         struct fc_queue queue;  //trunk event queue for nodify
-        struct fs_trunk_allocator *next; //for event notify queue
+        struct da_trunk_allocator *next; //for event notify queue
     } reclaim; //for trunk reclaim
-} FSTrunkAllocator;
+} DATrunkAllocator;
 
 typedef struct {
     struct fast_mblock_man trunk_allocator;
@@ -90,32 +90,32 @@ extern "C" {
 
     int trunk_allocator_init();
 
-    int trunk_allocator_init_instance(FSTrunkAllocator *allocator,
-            FSStoragePathInfo *path_info);
+    int trunk_allocator_init_instance(DATrunkAllocator *allocator,
+            DAStoragePathInfo *path_info);
 
-    int trunk_allocator_add(FSTrunkAllocator *allocator,
-            const FSTrunkIdInfo *id_info, const int64_t size,
-            FSTrunkFileInfo **pp_trunk);
+    int trunk_allocator_add(DATrunkAllocator *allocator,
+            const DATrunkIdInfo *id_info, const int64_t size,
+            DATrunkFileInfo **pp_trunk);
 
-    int trunk_allocator_delete(FSTrunkAllocator *allocator, const int64_t id);
+    int trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id);
 
-    int trunk_allocator_free(FSTrunkAllocator *allocator,
+    int trunk_allocator_free(DATrunkAllocator *allocator,
             const int id, const int size);
 
-    FSTrunkFreelistType trunk_allocator_add_to_freelist(
-            FSTrunkAllocator *allocator, FSTrunkFileInfo *trunk_info);
+    DATrunkFreelistType trunk_allocator_add_to_freelist(
+            DATrunkAllocator *allocator, DATrunkFileInfo *trunk_info);
 
-    void trunk_allocator_deal_on_ready(FSTrunkAllocator *allocator);
+    void trunk_allocator_deal_on_ready(DATrunkAllocator *allocator);
 
-    static inline bool trunk_allocator_is_available(FSTrunkAllocator *allocator)
+    static inline bool trunk_allocator_is_available(DATrunkAllocator *allocator)
     {
         return allocator->freelist.count >=
             allocator->freelist.water_mark_trunks;
     }
 
-    void trunk_allocator_log_trunk_info(FSTrunkFileInfo *trunk_info);
+    void trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info);
 
-    static inline int fs_compare_trunk_by_size_id(const FSTrunkFileInfo *t1,
+    static inline int da_compare_trunk_by_size_id(const DATrunkFileInfo *t1,
             const int64_t last_used_bytes2, const int64_t id2)
     {
         int sub;
@@ -129,11 +129,11 @@ extern "C" {
         return fc_compare_int64(t1->id_info.id, id2);
     }
 
-    int compare_trunk_by_size_id(const FSTrunkFileInfo *t1,
-            const FSTrunkFileInfo *t2);
+    int compare_trunk_by_size_id(const DATrunkFileInfo *t1,
+            const DATrunkFileInfo *t2);
 
     static inline int trunk_allocator_get_freelist_count(
-            FSTrunkAllocator *allocator)
+            DATrunkAllocator *allocator)
     {
         int count;
         PTHREAD_MUTEX_LOCK(&allocator->freelist.lcp.lock);
@@ -142,7 +142,7 @@ extern "C" {
         return count;
     }
 
-    static inline void fs_set_trunk_status(FSTrunkFileInfo *trunk,
+    static inline void da_set_trunk_status(DATrunkFileInfo *trunk,
             const int new_status)
     {
         int old_status;
@@ -159,7 +159,7 @@ extern "C" {
     }
 
     static inline void trunk_allocator_before_make_trunk(
-            FSTrunkAllocator *allocator, const bool need_lock)
+            DATrunkAllocator *allocator, const bool need_lock)
     {
         if (need_lock) {
             PTHREAD_MUTEX_LOCK(&allocator->freelist.lcp.lock);
@@ -171,7 +171,7 @@ extern "C" {
     }
 
     static inline void trunk_allocator_after_make_trunk(
-            FSTrunkAllocator *allocator, const int result)
+            DATrunkAllocator *allocator, const int result)
     {
         PTHREAD_MUTEX_LOCK(&allocator->freelist.lcp.lock);
         allocator->reclaim.last_errno = result;
@@ -183,17 +183,17 @@ extern "C" {
     }
 
     static inline double trunk_allocator_calc_reclaim_ratio_thredhold(
-            FSTrunkAllocator *allocator)
+            DATrunkAllocator *allocator)
     {
         double used_ratio;
         used_ratio = allocator->path_info->space_stat.used_ratio
             + allocator->path_info->reserved_space.ratio;
         if (used_ratio >= 1.00) {
-            return STORAGE_CFG.never_reclaim_on_trunk_usage;
+            return DA_STORE_CFG.never_reclaim_on_trunk_usage;
         } else {
-            return STORAGE_CFG.never_reclaim_on_trunk_usage *
-                (used_ratio - STORAGE_CFG.reclaim_trunks_on_path_usage) /
-                (1.00 -  STORAGE_CFG.reclaim_trunks_on_path_usage);
+            return DA_STORE_CFG.never_reclaim_on_trunk_usage *
+                (used_ratio - DA_STORE_CFG.reclaim_trunks_on_path_usage) /
+                (1.00 -  DA_STORE_CFG.reclaim_trunks_on_path_usage);
         }
     }
 

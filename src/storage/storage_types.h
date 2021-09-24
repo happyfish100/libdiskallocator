@@ -22,44 +22,44 @@
 #include "fastcommon/uniq_skiplist.h"
 #include "sf/sf_types.h"
 
-#define FS_SPACE_ALIGN_SIZE  8
-#define FS_TRUNK_BINLOG_MAX_RECORD_SIZE    128
-#define FS_TRUNK_BINLOG_SUBDIR_NAME      "trunk"
+#define DA_SPACE_ALIGN_SIZE  8
+#define DA_TRUNK_BINLOG_MAX_RECORD_SIZE    128
+#define DA_TRUNK_BINLOG_SUBDIR_NAME      "trunk"
 
-#define FS_DEFAULT_TRUNK_FILE_SIZE  (256 * 1024 * 1024LL)
-#define FS_TRUNK_FILE_MIN_SIZE      ( 64 * 1024 * 1024LL)
-#define FS_TRUNK_FILE_MAX_SIZE      (  2 * 1024 * 1024 * 1024LL)
+#define DA_DEFAULT_TRUNK_FILE_SIZE  (256 * 1024 * 1024LL)
+#define DA_TRUNK_FILE_MIN_SIZE      ( 64 * 1024 * 1024LL)
+#define DA_TRUNK_FILE_MAX_SIZE      (  2 * 1024 * 1024 * 1024UL)
 
-#define FS_DEFAULT_DISCARD_REMAIN_SPACE_SIZE  4096
-#define FS_DISCARD_REMAIN_SPACE_MIN_SIZE       256
-#define FS_DISCARD_REMAIN_SPACE_MAX_SIZE      (256 * 1024)
+#define DA_DEFAULT_DISCARD_REMAIN_SPACE_SIZE  4096
+#define DA_DISCARD_REMAIN_SPACE_MIN_SIZE       256
+#define DA_DISCARD_REMAIN_SPACE_MAX_SIZE      (256 * 1024)
 
-#define FS_MAX_SPLIT_COUNT_PER_SPACE_ALLOC   2
-#define FS_SLICE_SN_PARRAY_INIT_ALLOC_COUNT  4
+#define DA_MAX_SPLIT_COUNT_PER_SPACE_ALLOC   2
+#define DA_SLICE_SN_PARRAY_INIT_ALLOC_COUNT  4
 
-struct fs_trunk_allocator;
+struct da_trunk_allocator;
 
 typedef struct {
     int index;   //the inner index is important!
     string_t path;
-} FSStorePath;
+} DAStorePath;
 
 typedef struct {
     int64_t id;
     int64_t subdir;     //in which subdir
-} FSTrunkIdInfo;
+} DATrunkIdInfo;
 
 typedef struct {
-    FSStorePath *store;
-    FSTrunkIdInfo id_info;
+    DAStorePath *store;
+    DATrunkIdInfo id_info;
     int64_t offset;  //offset of the trunk file
     int64_t size;    //alloced space size
-} FSTrunkSpaceInfo;
+} DATrunkSpaceInfo;
 
 typedef struct {
-    FSTrunkSpaceInfo space;
+    DATrunkSpaceInfo space;
     int64_t version; //for write in order
-} FSTrunkSpaceWithVersion;
+} DATrunkSpaceWithVersion;
 
 #ifdef OS_LINUX
 typedef struct aio_buffer_ptr_array {
@@ -69,14 +69,14 @@ typedef struct aio_buffer_ptr_array {
 } AIOBufferPtrArray;
 
 typedef enum {
-    fs_buffer_type_direct,  /* char *buff */
-    fs_buffer_type_array    /* aligned_read_buffer **array */
-} FSIOBufferType;
+    da_buffer_type_direct,  /* char *buff */
+    da_buffer_type_array    /* aligned_read_buffer **array */
+} DAIOBufferType;
 #endif
 
-typedef struct fs_trunk_file_info {
-    struct fs_trunk_allocator *allocator;
-    FSTrunkIdInfo id_info;
+typedef struct da_trunk_file_info {
+    struct da_trunk_allocator *allocator;
+    DATrunkIdInfo id_info;
     volatile int status;
     struct {
         int count;  //slice count
@@ -87,14 +87,14 @@ typedef struct fs_trunk_file_info {
     int64_t free_start;  //free space offset
 
     struct {
-        struct fs_trunk_file_info *next;
+        struct da_trunk_file_info *next;
     } alloc;  //for space allocate
 
     struct {
         volatile char event;
         int64_t last_used_bytes;
-        struct fs_trunk_file_info *next;
+        struct da_trunk_file_info *next;
     } util;  //for util manager queue
-} FSTrunkFileInfo;
+} DATrunkFileInfo;
 
 #endif

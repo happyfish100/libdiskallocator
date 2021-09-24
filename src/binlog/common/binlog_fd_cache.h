@@ -102,9 +102,9 @@ extern "C" {
     {
         int path_index;
 
-        path_index = key->id % BINLOG_SUBDIRS;
+        path_index = key->id % DA_BINLOG_SUBDIRS;
         snprintf(full_filename, size, "%s/%s/%02X/%02X/binlog.%08"PRIX64,
-                DATA_PATH_STR, cache_ctx->type_subdir_array.pairs
+                DA_DATA_PATH_STR, cache_ctx->type_subdir_array.pairs
                 [key->type].subdir_name, path_index, path_index, key->id);
         return 0;
     }

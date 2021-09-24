@@ -110,7 +110,7 @@ static int init_allocators(ReadBufferPool *pool)
 
     size = pool->block_size;
     pool->mpool.count = 1;
-    while (size <= FILE_BLOCK_SIZE) {
+    while (size <= DA_FILE_BLOCK_SIZE) {
         pool->mpool.count++;
         size *= 2;
     }
@@ -310,7 +310,7 @@ AlignedReadBuffer *read_buffer_pool_alloc(
 
     pool = rbpool_ctx.array.pools + path_index;
     if ((allocator=get_allocator(pool, size +
-                    FS_SPACE_ALIGN_SIZE)) == NULL)
+                    DA_SPACE_ALIGN_SIZE)) == NULL)
     {
         return NULL;
     }
@@ -327,9 +327,9 @@ AlignedReadBuffer *read_buffer_pool_alloc(
         total_alloc = FC_ATOMIC_GET(pool->memory.alloc);
         if (total_alloc + allocator->size > rbpool_ctx.watermark.high) {
             if (total_alloc - FC_ATOMIC_GET(pool->memory.used) >
-                    FILE_BLOCK_SIZE)
+                    DA_FILE_BLOCK_SIZE)
             {
-                reclaim(pool, FILE_BLOCK_SIZE, &reclaim_bytes);
+                reclaim(pool, DA_FILE_BLOCK_SIZE, &reclaim_bytes);
                 logInfo("file: "__FILE__", line: %d, "
                         "reach max memory limit, reclaim %d bytes",
                         __LINE__, reclaim_bytes);

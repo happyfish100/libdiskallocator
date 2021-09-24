@@ -22,7 +22,7 @@
 #include "storage_config.h"
 #include "trunk_allocator.h"
 
-typedef void (*trunk_allocate_done_callback)(FSTrunkAllocator *allocator,
+typedef void (*trunk_allocate_done_callback)(DATrunkAllocator *allocator,
         const int result, const bool is_new_trunk, void *arg);
 
 #ifdef __cplusplus
@@ -33,13 +33,13 @@ extern "C" {
 
     //TODO
     /*
-    int trunk_maker_allocate_ex(FSTrunkAllocator *allocator,
+    int trunk_maker_allocate_ex(DATrunkAllocator *allocator,
             const bool urgent, const bool need_lock,
             trunk_allocate_done_callback callback, void *arg);
             */
 
     //TODO
-    static inline int trunk_maker_allocate_ex(FSTrunkAllocator *allocator,
+    static inline int trunk_maker_allocate_ex(DATrunkAllocator *allocator,
             const bool urgent, const bool need_lock,
             trunk_allocate_done_callback callback, void *arg)
     {

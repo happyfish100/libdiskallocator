@@ -19,32 +19,32 @@
 
 #include "storage_types.h"
 
-struct fs_trunk_allocator;
+struct da_trunk_allocator;
 typedef struct {
     int count;
     int water_mark_trunks;
-    FSTrunkFileInfo *head;  //allocate from head
-    FSTrunkFileInfo *tail;  //push to tail
+    DATrunkFileInfo *head;  //allocate from head
+    DATrunkFileInfo *tail;  //push to tail
     pthread_lock_cond_pair_t lcp;  //for lock and notify
-} FSTrunkFreelist;
+} DATrunkFreelist;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int trunk_freelist_init(FSTrunkFreelist *freelist);
+    int trunk_freelist_init(DATrunkFreelist *freelist);
 
-    void trunk_freelist_keep_water_mark(struct fs_trunk_allocator
+    void trunk_freelist_keep_water_mark(struct da_trunk_allocator
             *allocator);
 
-    void trunk_freelist_add(FSTrunkFreelist *freelist,
-            FSTrunkFileInfo *trunk_info);
+    void trunk_freelist_add(DATrunkFreelist *freelist,
+            DATrunkFileInfo *trunk_info);
 
-    int trunk_freelist_alloc_space(struct fs_trunk_allocator *allocator,
-            FSTrunkFreelist *freelist, const uint64_t blk_hc, const int size,
-            FSTrunkSpaceWithVersion *spaces, int *count, const bool is_normal);
+    int trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
+            DATrunkFreelist *freelist, const uint64_t blk_hc, const int size,
+            DATrunkSpaceWithVersion *spaces, int *count, const bool is_normal);
 
-    int trunk_freelist_free_space(const FSTrunkSpaceInfo *space);
+    int trunk_freelist_free_space(const DATrunkSpaceInfo *space);
 
 #ifdef __cplusplus
 }

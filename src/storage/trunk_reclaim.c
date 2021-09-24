@@ -24,14 +24,14 @@
 #include "fastcommon/common_blocked_queue.h"
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
-#include "../common/fs_func.h"
+#include "../common/da_func.h"
 #include "../server_global.h"
 #include "../binlog/binlog_types.h"
 #include "storage_allocator.h"
 #include "slice_op.h"
 #include "trunk_reclaim.h"
 
-static void reclaim_slice_rw_done_callback(FSSliceOpContext *op_ctx,
+static void reclaim_slice_rw_done_callback(DASliceOpContext *op_ctx,
         TrunkReclaimContext *rctx)
 {
     PTHREAD_MUTEX_LOCK(&rctx->notify.lcp.lock);
@@ -51,7 +51,7 @@ int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
     rctx->op_ctx.info.myself = NULL;
 
 #ifdef OS_LINUX
-    rctx->op_ctx.info.buffer_type = fs_buffer_type_array;
+    rctx->op_ctx.info.buffer_type = da_buffer_type_array;
     rctx->buffer_size = 0;
     rctx->op_ctx.info.buff = NULL;
 #else
@@ -67,10 +67,10 @@ int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
     }
 
     rctx->notify.finished = false;
-    rctx->op_ctx.rw_done_callback = (fs_rw_done_callback_func)
+    rctx->op_ctx.rw_done_callback = (da_rw_done_callback_func)
         reclaim_slice_rw_done_callback;
     rctx->op_ctx.arg = rctx;
-    return fs_init_slice_op_ctx(&rctx->op_ctx.update.sarray);
+    return da_init_slice_op_ctx(&rctx->op_ctx.update.sarray);
 }
 
 static int realloc_rb_array(TrunkReclaimBlockArray *array,
@@ -148,8 +148,8 @@ static int compare_by_block_slice_key(const TrunkReclaimSliceInfo *s1,
     return (int)s1->bs_key.slice.offset - (int)s2->bs_key.slice.offset;
 }
 
-static int convert_to_rs_array(FSTrunkAllocator *allocator,
-        FSTrunkFileInfo *trunk, TrunkReclaimSliceArray *rs_array)
+static int convert_to_rs_array(DATrunkAllocator *allocator,
+        DATrunkFileInfo *trunk, TrunkReclaimSliceArray *rs_array)
 {
     int result;
     OBSliceEntry *slice;
@@ -243,10 +243,10 @@ static int combine_to_rb_array(TrunkReclaimSliceArray *sarray,
 }
 
 static int migrate_prepare(TrunkReclaimContext *rctx,
-        FSBlockSliceKeyInfo *bs_key)
+        DABlockSliceKeyInfo *bs_key)
 {
     rctx->op_ctx.info.bs_key = *bs_key;
-    rctx->op_ctx.info.data_group_id = FS_DATA_GROUP_ID(bs_key->block);
+    rctx->op_ctx.info.data_group_id = DA_DATA_GROUP_ID(bs_key->block);
 
 #ifdef OS_LINUX
 #else
@@ -272,7 +272,7 @@ static int migrate_prepare(TrunkReclaimContext *rctx,
     return 0;
 }
 
-static inline void log_rw_error(FSSliceOpContext *op_ctx,
+static inline void log_rw_error(DASliceOpContext *op_ctx,
         const int result, const int ignore_errno, const char *caption)
 {
     int log_level;
@@ -290,7 +290,7 @@ static inline void log_rw_error(FSSliceOpContext *op_ctx,
 }
 
 static int migrate_one_slice(TrunkReclaimContext *rctx,
-        FSBlockSliceKeyInfo *bs_key)
+        DABlockSliceKeyInfo *bs_key)
 {
     int result;
 
@@ -298,7 +298,7 @@ static int migrate_one_slice(TrunkReclaimContext *rctx,
         return result;
     }
 
-    if ((result=fs_slice_read(&rctx->op_ctx)) == 0) {
+    if ((result=da_slice_read(&rctx->op_ctx)) == 0) {
         PTHREAD_MUTEX_LOCK(&rctx->notify.lcp.lock);
         while (!rctx->notify.finished && SF_G_CONTINUE_FLAG) {
             pthread_cond_wait(&rctx->notify.lcp.cond,
@@ -315,7 +315,7 @@ static int migrate_one_slice(TrunkReclaimContext *rctx,
     }
 
     rctx->op_ctx.info.bs_key.slice.length = rctx->op_ctx.done_bytes;
-    if ((result=fs_slice_write(&rctx->op_ctx)) == 0) {
+    if ((result=da_slice_write(&rctx->op_ctx)) == 0) {
         PTHREAD_MUTEX_LOCK(&rctx->notify.lcp.lock);
         while (!rctx->notify.finished && SF_G_CONTINUE_FLAG) {
             pthread_cond_wait(&rctx->notify.lcp.cond,
@@ -332,11 +332,11 @@ static int migrate_one_slice(TrunkReclaimContext *rctx,
     }
 
     if (result == 0) {
-        fs_write_finish(&rctx->op_ctx);  //for add slice index and cleanup
+        da_write_finish(&rctx->op_ctx);  //for add slice index and cleanup
     }
 
 #ifdef OS_LINUX
-    fs_release_aio_buffers(&rctx->op_ctx);
+    da_release_aio_buffers(&rctx->op_ctx);
 #endif
 
     if (rctx->op_ctx.result != 0) {
@@ -344,7 +344,7 @@ static int migrate_one_slice(TrunkReclaimContext *rctx,
         return rctx->op_ctx.result;
     }
 
-    return fs_log_slice_write(&rctx->op_ctx);
+    return da_log_slice_write(&rctx->op_ctx);
 }
 
 static int migrate_one_block(TrunkReclaimContext *rctx,
@@ -385,7 +385,7 @@ static int migrate_blocks(TrunkReclaimContext *rctx)
     return 0;
 }
 
-int trunk_reclaim(FSTrunkAllocator *allocator, FSTrunkFileInfo *trunk,
+int trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
         TrunkReclaimContext *rctx)
 {
     int result;

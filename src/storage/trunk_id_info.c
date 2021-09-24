@@ -60,7 +60,7 @@ static TrunkIdInfoContext id_info_context = {0, 0, 0, 0, {0, NULL}};
 static inline void get_trunk_id_dat_filename(
         char *full_filename, const int size)
 {
-    snprintf(full_filename, size, "%s/%s", DATA_PATH_STR,
+    snprintf(full_filename, size, "%s/%s", DA_DATA_PATH_STR,
             TRUNK_ID_DATA_FILENAME);
 }
 
@@ -149,7 +149,7 @@ static int alloc_sorted_subdirs()
 {
     int bytes;
 
-    id_info_context.subdir_array.count = STORAGE_CFG.max_store_path_index + 1;
+    id_info_context.subdir_array.count = DA_STORE_CFG.max_store_path_index + 1;
     bytes = sizeof(SortedSubdirs) * id_info_context.subdir_array.count;
     id_info_context.subdir_array.subdirs = (SortedSubdirs *)fc_malloc(bytes);
     if (id_info_context.subdir_array.subdirs == NULL) {
@@ -159,15 +159,15 @@ static int alloc_sorted_subdirs()
     return 0;
 }
 
-static int init_sorted_subdirs(FSStoragePathArray *parray)
+static int init_sorted_subdirs(DAStoragePathArray *parray)
 {
     const int init_level_count = 4;
     const int max_level_count = 16;
     const int min_alloc_elements_once = 8;
     const int delay_free_seconds = 0;
     int result;
-    FSStoragePathInfo *p;
-    FSStoragePathInfo *end;
+    DAStoragePathInfo *p;
+    DAStoragePathInfo *end;
     SortedSubdirs *sorted_subdirs;
 
     end = parray->paths + parray->count;
@@ -249,10 +249,10 @@ int trunk_id_info_init()
     if ((result=alloc_sorted_subdirs()) != 0) {
         return result;
     }
-    if ((result=init_sorted_subdirs(&STORAGE_CFG.write_cache)) != 0) {
+    if ((result=init_sorted_subdirs(&DA_STORE_CFG.write_cache)) != 0) {
         return result;
     }
-    if ((result=init_sorted_subdirs(&STORAGE_CFG.store_path)) != 0) {
+    if ((result=init_sorted_subdirs(&DA_STORE_CFG.store_path)) != 0) {
         return result;
     }
 
@@ -277,7 +277,7 @@ void trunk_id_info_destroy()
     save_current_trunk_id_ex(current_trunk_id, current_subdir_id, true);
 }
 
-int trunk_id_info_add(const int path_index, const FSTrunkIdInfo *id_info)
+int trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info)
 {
     SortedSubdirs *sorted_subdirs;
     StoreSubdirInfo target;
@@ -298,7 +298,7 @@ int trunk_id_info_add(const int path_index, const FSTrunkIdInfo *id_info)
                 sorted_subdirs->all.skiplist, &target);
         if (subdir != NULL) {
             subdir->file_count++;
-            if (subdir->file_count >= STORAGE_CFG.max_trunk_files_per_subdir) {
+            if (subdir->file_count >= DA_STORE_CFG.max_trunk_files_per_subdir) {
                 uniq_skiplist_delete(sorted_subdirs->
                         freelist.skiplist, subdir);
             }
@@ -315,7 +315,7 @@ int trunk_id_info_add(const int path_index, const FSTrunkIdInfo *id_info)
             {
                 break;
             }
-            if (subdir->file_count < STORAGE_CFG.max_trunk_files_per_subdir) {
+            if (subdir->file_count < DA_STORE_CFG.max_trunk_files_per_subdir) {
                 result = uniq_skiplist_insert(sorted_subdirs->
                         freelist.skiplist, subdir);
             }
@@ -326,7 +326,7 @@ int trunk_id_info_add(const int path_index, const FSTrunkIdInfo *id_info)
     return result;
 }
 
-int trunk_id_info_delete(const int path_index, const FSTrunkIdInfo *id_info)
+int trunk_id_info_delete(const int path_index, const DATrunkIdInfo *id_info)
 {
     SortedSubdirs *sorted_subdirs;
     StoreSubdirInfo target;
@@ -346,7 +346,7 @@ int trunk_id_info_delete(const int path_index, const FSTrunkIdInfo *id_info)
         subdir = (StoreSubdirInfo *)uniq_skiplist_find(
                 sorted_subdirs->all.skiplist, &target);
         if (subdir != NULL) {
-            if (subdir->file_count >= STORAGE_CFG.max_trunk_files_per_subdir) {
+            if (subdir->file_count >= DA_STORE_CFG.max_trunk_files_per_subdir) {
                 uniq_skiplist_insert(sorted_subdirs->
                         freelist.skiplist, subdir);
             }
@@ -358,7 +358,7 @@ int trunk_id_info_delete(const int path_index, const FSTrunkIdInfo *id_info)
     return result;
 }
 
-int trunk_id_info_generate(const int path_index, FSTrunkIdInfo *id_info)
+int trunk_id_info_generate(const int path_index, DATrunkIdInfo *id_info)
 {
     SortedSubdirs *sorted_subdirs;
     StoreSubdirInfo *sd_info;

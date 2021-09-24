@@ -31,15 +31,15 @@ static SFBinlogWriterContext binlog_writer;
 
 #define TRUNK_GET_FILENAME_LINE_COUNT(r, binlog_filename, \
         line_str, line_count) \
-        BINLOG_GET_FILENAME_LINE_COUNT(r, FS_TRUNK_BINLOG_SUBDIR_NAME, \
+        BINLOG_GET_FILENAME_LINE_COUNT(r, DA_TRUNK_BINLOG_SUBDIR_NAME, \
         binlog_filename, line_str, line_count)
 
 #define TRUNK_PARSE_INT_EX(var, caption, index, endchr, min_val) \
-    BINLOG_PARSE_INT_EX(FS_TRUNK_BINLOG_SUBDIR_NAME, var, caption,  \
+    BINLOG_PARSE_INT_EX(DA_TRUNK_BINLOG_SUBDIR_NAME, var, caption,  \
             index, endchr, min_val)
 
 #define TRUNK_PARSE_INT(var, index, endchr, min_val)  \
-    BINLOG_PARSE_INT_EX(FS_TRUNK_BINLOG_SUBDIR_NAME, var, #var, \
+    BINLOG_PARSE_INT_EX(DA_TRUNK_BINLOG_SUBDIR_NAME, var, #var, \
             index, endchr, min_val)
 
 /*
@@ -63,7 +63,7 @@ static int trunk_parse_line(BinlogReadThreadResult *r, string_t *line)
     char *endptr;
     char op_type;
     int path_index;
-    FSTrunkIdInfo id_info;
+    DATrunkIdInfo id_info;
     int64_t trunk_size;
 
     count = split_string_ex(line, ' ', cols,
@@ -95,8 +95,8 @@ static int trunk_parse_line(BinlogReadThreadResult *r, string_t *line)
     TRUNK_PARSE_INT_EX(id_info.id, "trunk_id", FIELD_INDEX_TRUNK_ID, ' ', 1);
     TRUNK_PARSE_INT_EX(id_info.subdir, "subdir", FIELD_INDEX_SUBDIR, ' ', 1);
     TRUNK_PARSE_INT(trunk_size, FIELD_INDEX_TRUNK_SIZE,
-            '\n', FS_TRUNK_FILE_MIN_SIZE);
-    if (trunk_size > FS_TRUNK_FILE_MAX_SIZE) {
+            '\n', DA_TRUNK_FILE_MIN_SIZE);
+    if (trunk_size > DA_TRUNK_FILE_MAX_SIZE) {
         TRUNK_GET_FILENAME_LINE_COUNT(r, binlog_filename,
                 line->str, line_count);
         logError("file: "__FILE__", line: %d, "
@@ -106,7 +106,7 @@ static int trunk_parse_line(BinlogReadThreadResult *r, string_t *line)
         return EINVAL;
     }
 
-    if (op_type == FS_IO_TYPE_CREATE_TRUNK) {
+    if (op_type == DA_IO_TYPE_CREATE_TRUNK) {
         if ((result=storage_allocator_add_trunk(path_index,
                        &id_info, trunk_size)) != 0)
         {
@@ -114,7 +114,7 @@ static int trunk_parse_line(BinlogReadThreadResult *r, string_t *line)
                     "add trunk fail, errno: %d, error info: %s",
                     result, STRERROR(result));
         }
-    } else if (op_type == FS_IO_TYPE_DELETE_TRUNK) {
+    } else if (op_type == DA_IO_TYPE_DELETE_TRUNK) {
         if ((result=storage_allocator_delete_trunk(path_index,
                         &id_info)) != 0)
         {
@@ -146,8 +146,9 @@ int trunk_sf_binlog_get_current_write_index()
 
 static int init_binlog_writer()
 {
-    return sf_binlog_writer_init(&binlog_writer, FS_TRUNK_BINLOG_SUBDIR_NAME,
-            BINLOG_BUFFER_SIZE, FS_TRUNK_BINLOG_MAX_RECORD_SIZE);
+    return sf_binlog_writer_init(&binlog_writer, DA_DATA_PATH_STR,
+            DA_TRUNK_BINLOG_SUBDIR_NAME, DA_BINLOG_BUFFER_SIZE,
+            DA_TRUNK_BINLOG_MAX_RECORD_SIZE);
 }
 
 int trunk_binlog_init()
@@ -158,7 +159,7 @@ int trunk_binlog_init()
     }
 
     /*
-    return binlog_loader_load(FS_TRUNK_BINLOG_SUBDIR_NAME,
+    return binlog_loader_load(DA_TRUNK_BINLOG_SUBDIR_NAME,
             &binlog_writer.writer, trunk_parse_line);
             */
     return 0;
@@ -170,7 +171,7 @@ void trunk_binlog_destroy()
 }
 
 int trunk_binlog_write(const char op_type, const int path_index,
-        const FSTrunkIdInfo *id_info, const int64_t file_size)
+        const DATrunkIdInfo *id_info, const int64_t file_size)
 {
     SFBinlogWriterBuffer *wbuffer;
 

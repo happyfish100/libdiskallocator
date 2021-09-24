@@ -46,7 +46,7 @@ typedef struct
 #define STORE_PATH_INDEX_ITEM_PATH       "path"
 #define STORE_PATH_INDEX_ITEM_MARK       "mark"
 
-#define STORE_PATH_MARK_FILENAME    ".fs_vars"
+#define STORE_PATH_MARK_FILENAME    ".da_vars"
 
 static StorePathArray store_paths = {0, 0, NULL};   //sort by index
 static struct base64_context base64_ctx;
@@ -60,7 +60,7 @@ static int store_path_generate_mark(const char *store_path,
     int mark_len;
     int buff_len;
 
-    mark_info.server_id = MY_SERVER_ID;
+    mark_info.server_id = DA_MY_SERVER_ID;
     mark_info.index = index;
     mark_info.crc32 = CRC32(store_path, strlen(store_path));
     mark_info.create_time = g_current_time;
@@ -189,7 +189,7 @@ int store_path_check_mark(StorePathEntry *pentry, bool *regenerated)
 static char *get_store_path_index_filename(char *full_filename, const int size)
 {
     snprintf(full_filename, size, "%s/%s",
-            DATA_PATH_STR, STORE_PATH_INDEX_FILENAME);
+            DA_DATA_PATH_STR, STORE_PATH_INDEX_FILENAME);
     return full_filename;
 }
 

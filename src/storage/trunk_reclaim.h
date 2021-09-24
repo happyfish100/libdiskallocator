@@ -30,7 +30,7 @@ typedef struct trunk_reclaim_block_info {
 } TrunkReclaimBlockInfo;
 
 typedef struct trunk_reclaim_slice_info {
-    FSBlockSliceKeyInfo bs_key;
+    DABlockSliceKeyInfo bs_key;
     struct trunk_reclaim_slice_info *next;
 } TrunkReclaimSliceInfo;
 
@@ -49,7 +49,7 @@ typedef struct trunk_reclaim_slice_array {
 typedef struct trunk_reclaim_context {
     TrunkReclaimBlockArray barray;
     TrunkReclaimSliceArray sarray;
-    FSSliceOpContext op_ctx;
+    DASliceOpContext op_ctx;
     int buffer_size;
     struct {
         bool finished;
@@ -63,7 +63,7 @@ extern "C" {
 #endif
     int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx);
 
-    int trunk_reclaim(FSTrunkAllocator *allocator, FSTrunkFileInfo *trunk,
+    int trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
             TrunkReclaimContext *rctx);
 
 #ifdef __cplusplus

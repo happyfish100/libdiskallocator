@@ -29,7 +29,7 @@
 #include "trunk_prealloc.h"
 
 typedef struct trunk_preallocator_info {
-    FSTrunkAllocator *allocator;
+    DATrunkAllocator *allocator;
     struct {
         int total;
         volatile int create;  //new create trunk count
@@ -69,7 +69,7 @@ typedef struct trunk_prealloc_context {
 
 static TrunkPreallocContext prealloc_ctx;
 
-static void allocate_done_callback(FSTrunkAllocator *allocator,
+static void allocate_done_callback(DATrunkAllocator *allocator,
         const int result, const bool is_new_trunk, void *arg)
 {
     TrunkPreallocThreadArg *thread_arg;
@@ -145,8 +145,8 @@ static int init_preallocator_array(
         TrunkPreallocatorArray *preallocator_array)
 {
     int bytes;
-    FSTrunkAllocator **pp;
-    FSTrunkAllocator **end;
+    DATrunkAllocator **pp;
+    DATrunkAllocator **end;
     TrunkPreallocatorInfo *preallocator;
 
     bytes = sizeof(TrunkPreallocatorInfo) *

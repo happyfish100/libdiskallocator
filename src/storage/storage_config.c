@@ -26,7 +26,7 @@
 #include "store_path_index.h"
 #include "storage_config.h"
 
-static int load_one_path(FSStorageConfig *storage_cfg,
+static int load_one_path(DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx, string_t *path)
 {
     int result;
@@ -82,13 +82,13 @@ static int load_one_path(FSStorageConfig *storage_cfg,
     return 0;
 }
 
-static int storage_config_calc_path_spaces(FSStoragePathInfo *path_info)
+static int storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
 {
     struct statvfs sbuf;
 
     if (statvfs(path_info->store.path.str, &sbuf) != 0) {
         logError("file: "__FILE__", line: %d, "
-                "statfs path %s fail, errno: %d, error info: %s.",
+                "statvfs path %s fail, errno: %d, error info: %s.",
                 __LINE__, path_info->store.path.str, errno, STRERROR(errno));
         return errno != 0 ? errno : EPERM;
     }
@@ -100,8 +100,8 @@ static int storage_config_calc_path_spaces(FSStoragePathInfo *path_info)
     path_info->prealloc_space.value = path_info->space_stat.total *
         path_info->prealloc_space.ratio;
     path_info->prealloc_space.trunk_count = (path_info->prealloc_space.
-            value + STORAGE_CFG.trunk_file_size - 1) /
-        STORAGE_CFG.trunk_file_size;
+            value + DA_STORE_CFG.trunk_file_size - 1) /
+        DA_STORE_CFG.trunk_file_size;
     if (sbuf.f_blocks > 0) {
         path_info->space_stat.used_ratio = (double)(sbuf.f_blocks -
                 sbuf.f_bavail) / (double)sbuf.f_blocks;
@@ -118,7 +118,7 @@ static int storage_config_calc_path_spaces(FSStoragePathInfo *path_info)
     return 0;
 }
 
-int storage_config_calc_path_avail_space(FSStoragePathInfo *path_info)
+int storage_config_calc_path_avail_space(DAStoragePathInfo *path_info)
 {
     struct statvfs sbuf;
     time_t last_stat_time;
@@ -133,7 +133,7 @@ int storage_config_calc_path_avail_space(FSStoragePathInfo *path_info)
 
     if (statvfs(path_info->store.path.str, &sbuf) != 0) {
         logError("file: "__FILE__", line: %d, "
-                "statfs path %s fail, errno: %d, error info: %s.",
+                "statvfs path %s fail, errno: %d, error info: %s.",
                 __LINE__, path_info->store.path.str, errno, STRERROR(errno));
         return errno != 0 ? errno : EPERM;
     }
@@ -149,14 +149,14 @@ int storage_config_calc_path_avail_space(FSStoragePathInfo *path_info)
 
 void storage_config_stat_path_spaces(SFSpaceStat *ss)
 {
-    FSStoragePathInfo **pp;
-    FSStoragePathInfo **end;
+    DAStoragePathInfo **pp;
+    DAStoragePathInfo **end;
     SFSpaceStat stat;
     int64_t disk_avail;
 
     stat.total = stat.used = stat.avail = 0;
-    end = STORAGE_CFG.paths_by_index.paths + STORAGE_CFG.paths_by_index.count;
-    for (pp=STORAGE_CFG.paths_by_index.paths; pp<end; pp++) {
+    end = DA_STORE_CFG.paths_by_index.paths + DA_STORE_CFG.paths_by_index.count;
+    for (pp=DA_STORE_CFG.paths_by_index.paths; pp<end; pp++) {
         if (*pp == NULL) {
             continue;
         }
@@ -187,9 +187,9 @@ void storage_config_stat_path_spaces(SFSpaceStat *ss)
     *ss = stat;
 }
 
-static int load_paths(FSStorageConfig *storage_cfg, IniFullContext *ini_ctx,
+static int load_paths(DAStorageConfig *storage_cfg, IniFullContext *ini_ctx,
         const char *section_name_prefix, const char *item_name,
-        FSStoragePathArray *parray, const bool required)
+        DAStoragePathArray *parray, const bool required)
 {
     int result;
     int count;
@@ -211,8 +211,8 @@ static int load_paths(FSStorageConfig *storage_cfg, IniFullContext *ini_ctx,
         }
     }
 
-    bytes = sizeof(FSStoragePathInfo) * count;
-    parray->paths = (FSStoragePathInfo *)fc_malloc(bytes);
+    bytes = sizeof(DAStoragePathInfo) * count;
+    parray->paths = (DAStoragePathInfo *)fc_malloc(bytes);
     if (parray->paths == NULL) {
         return ENOMEM;
     }
@@ -274,7 +274,7 @@ static int load_paths(FSStorageConfig *storage_cfg, IniFullContext *ini_ctx,
 }
 
 #ifdef OS_LINUX
-static int load_aio_read_buffer_params(FSStorageConfig *storage_cfg,
+static int load_aio_read_buffer_params(DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx)
 {
     int result;
@@ -324,7 +324,7 @@ static int load_aio_read_buffer_params(FSStorageConfig *storage_cfg,
 }
 #endif
 
-static int load_global_items(FSStorageConfig *storage_cfg,
+static int load_global_items(DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx)
 {
     int result;
@@ -423,37 +423,37 @@ static int load_global_items(FSStorageConfig *storage_cfg,
 
     tf_size = iniGetStrValue(NULL, "trunk_file_size", ini_ctx->context);
     if (tf_size == NULL || *tf_size == '\0') {
-        trunk_file_size = FS_DEFAULT_TRUNK_FILE_SIZE;
+        trunk_file_size = DA_DEFAULT_TRUNK_FILE_SIZE;
     } else if ((result=parse_bytes(tf_size, 1, &trunk_file_size)) != 0) {
         return result;
     }
     storage_cfg->trunk_file_size = trunk_file_size;
 
-    if (storage_cfg->trunk_file_size < FS_TRUNK_FILE_MIN_SIZE) {
+    if (storage_cfg->trunk_file_size < DA_TRUNK_FILE_MIN_SIZE) {
         logWarning("file: "__FILE__", line: %d, "
                 "trunk_file_size: %"PRId64" is too small, set to %"PRId64,
                 __LINE__, storage_cfg->trunk_file_size,
-                (int64_t)FS_TRUNK_FILE_MIN_SIZE);
-        storage_cfg->trunk_file_size = FS_TRUNK_FILE_MIN_SIZE;
-    } else if (storage_cfg->trunk_file_size > FS_TRUNK_FILE_MAX_SIZE) {
+                (int64_t)DA_TRUNK_FILE_MIN_SIZE);
+        storage_cfg->trunk_file_size = DA_TRUNK_FILE_MIN_SIZE;
+    } else if (storage_cfg->trunk_file_size > DA_TRUNK_FILE_MAX_SIZE) {
         logWarning("file: "__FILE__", line: %d, "
                 "trunk_file_size: %"PRId64" is too large, set to %"PRId64,
                 __LINE__, storage_cfg->trunk_file_size,
-                (int64_t)FS_TRUNK_FILE_MAX_SIZE);
-        storage_cfg->trunk_file_size = FS_TRUNK_FILE_MAX_SIZE;
+                (int64_t)DA_TRUNK_FILE_MAX_SIZE);
+        storage_cfg->trunk_file_size = DA_TRUNK_FILE_MAX_SIZE;
     }
-    if (storage_cfg->trunk_file_size <= FILE_BLOCK_SIZE) {
+    if (storage_cfg->trunk_file_size <= DA_FILE_BLOCK_SIZE) {
         logError("file: "__FILE__", line: %d, "
                 "trunk_file_size: %"PRId64" is too small, "
                 "<= block size %d", __LINE__, storage_cfg->
-                trunk_file_size, FILE_BLOCK_SIZE);
+                trunk_file_size, DA_FILE_BLOCK_SIZE);
         return EINVAL;
     }
 
     discard_size = iniGetStrValue(NULL, "discard_remain_space_size",
             ini_ctx->context);
     if (discard_size == NULL || *discard_size == '\0') {
-        discard_remain_space_size = FS_DEFAULT_DISCARD_REMAIN_SPACE_SIZE;
+        discard_remain_space_size = DA_DEFAULT_DISCARD_REMAIN_SPACE_SIZE;
     } else if ((result=parse_bytes(discard_size, 1,
                     &discard_remain_space_size)) != 0) {
         return result;
@@ -462,23 +462,23 @@ static int load_global_items(FSStorageConfig *storage_cfg,
     storage_cfg->discard_remain_space_size = discard_remain_space_size;
 
     if (storage_cfg->discard_remain_space_size <
-            FS_DISCARD_REMAIN_SPACE_MIN_SIZE)
+            DA_DISCARD_REMAIN_SPACE_MIN_SIZE)
     {
         logWarning("file: "__FILE__", line: %d, "
                 "discard_remain_space_size: %d is too small, set to %d",
                 __LINE__, storage_cfg->discard_remain_space_size,
-                FS_DISCARD_REMAIN_SPACE_MIN_SIZE);
+                DA_DISCARD_REMAIN_SPACE_MIN_SIZE);
         storage_cfg->discard_remain_space_size =
-            FS_DISCARD_REMAIN_SPACE_MIN_SIZE;
+            DA_DISCARD_REMAIN_SPACE_MIN_SIZE;
     } else if (storage_cfg->discard_remain_space_size >
-            FS_DISCARD_REMAIN_SPACE_MAX_SIZE)
+            DA_DISCARD_REMAIN_SPACE_MAX_SIZE)
     {
         logWarning("file: "__FILE__", line: %d, "
                 "discard_remain_space_size: %d is too large, set to %d",
                 __LINE__, storage_cfg->discard_remain_space_size,
-                FS_DISCARD_REMAIN_SPACE_MAX_SIZE);
+                DA_DISCARD_REMAIN_SPACE_MAX_SIZE);
         storage_cfg->discard_remain_space_size =
-            FS_DISCARD_REMAIN_SPACE_MAX_SIZE;
+            DA_DISCARD_REMAIN_SPACE_MAX_SIZE;
     }
 
     if ((result=iniGetPercentValue(ini_ctx, "reserved_space_per_disk",
@@ -522,7 +522,7 @@ static int load_global_items(FSStorageConfig *storage_cfg,
     return 0;
 }
 
-static int load_from_config_file(FSStorageConfig *storage_cfg,
+static int load_from_config_file(DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx)
 {
     int result;
@@ -553,13 +553,13 @@ static int load_from_config_file(FSStorageConfig *storage_cfg,
     return 0;
 }
 
-static int load_path_indexes(FSStoragePathArray *parray, const char *caption,
+static int load_path_indexes(DAStoragePathArray *parray, const char *caption,
         int *change_count)
 {
     int result;
     bool regenerated;
-    FSStoragePathInfo *p;
-    FSStoragePathInfo *end;
+    DAStoragePathInfo *p;
+    DAStoragePathInfo *end;
     StorePathEntry *pentry;
 
     end = parray->paths + parray->count;
@@ -594,11 +594,11 @@ static int load_path_indexes(FSStoragePathArray *parray, const char *caption,
     return 0;
 }
 
-static void do_set_paths_by_index(FSStorageConfig *storage_cfg,
-        FSStoragePathArray *parray)
+static void do_set_paths_by_index(DAStorageConfig *storage_cfg,
+        DAStoragePathArray *parray)
 {
-    FSStoragePathInfo *p;
-    FSStoragePathInfo *end;
+    DAStoragePathInfo *p;
+    DAStoragePathInfo *end;
 
     end = parray->paths + parray->count;
     for (p=parray->paths; p<end; p++) {
@@ -606,13 +606,13 @@ static void do_set_paths_by_index(FSStorageConfig *storage_cfg,
     }
 }
 
-static int set_paths_by_index(FSStorageConfig *storage_cfg)
+static int set_paths_by_index(DAStorageConfig *storage_cfg)
 {
     int bytes;
 
     storage_cfg->paths_by_index.count = storage_cfg->max_store_path_index + 1;
-    bytes = sizeof(FSStoragePathInfo *) * storage_cfg->paths_by_index.count;
-    storage_cfg->paths_by_index.paths = (FSStoragePathInfo **)fc_malloc(bytes);
+    bytes = sizeof(DAStoragePathInfo *) * storage_cfg->paths_by_index.count;
+    storage_cfg->paths_by_index.paths = (DAStoragePathInfo **)fc_malloc(bytes);
     if (storage_cfg->paths_by_index.paths == NULL) {
         return ENOMEM;
     }
@@ -623,7 +623,7 @@ static int set_paths_by_index(FSStorageConfig *storage_cfg)
     return 0;
 }
 
-static int load_store_path_indexes(FSStorageConfig *storage_cfg,
+static int load_store_path_indexes(DAStorageConfig *storage_cfg,
         const char *storage_filename)
 {
     int result;
@@ -671,14 +671,14 @@ static int load_store_path_indexes(FSStorageConfig *storage_cfg,
     return result;
 }
 
-int storage_config_load(FSStorageConfig *storage_cfg,
+int storage_config_load(DAStorageConfig *storage_cfg,
         const char *storage_filename)
 {
     IniContext ini_context;
     IniFullContext ini_ctx;
     int result;
 
-    memset(storage_cfg, 0, sizeof(FSStorageConfig));
+    memset(storage_cfg, 0, sizeof(DAStorageConfig));
     if ((result=iniLoadFromFile(storage_filename, &ini_context)) != 0) {
         logError("file: "__FILE__", line: %d, "
                 "load conf file \"%s\" fail, ret code: %d",
@@ -695,10 +695,10 @@ int storage_config_load(FSStorageConfig *storage_cfg,
     return result;
 }
 
-static void log_paths(FSStoragePathArray *parray, const char *caption)
+static void log_paths(DAStoragePathArray *parray, const char *caption)
 {
-    FSStoragePathInfo *p;
-    FSStoragePathInfo *end;
+    DAStoragePathInfo *p;
+    DAStoragePathInfo *end;
     char avail_space_buff[32];
     char reserved_space_buff[32];
     char prealloc_space_buff[32];
@@ -743,7 +743,7 @@ static void log_paths(FSStoragePathArray *parray, const char *caption)
     }
 }
 
-void storage_config_to_log(FSStorageConfig *storage_cfg)
+void storage_config_to_log(DAStorageConfig *storage_cfg)
 {
     logInfo("storage config, write_threads_per_path: %d, "
             "read_threads_per_path: %d, "

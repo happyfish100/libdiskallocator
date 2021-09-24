@@ -23,44 +23,44 @@
 
 typedef struct {
     int count;
-    FSTrunkAllocator *allocators;
-} FSTrunkAllocatorArray;
+    DATrunkAllocator *allocators;
+} DATrunkAllocatorArray;
 
 typedef struct {
     int count;
     int alloc;
-    FSTrunkAllocator **allocators;
-} FSTrunkAllocatorPtrArray;
+    DATrunkAllocator **allocators;
+} DATrunkAllocatorPtrArray;
 
 typedef struct {
-    FSTrunkAllocatorArray all;
-    volatile FSTrunkAllocatorPtrArray *full;
-    volatile FSTrunkAllocatorPtrArray *avail;
-} FSStorageAllocatorContext;
+    DATrunkAllocatorArray all;
+    volatile DATrunkAllocatorPtrArray *full;
+    volatile DATrunkAllocatorPtrArray *avail;
+} DAStorageAllocatorContext;
 
 typedef struct {
-    FSStorageAllocatorContext write_cache;
-    FSStorageAllocatorContext store_path;
-    FSTrunkFreelist reclaim_freelist;  //special purpose for reclaiming
-    FSTrunkAllocatorPtrArray allocator_ptr_array; //by store path index
+    DAStorageAllocatorContext write_cache;
+    DAStorageAllocatorContext store_path;
+    DATrunkFreelist reclaim_freelist;  //special purpose for reclaiming
+    DATrunkAllocatorPtrArray allocator_ptr_array; //by store path index
     struct fast_mblock_man aptr_array_allocator;
     pthread_mutex_t lock;
     int64_t current_trunk_id;
-} FSStorageAllocatorManager;
+} DAStorageAllocatorManager;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    extern FSStorageAllocatorManager *g_allocator_mgr;
+    extern DAStorageAllocatorManager *g_allocator_mgr;
 
     int storage_allocator_init();
 
     int storage_allocator_prealloc_trunk_freelists();
 
     static inline int storage_allocator_add_trunk_ex(const int path_index,
-            const FSTrunkIdInfo *id_info, const int64_t size,
-            FSTrunkFileInfo **pp_trunk)
+            const DATrunkIdInfo *id_info, const int64_t size,
+            DATrunkFileInfo **pp_trunk)
     {
         int result;
 
@@ -73,13 +73,13 @@ extern "C" {
     }
 
     static inline int storage_allocator_add_trunk(const int path_index,
-            const FSTrunkIdInfo *id_info, const int64_t size)
+            const DATrunkIdInfo *id_info, const int64_t size)
     {
         return storage_allocator_add_trunk_ex(path_index, id_info, size, NULL);
     }
 
     static inline int storage_allocator_delete_trunk(const int path_index,
-            const FSTrunkIdInfo *id_info)
+            const DATrunkIdInfo *id_info)
     {
         int result;
         if ((result=trunk_id_info_delete(path_index, id_info)) != 0) {
@@ -91,15 +91,15 @@ extern "C" {
 
     static inline int storage_allocator_normal_alloc_ex(
             const uint64_t blk_hc, const int size,
-            FSTrunkSpaceWithVersion *spaces,
+            DATrunkSpaceWithVersion *spaces,
             int *count, const bool is_normal)
     {
-        FSTrunkAllocatorPtrArray *avail_array;
-        FSTrunkAllocator **allocator;
+        DATrunkAllocatorPtrArray *avail_array;
+        DATrunkAllocator **allocator;
         int result;
 
         do {
-            avail_array = (FSTrunkAllocatorPtrArray *)
+            avail_array = (DATrunkAllocatorPtrArray *)
                 g_allocator_mgr->store_path.avail;
             if (avail_array->count == 0) {
                 result = ENOSPC;
@@ -117,7 +117,7 @@ extern "C" {
     }
 
     static inline int storage_allocator_reclaim_alloc(const uint64_t blk_hc,
-            const int size, FSTrunkSpaceWithVersion *spaces, int *count)
+            const int size, DATrunkSpaceWithVersion *spaces, int *count)
     {
         const bool is_normal = false;
         int result;
@@ -136,15 +136,15 @@ extern "C" {
 #define storage_allocator_normal_alloc(blk_hc, size, spaces, count) \
     storage_allocator_normal_alloc_ex(blk_hc, size, spaces, count, true)
 
-    int fs_move_allocator_ptr_array(FSTrunkAllocatorPtrArray **src_array,
-            FSTrunkAllocatorPtrArray **dest_array, FSTrunkAllocator *allocator);
+    int da_move_allocator_ptr_array(DATrunkAllocatorPtrArray **src_array,
+            DATrunkAllocatorPtrArray **dest_array, DATrunkAllocator *allocator);
 
-    static inline int fs_add_to_avail_aptr_array(FSStorageAllocatorContext
-            *allocator_ctx, FSTrunkAllocator *allocator)
+    static inline int da_add_to_avail_aptr_array(DAStorageAllocatorContext
+            *allocator_ctx, DATrunkAllocator *allocator)
     {
         int result;
-        if ((result=fs_move_allocator_ptr_array((FSTrunkAllocatorPtrArray **)
-                        &allocator_ctx->full, (FSTrunkAllocatorPtrArray **)
+        if ((result=da_move_allocator_ptr_array((DATrunkAllocatorPtrArray **)
+                        &allocator_ctx->full, (DATrunkAllocatorPtrArray **)
                         &allocator_ctx->avail, allocator)) == 0)
         {
             logInfo("file: "__FILE__", line: %d, "
@@ -160,12 +160,12 @@ extern "C" {
         return result;
     }
 
-    static inline int fs_remove_from_avail_aptr_array(FSStorageAllocatorContext
-            *allocator_ctx, FSTrunkAllocator *allocator)
+    static inline int da_remove_from_avail_aptr_array(DAStorageAllocatorContext
+            *allocator_ctx, DATrunkAllocator *allocator)
     {
         int result;
-        if ((result=fs_move_allocator_ptr_array((FSTrunkAllocatorPtrArray **)
-                        &allocator_ctx->avail, (FSTrunkAllocatorPtrArray **)
+        if ((result=da_move_allocator_ptr_array((DATrunkAllocatorPtrArray **)
+                        &allocator_ctx->avail, (DATrunkAllocatorPtrArray **)
                         &allocator_ctx->full, allocator)) == 0)
         {
             allocator->path_info->trunk_stat.last_used = __sync_add_and_fetch(

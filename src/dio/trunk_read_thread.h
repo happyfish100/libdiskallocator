@@ -35,7 +35,7 @@ typedef void (*trunk_read_io_notify_func)(struct trunk_read_io_buffer
         *record, const int result);
 
 typedef struct trunk_read_io_buffer {
-    FSTrunkSpaceInfo space;
+    DATrunkSpaceInfo space;
     int read_bytes;
     char *data;
 
@@ -60,7 +60,7 @@ extern "C" {
     void trunk_read_thread_terminate();
 
 #ifdef OS_LINUX
-    int trunk_read_thread_push(const FSTrunkSpaceInfo *space,
+    int trunk_read_thread_push(const DATrunkSpaceInfo *space,
             const int read_bytes, AlignedReadBuffer **aligned_buffer,
             trunk_read_io_notify_func notify_func, void *notify_arg);
 
@@ -82,7 +82,7 @@ extern "C" {
 
 #else
 
-    int trunk_read_thread_push(const FSTrunkSpaceInfo *space,
+    int trunk_read_thread_push(const DATrunkSpaceInfo *space,
             const int read_bytes, char *buff, trunk_read_io_notify_func
             notify_func, void *notify_arg);
 

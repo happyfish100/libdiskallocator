@@ -23,25 +23,25 @@
 #include "trunk_maker.h"
 #include "storage_allocator.h"
 
-static FSStorageAllocatorManager allocator_mgr;
-FSStorageAllocatorManager *g_allocator_mgr = &allocator_mgr;
+static DAStorageAllocatorManager allocator_mgr;
+DAStorageAllocatorManager *g_allocator_mgr = &allocator_mgr;
 static int check_trunk_avail_func(void *args);
 
-static int init_allocator_context(FSStorageAllocatorContext *allocator_ctx,
-        FSStoragePathArray *parray)
+static int init_allocator_context(DAStorageAllocatorContext *allocator_ctx,
+        DAStoragePathArray *parray)
 {
     int result;
     int bytes;
-    FSStoragePathInfo *path;
-    FSStoragePathInfo *end;
-    FSTrunkAllocator *pallocator;
+    DAStoragePathInfo *path;
+    DAStoragePathInfo *end;
+    DATrunkAllocator *pallocator;
 
     if (parray->count == 0) {
         return 0;
     }
 
-    bytes = sizeof(FSTrunkAllocator) * parray->count;
-    allocator_ctx->all.allocators = (FSTrunkAllocator *)fc_malloc(bytes);
+    bytes = sizeof(DATrunkAllocator) * parray->count;
+    allocator_ctx->all.allocators = (DATrunkAllocator *)fc_malloc(bytes);
     if (allocator_ctx->all.allocators == NULL) {
         return ENOMEM;
     }
@@ -64,9 +64,9 @@ static int init_allocator_context(FSStorageAllocatorContext *allocator_ctx,
 
 static int aptr_array_alloc_init(void *element, void *args)
 {
-    FSTrunkAllocatorPtrArray *aptr_array;
-    aptr_array = (FSTrunkAllocatorPtrArray *)element;
-    aptr_array->allocators = (FSTrunkAllocator **)(aptr_array + 1);
+    DATrunkAllocatorPtrArray *aptr_array;
+    aptr_array = (DATrunkAllocatorPtrArray *)element;
+    aptr_array->allocators = (DATrunkAllocator **)(aptr_array + 1);
     aptr_array->alloc = (long)args;
     return 0;
 }
@@ -78,11 +78,11 @@ int storage_allocator_init()
     int count;
     int element_size;
 
-    memset(g_allocator_mgr, 0, sizeof(FSStorageAllocatorManager));
-    count = STORAGE_CFG.max_store_path_index + 1;
-    bytes = sizeof(FSTrunkAllocator *) * count;
+    memset(g_allocator_mgr, 0, sizeof(DAStorageAllocatorManager));
+    count = DA_STORE_CFG.max_store_path_index + 1;
+    bytes = sizeof(DATrunkAllocator *) * count;
     g_allocator_mgr->allocator_ptr_array.allocators =
-        (FSTrunkAllocator **)fc_malloc(bytes);
+        (DATrunkAllocator **)fc_malloc(bytes);
     if (g_allocator_mgr->allocator_ptr_array.allocators == NULL) {
         return ENOMEM;
     }
@@ -104,20 +104,20 @@ int storage_allocator_init()
     }
 
     if ((result=init_allocator_context(&g_allocator_mgr->write_cache,
-                    &STORAGE_CFG.write_cache)) != 0)
+                    &DA_STORE_CFG.write_cache)) != 0)
     {
         return result;
     }
     if ((result=init_allocator_context(&g_allocator_mgr->store_path,
-                    &STORAGE_CFG.store_path)) != 0)
+                    &DA_STORE_CFG.store_path)) != 0)
     {
         return result;
     }
 
     count = FC_MAX(g_allocator_mgr->write_cache.all.count,
             g_allocator_mgr->store_path.all.count);
-    element_size = sizeof(FSTrunkAllocatorPtrArray) +
-        sizeof(FSTrunkAllocator *) * count;
+    element_size = sizeof(DATrunkAllocatorPtrArray) +
+        sizeof(DATrunkAllocator *) * count;
     if ((result=fast_mblock_init_ex1(&g_allocator_mgr->aptr_array_allocator,
                     "aptr_array", element_size, 64, 0, aptr_array_alloc_init,
                     (void *)(long)count, true)) != 0)
@@ -128,10 +128,10 @@ int storage_allocator_init()
     return trunk_id_info_init();
 }
 
-static int deal_allocator_on_ready(FSStorageAllocatorContext *allocator_ctx)
+static int deal_allocator_on_ready(DAStorageAllocatorContext *allocator_ctx)
 {
-    FSTrunkAllocator *allocator;
-    FSTrunkAllocator *end;
+    DATrunkAllocator *allocator;
+    DATrunkAllocator *end;
 
     end = allocator_ctx->all.allocators + allocator_ctx->all.count;
     for (allocator=allocator_ctx->all.allocators; allocator<end; allocator++) {
@@ -149,10 +149,10 @@ static int deal_allocator_on_ready(FSStorageAllocatorContext *allocator_ctx)
     return 0;
 }
 
-static int prealloc_trunk_freelist(FSStorageAllocatorContext *allocator_ctx)
+static int prealloc_trunk_freelist(DAStorageAllocatorContext *allocator_ctx)
 {
-    FSTrunkAllocator *allocator;
-    FSTrunkAllocator *end;
+    DATrunkAllocator *allocator;
+    DATrunkAllocator *end;
 
     end = allocator_ctx->all.allocators + allocator_ctx->all.count;
     for (allocator=allocator_ctx->all.allocators; allocator<end; allocator++) {
@@ -164,7 +164,7 @@ static int prealloc_trunk_freelist(FSStorageAllocatorContext *allocator_ctx)
 
 static void wait_allocator_available()
 {
-    FSTrunkAllocatorPtrArray *avail_array;
+    DATrunkAllocatorPtrArray *avail_array;
     int count;
     int i;
 
@@ -195,7 +195,7 @@ static void wait_allocator_available()
         return;
     }
 
-    avail_array = (FSTrunkAllocatorPtrArray *)
+    avail_array = (DATrunkAllocatorPtrArray *)
         g_allocator_mgr->store_path.avail;
     for (i=0; i<avail_array->count; i++) {
         trunk_maker_allocate_ex(avail_array->allocators[i],
@@ -208,17 +208,17 @@ static void wait_allocator_available()
      (int)(a2)->path_info->store.index)
 
 static int compare_allocator_by_path_index(
-        FSTrunkAllocator **pp1,
-        FSTrunkAllocator **pp2)
+        DATrunkAllocator **pp1,
+        DATrunkAllocator **pp2)
 {
     return CMP_APTR_BY_PINDEX(*pp1, *pp2);
 }
 
-static inline int add_to_aptr_array(FSTrunkAllocatorPtrArray
-        *aptr_array, FSTrunkAllocator *allocator)
+static inline int add_to_aptr_array(DATrunkAllocatorPtrArray
+        *aptr_array, DATrunkAllocator *allocator)
 {
-    FSTrunkAllocator **pos;
-    FSTrunkAllocator **end;
+    DATrunkAllocator **pos;
+    DATrunkAllocator **end;
     int r;
 
     end = aptr_array->allocators + aptr_array->count;
@@ -236,7 +236,7 @@ static inline int add_to_aptr_array(FSTrunkAllocatorPtrArray
     }
 
     if (pos < end) {
-        FSTrunkAllocator **pp;
+        DATrunkAllocator **pp;
 
         for (pp=end; pp>pos; pp--) {
             *pp = *(pp - 1);
@@ -248,11 +248,11 @@ static inline int add_to_aptr_array(FSTrunkAllocatorPtrArray
     return 0;
 }
 
-static inline int remove_from_aptr_array(FSTrunkAllocatorPtrArray *aptr_array,
-        FSTrunkAllocator *allocator)
+static inline int remove_from_aptr_array(DATrunkAllocatorPtrArray *aptr_array,
+        DATrunkAllocator *allocator)
 {
-    FSTrunkAllocator **pp;
-    FSTrunkAllocator **end;
+    DATrunkAllocator **pp;
+    DATrunkAllocator **end;
 
     end = aptr_array->allocators + aptr_array->count;
     for (pp=aptr_array->allocators; pp<end; pp++) {
@@ -271,19 +271,19 @@ static inline int remove_from_aptr_array(FSTrunkAllocatorPtrArray *aptr_array,
     return 0;
 }
 
-int init_allocator_ptr_array(FSStorageAllocatorContext *allocator_ctx)
+int init_allocator_ptr_array(DAStorageAllocatorContext *allocator_ctx)
 {
-    FSTrunkAllocator *allocator;
-    FSTrunkAllocator *end;
-    FSTrunkAllocatorPtrArray *aptr_array;
+    DATrunkAllocator *allocator;
+    DATrunkAllocator *end;
+    DATrunkAllocatorPtrArray *aptr_array;
 
-    allocator_ctx->full = (FSTrunkAllocatorPtrArray *)
+    allocator_ctx->full = (DATrunkAllocatorPtrArray *)
         fast_mblock_alloc_object(&g_allocator_mgr->aptr_array_allocator);
     if (allocator_ctx->full == NULL) {
         return ENOMEM;
     }
 
-    allocator_ctx->avail = (FSTrunkAllocatorPtrArray *)
+    allocator_ctx->avail = (DATrunkAllocatorPtrArray *)
         fast_mblock_alloc_object(&g_allocator_mgr->aptr_array_allocator);
     if (allocator_ctx->avail == NULL) {
         return ENOMEM;
@@ -293,12 +293,12 @@ int init_allocator_ptr_array(FSStorageAllocatorContext *allocator_ctx)
     end = allocator_ctx->all.allocators + allocator_ctx->all.count;
     for (allocator=allocator_ctx->all.allocators; allocator<end; allocator++) {
         if (trunk_allocator_is_available(allocator)) {
-            aptr_array = (FSTrunkAllocatorPtrArray *)allocator_ctx->avail;
+            aptr_array = (DATrunkAllocatorPtrArray *)allocator_ctx->avail;
         } else {
             allocator->path_info->trunk_stat.last_used = __sync_add_and_fetch(
                     &allocator->path_info->trunk_stat.used, 0) +
-                STORAGE_CFG.trunk_file_size;  //for trigger check trunk avail
-            aptr_array = (FSTrunkAllocatorPtrArray *)allocator_ctx->full;
+                DA_STORE_CFG.trunk_file_size;  //for trigger check trunk avail
+            aptr_array = (DATrunkAllocatorPtrArray *)allocator_ctx->full;
         }
         add_to_aptr_array(aptr_array, allocator);
 
@@ -313,34 +313,34 @@ int init_allocator_ptr_array(FSStorageAllocatorContext *allocator_ctx)
     return 0;
 }
 
-static int check_trunk_avail(FSStorageAllocatorContext *allocator_ctx)
+static int check_trunk_avail(DAStorageAllocatorContext *allocator_ctx)
 {
-    FSTrunkAllocatorPtrArray *aptr_array;
-    FSTrunkAllocator **pp;
-    FSTrunkAllocator **end;
+    DATrunkAllocatorPtrArray *aptr_array;
+    DATrunkAllocator **pp;
+    DATrunkAllocator **end;
     int64_t used_bytes;
     int r;
     int result;
 
     result = 0;
-    aptr_array = (FSTrunkAllocatorPtrArray *)allocator_ctx->full;
+    aptr_array = (DATrunkAllocatorPtrArray *)allocator_ctx->full;
     end = aptr_array->allocators + aptr_array->count;
     for (pp=aptr_array->allocators; pp<end; pp++) {
         if (trunk_allocator_is_available(*pp)) {
-            if ((r=fs_add_to_avail_aptr_array(allocator_ctx, *pp)) != 0) {
+            if ((r=da_add_to_avail_aptr_array(allocator_ctx, *pp)) != 0) {
                 result = r;
             }
         } else {
             used_bytes = __sync_add_and_fetch(&(*pp)->
                     path_info->trunk_stat.used, 0);
             if ((*pp)->path_info->trunk_stat.last_used - used_bytes >=
-                    STORAGE_CFG.trunk_file_size)
+                    DA_STORE_CFG.trunk_file_size)
             {
                 (*pp)->path_info->trunk_stat.last_used = used_bytes;
                 trunk_maker_allocate_ex(*pp, true, true, NULL, NULL);
             } else {
                 storage_config_calc_path_avail_space((*pp)->path_info);
-                if ((*pp)->path_info->space_stat.avail - STORAGE_CFG.
+                if ((*pp)->path_info->space_stat.avail - DA_STORE_CFG.
                         trunk_file_size > (*pp)->path_info->reserved_space.value)
                 {
                     trunk_maker_allocate(*pp);
@@ -421,12 +421,12 @@ int storage_allocator_prealloc_trunk_freelists()
     return 0;
 }
 
-static inline FSTrunkAllocatorPtrArray *duplicate_aptr_array(
-        FSTrunkAllocatorPtrArray *aptr_array)
+static inline DATrunkAllocatorPtrArray *duplicate_aptr_array(
+        DATrunkAllocatorPtrArray *aptr_array)
 {
-    FSTrunkAllocatorPtrArray *new_array;
+    DATrunkAllocatorPtrArray *new_array;
 
-    new_array = (FSTrunkAllocatorPtrArray *)fast_mblock_alloc_object(
+    new_array = (DATrunkAllocatorPtrArray *)fast_mblock_alloc_object(
             &g_allocator_mgr->aptr_array_allocator);
     if (new_array == NULL) {
         return NULL;
@@ -434,17 +434,17 @@ static inline FSTrunkAllocatorPtrArray *duplicate_aptr_array(
 
     if (aptr_array->count > 0) {
         memcpy(new_array->allocators, aptr_array->allocators,
-                sizeof(FSTrunkAllocator *) * aptr_array->count);
+                sizeof(DATrunkAllocator *) * aptr_array->count);
     }
 
     new_array->count = aptr_array->count;
     return new_array;
 }
 
-static inline void switch_aptr_array(FSTrunkAllocatorPtrArray **aptr_array,
-        FSTrunkAllocatorPtrArray *new_array)
+static inline void switch_aptr_array(DATrunkAllocatorPtrArray **aptr_array,
+        DATrunkAllocatorPtrArray *new_array)
 {
-    FSTrunkAllocatorPtrArray *old_array;
+    DATrunkAllocatorPtrArray *old_array;
 
     old_array = *aptr_array;
     *aptr_array = new_array;
@@ -452,18 +452,18 @@ static inline void switch_aptr_array(FSTrunkAllocatorPtrArray **aptr_array,
             aptr_array_allocator, old_array, 60);
 }
 
-int fs_move_allocator_ptr_array(FSTrunkAllocatorPtrArray **src_array,
-        FSTrunkAllocatorPtrArray **dest_array, FSTrunkAllocator *allocator)
+int da_move_allocator_ptr_array(DATrunkAllocatorPtrArray **src_array,
+        DATrunkAllocatorPtrArray **dest_array, DATrunkAllocator *allocator)
 {
     int result;
-    FSTrunkAllocatorPtrArray *new_sarray;
-    FSTrunkAllocatorPtrArray *new_darray;
+    DATrunkAllocatorPtrArray *new_sarray;
+    DATrunkAllocatorPtrArray *new_darray;
 
     new_sarray = new_darray = NULL;
     PTHREAD_MUTEX_LOCK(&g_allocator_mgr->lock);
     do {
         if (bsearch(&allocator, (*src_array)->allocators,
-                    (*src_array)->count, sizeof(FSTrunkAllocator *),
+                    (*src_array)->count, sizeof(DATrunkAllocator *),
                     (int (*)(const void *, const void *))
                     compare_allocator_by_path_index) == NULL)
         {
