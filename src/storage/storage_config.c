@@ -100,7 +100,7 @@ static int storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
     path_info->prealloc_space.value = path_info->space_stat.total *
         path_info->prealloc_space.ratio;
     path_info->prealloc_space.trunk_count = (path_info->prealloc_space.
-            value + DA_STORE_CFG.trunk_file_size - 1) /
+            value + DA_STORE_CFG.trunk_file_size - 1) / (int64_t)
         DA_STORE_CFG.trunk_file_size;
     if (sbuf.f_blocks > 0) {
         path_info->space_stat.used_ratio = (double)(sbuf.f_blocks -
@@ -328,10 +328,6 @@ static int load_global_items(DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx)
 {
     int result;
-    char *tf_size;
-    char *discard_size;
-    int64_t trunk_file_size;
-    int64_t discard_remain_space_size;
 
     storage_cfg->fd_cache_capacity_per_read_thread = iniGetIntValue(NULL,
             "fd_cache_capacity_per_read_thread", ini_ctx->context, 256);
@@ -421,65 +417,22 @@ static int load_global_items(DAStorageConfig *storage_cfg,
         storage_cfg->max_trunk_files_per_subdir = 100;
     }
 
-    tf_size = iniGetStrValue(NULL, "trunk_file_size", ini_ctx->context);
-    if (tf_size == NULL || *tf_size == '\0') {
-        trunk_file_size = DA_DEFAULT_TRUNK_FILE_SIZE;
-    } else if ((result=parse_bytes(tf_size, 1, &trunk_file_size)) != 0) {
-        return result;
-    }
-    storage_cfg->trunk_file_size = trunk_file_size;
-
-    if (storage_cfg->trunk_file_size < DA_TRUNK_FILE_MIN_SIZE) {
-        logWarning("file: "__FILE__", line: %d, "
-                "trunk_file_size: %"PRId64" is too small, set to %"PRId64,
-                __LINE__, storage_cfg->trunk_file_size,
-                (int64_t)DA_TRUNK_FILE_MIN_SIZE);
-        storage_cfg->trunk_file_size = DA_TRUNK_FILE_MIN_SIZE;
-    } else if (storage_cfg->trunk_file_size > DA_TRUNK_FILE_MAX_SIZE) {
-        logWarning("file: "__FILE__", line: %d, "
-                "trunk_file_size: %"PRId64" is too large, set to %"PRId64,
-                __LINE__, storage_cfg->trunk_file_size,
-                (int64_t)DA_TRUNK_FILE_MAX_SIZE);
-        storage_cfg->trunk_file_size = DA_TRUNK_FILE_MAX_SIZE;
-    }
+    storage_cfg->trunk_file_size = iniGetInt64CorrectValue(ini_ctx,
+            "trunk_file_size", DA_DEFAULT_TRUNK_FILE_SIZE,
+            DA_TRUNK_FILE_MIN_SIZE, DA_TRUNK_FILE_MAX_SIZE);
     if (storage_cfg->trunk_file_size <= DA_FILE_BLOCK_SIZE) {
         logError("file: "__FILE__", line: %d, "
-                "trunk_file_size: %"PRId64" is too small, "
+                "trunk_file_size: %u is too small, "
                 "<= block size %d", __LINE__, storage_cfg->
                 trunk_file_size, DA_FILE_BLOCK_SIZE);
         return EINVAL;
     }
 
-    discard_size = iniGetStrValue(NULL, "discard_remain_space_size",
-            ini_ctx->context);
-    if (discard_size == NULL || *discard_size == '\0') {
-        discard_remain_space_size = DA_DEFAULT_DISCARD_REMAIN_SPACE_SIZE;
-    } else if ((result=parse_bytes(discard_size, 1,
-                    &discard_remain_space_size)) != 0) {
-        return result;
-    } else {
-    }
-    storage_cfg->discard_remain_space_size = discard_remain_space_size;
-
-    if (storage_cfg->discard_remain_space_size <
-            DA_DISCARD_REMAIN_SPACE_MIN_SIZE)
-    {
-        logWarning("file: "__FILE__", line: %d, "
-                "discard_remain_space_size: %d is too small, set to %d",
-                __LINE__, storage_cfg->discard_remain_space_size,
-                DA_DISCARD_REMAIN_SPACE_MIN_SIZE);
-        storage_cfg->discard_remain_space_size =
-            DA_DISCARD_REMAIN_SPACE_MIN_SIZE;
-    } else if (storage_cfg->discard_remain_space_size >
-            DA_DISCARD_REMAIN_SPACE_MAX_SIZE)
-    {
-        logWarning("file: "__FILE__", line: %d, "
-                "discard_remain_space_size: %d is too large, set to %d",
-                __LINE__, storage_cfg->discard_remain_space_size,
-                DA_DISCARD_REMAIN_SPACE_MAX_SIZE);
-        storage_cfg->discard_remain_space_size =
-            DA_DISCARD_REMAIN_SPACE_MAX_SIZE;
-    }
+    storage_cfg->discard_remain_space_size = iniGetInt64CorrectValue(
+            ini_ctx, "discard_remain_space_size",
+            DA_DEFAULT_DISCARD_REMAIN_SPACE_SIZE,
+            DA_DISCARD_REMAIN_SPACE_MIN_SIZE,
+            DA_DISCARD_REMAIN_SPACE_MAX_SIZE);
 
     if ((result=iniGetPercentValue(ini_ctx, "reserved_space_per_disk",
                     &storage_cfg->reserved_space_per_disk, 0.10)) != 0)
@@ -756,7 +709,7 @@ void storage_config_to_log(DAStorageConfig *storage_cfg)
             "start_time: %02d:%02d, end_time: %02d:%02d }, "
             "trunk_prealloc_threads: %d, "
             "reserved_space_per_disk: %.2f%%, "
-            "trunk_file_size: %"PRId64" MB, "
+            "trunk_file_size: %u MB, "
             "max_trunk_files_per_subdir: %d, "
             "discard_remain_space_size: %d, "
 #if 0
