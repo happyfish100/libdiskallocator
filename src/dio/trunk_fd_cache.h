@@ -18,9 +18,10 @@
 #define _TRUNK_FD_CACHE_H
 
 #include "fastcommon/fc_list.h"
+#include "../storage/storage_types.h"
 
 typedef struct trunk_id_fd_pair {
-    int64_t trunk_id;
+    uint32_t trunk_id;
     int fd;
 } TrunkIdFDPair;
 
@@ -53,13 +54,21 @@ extern "C" {
 
     //return fd, -1 for not exist
     int trunk_fd_cache_get(TrunkFDCacheContext *cache_ctx,
-            const int64_t trunk_id);
+            const uint32_t trunk_id);
 
     int trunk_fd_cache_add(TrunkFDCacheContext *cache_ctx,
-            const int64_t trunk_id, const int fd);
+            const uint32_t trunk_id, const int fd);
 
     int trunk_fd_cache_delete(TrunkFDCacheContext *cache_ctx,
-            const int64_t trunk_id);
+            const uint32_t trunk_id);
+
+    static inline void dio_get_trunk_filename(DATrunkSpaceInfo *space,
+            char *trunk_filename, const int size)
+    {
+        snprintf(trunk_filename, size, "%s/%04d/%06u",
+                space->store->path.str, space->id_info.subdir,
+                space->id_info.id);
+    }
 
 #ifdef __cplusplus
 }

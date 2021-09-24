@@ -334,14 +334,6 @@ int trunk_read_thread_push(const DATrunkSpaceInfo *space,
     return 0;
 }
 
-static inline void get_trunk_filename(DATrunkSpaceInfo *space,
-        char *trunk_filename, const int size)
-{
-    snprintf(trunk_filename, size, "%s/%04"PRId64"/%06"PRId64,
-            space->store->path.str, space->id_info.subdir,
-            space->id_info.id);
-}
-
 static int get_read_fd(TrunkReadThreadContext *ctx,
         DATrunkSpaceInfo *space, int *fd)
 {
@@ -354,7 +346,7 @@ static int get_read_fd(TrunkReadThreadContext *ctx,
         return 0;
     }
 
-    get_trunk_filename(space, trunk_filename, sizeof(trunk_filename));
+    dio_get_trunk_filename(space, trunk_filename, sizeof(trunk_filename));
 #ifdef OS_LINUX
     *fd = open(trunk_filename, O_RDONLY | O_DIRECT);
 #else
@@ -539,7 +531,7 @@ static int process_aio(TrunkReadThreadContext *ctx)
             } else {
                 result = EBUSY;
             }
-            get_trunk_filename(&iob->space, trunk_filename,
+            dio_get_trunk_filename(&iob->space, trunk_filename,
                     sizeof(trunk_filename));
             logError("file: "__FILE__", line: %d, "
                     "read trunk file: %s fail, offset: %"PRId64", "
@@ -603,10 +595,10 @@ static int do_read_slice(TrunkReadThreadContext *ctx, TrunkReadIOBuffer *iob)
             trunk_fd_cache_delete(&ctx->fd_cache,
                     iob->space.id_info.id);
 
-            get_trunk_filename(&iob->space, trunk_filename,
+            dio_get_trunk_filename(&iob->space, trunk_filename,
                     sizeof(trunk_filename));
             logError("file: "__FILE__", line: %d, "
-                    "read trunk file: %s fail, offset: %"PRId64", "
+                    "read trunk file: %s fail, offset: %u, "
                     "errno: %d, error info: %s", __LINE__, trunk_filename,
                     iob->space.offset + data_len,
                     result, STRERROR(result));

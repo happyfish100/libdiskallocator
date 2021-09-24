@@ -171,7 +171,7 @@ void trunk_binlog_destroy()
 }
 
 int trunk_binlog_write(const char op_type, const int path_index,
-        const DATrunkIdInfo *id_info, const int64_t file_size)
+        const DATrunkIdInfo *id_info, const uint32_t file_size)
 {
     SFBinlogWriterBuffer *wbuffer;
 
@@ -179,8 +179,7 @@ int trunk_binlog_write(const char op_type, const int path_index,
         return ENOMEM;
     }
 
-    wbuffer->bf.length = sprintf(wbuffer->bf.buff,
-            "%d %c %d %"PRId64" %"PRId64" %"PRId64"\n",
+    wbuffer->bf.length = sprintf(wbuffer->bf.buff, "%d %c %d %u %u %u\n",
             (int)g_current_time, op_type, path_index, id_info->id,
             id_info->subdir, file_size);
     sf_push_to_binlog_thread_queue(&binlog_writer.thread, wbuffer);

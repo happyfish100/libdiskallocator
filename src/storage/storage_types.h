@@ -45,15 +45,15 @@ typedef struct {
 } DAStorePath;
 
 typedef struct {
-    int64_t id;
-    int64_t subdir;     //in which subdir
+    uint32_t id;
+    uint32_t subdir;     //in which subdir
 } DATrunkIdInfo;
 
 typedef struct {
     DAStorePath *store;
     DATrunkIdInfo id_info;
-    int64_t offset;  //offset of the trunk file
-    int64_t size;    //alloced space size
+    uint32_t offset;  //offset of the trunk file
+    uint32_t size;    //alloced space size
 } DATrunkSpaceInfo;
 
 typedef struct {
@@ -80,11 +80,11 @@ typedef struct da_trunk_file_info {
     volatile int status;
     struct {
         int count;  //slice count
-        volatile int64_t bytes;
+        volatile uint32_t bytes;
         struct fc_list_head slice_head; //OBSliceEntry double link
     } used;
-    int64_t size;        //file size
-    int64_t free_start;  //free space offset
+    uint32_t size;        //file size
+    uint32_t free_start;  //free space offset
 
     struct {
         struct da_trunk_file_info *next;
@@ -92,7 +92,7 @@ typedef struct da_trunk_file_info {
 
     struct {
         volatile char event;
-        int64_t last_used_bytes;
+        uint32_t last_used_bytes;
         struct da_trunk_file_info *next;
     } util;  //for util manager queue
 } DATrunkFileInfo;

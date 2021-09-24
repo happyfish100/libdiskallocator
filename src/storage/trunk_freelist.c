@@ -182,9 +182,9 @@ int trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
         DATrunkFreelist *freelist, const uint64_t blk_hc, const int size,
         DATrunkSpaceWithVersion *spaces, int *count, const bool is_normal)
 {
-    int aligned_size;
     int result;
-    int remain_bytes;
+    uint32_t aligned_size;
+    uint32_t remain_bytes;
     DATrunkSpaceWithVersion *space_info;
     DATrunkFileInfo *trunk_info;
 
@@ -204,8 +204,8 @@ int trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
                 
                 if (remain_bytes <= 0) {
                     logInfo("allocator: %p, trunk_info: %p, "
-                            "trunk size: %"PRId64", free start: %"PRId64
-                            ", remain_bytes: %d", trunk_info->allocator,
+                            "trunk size: %u, free start: %u, "
+                            "remain_bytes: %u", trunk_info->allocator,
                             trunk_info, trunk_info->size,
                             trunk_info->free_start, remain_bytes);
                     abort();

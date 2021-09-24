@@ -24,14 +24,15 @@
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
 #include "../binlog/trunk/trunk_binlog.h"
+#include "trunk_fd_cache.h"
 #include "trunk_write_thread.h"
 
 #define IO_THREAD_IOB_MAX     256
 #define IO_THREAD_BYTES_MAX   (64 * 1024 * 1024)
 
 typedef struct write_file_handle {
-    int64_t trunk_id;
-    int64_t offset;
+    uint32_t trunk_id;
+    uint32_t offset;
     int fd;
 } WriteFileHandle;
 
@@ -286,14 +287,6 @@ int trunk_write_thread_push(const int type, const int64_t version,
     return 0;
 }
 
-static inline void get_trunk_filename(DATrunkSpaceInfo *space,
-        char *trunk_filename, const int size)
-{
-    snprintf(trunk_filename, size, "%s/%04"PRId64"/%06"PRId64,
-            space->store->path.str, space->id_info.subdir,
-            space->id_info.id);
-}
-
 static inline void clear_write_fd(TrunkWriteThreadContext *ctx)
 {
     if (ctx->file_handle.fd >= 0) {
@@ -314,7 +307,7 @@ static int get_write_fd(TrunkWriteThreadContext *ctx,
         return 0;
     }
 
-    get_trunk_filename(space, trunk_filename, sizeof(trunk_filename));
+    dio_get_trunk_filename(space, trunk_filename, sizeof(trunk_filename));
     *fd = open(trunk_filename, O_WRONLY, 0644);
     if (*fd < 0) {
         result = errno != 0 ? errno : EACCES;
@@ -340,7 +333,7 @@ static int do_create_trunk(TrunkWriteThreadContext *ctx, TrunkWriteIOBuffer *iob
     int fd;
     int result;
 
-    get_trunk_filename(&iob->space, trunk_filename, sizeof(trunk_filename));
+    dio_get_trunk_filename(&iob->space, trunk_filename, sizeof(trunk_filename));
     fd = open(trunk_filename, O_WRONLY | O_CREAT, 0644);
     if (fd < 0) {
         if (errno == ENOENT) {
@@ -391,7 +384,7 @@ static int do_delete_trunk(TrunkWriteThreadContext *ctx, TrunkWriteIOBuffer *iob
     char trunk_filename[PATH_MAX];
     int result;
 
-    get_trunk_filename(&iob->space, trunk_filename, sizeof(trunk_filename));
+    dio_get_trunk_filename(&iob->space, trunk_filename, sizeof(trunk_filename));
     if (unlink(trunk_filename) == 0) {
         result = trunk_binlog_write(DA_IO_TYPE_DELETE_TRUNK,
                 iob->space.store->index, &iob->space.id_info,
@@ -474,11 +467,11 @@ static int do_write_slices(TrunkWriteThreadContext *ctx)
 
     if (ctx->file_handle.offset != first->space.offset) {
         if (lseek(fd, first->space.offset, SEEK_SET) < 0) {
-            get_trunk_filename(&first->space, trunk_filename,
+            dio_get_trunk_filename(&first->space, trunk_filename,
                     sizeof(trunk_filename));
             result = errno != 0 ? errno : EIO;
             logError("file: "__FILE__", line: %d, "
-                    "lseek file: %s fail, offset: %"PRId64", "
+                    "lseek file: %s fail, offset: %u, "
                     "errno: %d, error info: %s", __LINE__, trunk_filename,
                     first->space.offset, result, STRERROR(result));
             clear_write_fd(ctx);
@@ -487,7 +480,7 @@ static int do_write_slices(TrunkWriteThreadContext *ctx)
         }
 
         /*
-        get_trunk_filename(&first->space, trunk_filename,
+        dio_get_trunk_filename(&first->space, trunk_filename,
                 sizeof(trunk_filename));
         logInfo("trunk file: %s, lseek to offset: %"PRId64,
                 trunk_filename, first->space.offset);
@@ -517,10 +510,10 @@ static int do_write_slices(TrunkWriteThreadContext *ctx)
     if (result != 0) {
         clear_write_fd(ctx);
 
-        get_trunk_filename(&first->space, trunk_filename,
+        dio_get_trunk_filename(&first->space, trunk_filename,
                 sizeof(trunk_filename));
         logError("file: "__FILE__", line: %d, "
-                "write to trunk file: %s fail, offset: %"PRId64", "
+                "write to trunk file: %s fail, offset: %u, "
                 "errno: %d, error info: %s", __LINE__, trunk_filename,
                 first->space.offset + (ctx->iovec_bytes -
                     remain_bytes), result, STRERROR(result));
