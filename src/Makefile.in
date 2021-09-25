@@ -11,7 +11,7 @@ BINLOG_COMMON_HEADER = binlog/common/binlog_types.h binlog/common/binlog_fd_cach
                        binlog/common/write_fd_cache.h binlog/common/binlog_reader.h \
                        binlog/common/binlog_writer.h
 
-BINLOG_TRUNK_HEADER = binlog/trunk/trunk_binlog.h
+BINLOG_TRUNK_HEADER = binlog/trunk/trunk_binlog.h binlog/trunk/trunk_space_log.h
 
 DIO_HEADER = dio/read_buffer_pool.h dio/trunk_fd_cache.h \
              dio/trunk_read_thread.h dio/trunk_write_thread.h
@@ -25,8 +25,8 @@ STORAGE_HEADER = storage/storage_allocator.h storage/storage_config.h \
 TOP_OBJS = global.o
 
 BINLOG_OBJS = binlog/common/binlog_fd_cache.o binlog/common/write_fd_cache.o \
-              binlog/trunk/trunk_binlog.o binlog/common/binlog_reader.o \
-              binlog/common/binlog_writer.o
+              binlog/common/binlog_reader.o binlog/common/binlog_writer.o \
+              binlog/trunk/trunk_binlog.o binlog/trunk/trunk_space_log.o
 
 DIO_OBJS =  dio/trunk_write_thread.o dio/trunk_read_thread.o \
             dio/trunk_fd_cache.o dio/read_buffer_pool.o

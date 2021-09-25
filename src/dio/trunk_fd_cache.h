@@ -70,7 +70,7 @@ extern "C" {
                 space->id_info.id);
     }
 
-    static inline void dio_get_space_binlog_filename(DATrunkSpaceInfo *space,
+    static inline void dio_get_space_log_filename(DATrunkSpaceInfo *space,
             char *binlog_filename, const int size)
     {
         snprintf(binlog_filename, size, "%s/%04d/.%06u.log",
