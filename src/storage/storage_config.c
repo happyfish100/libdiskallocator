@@ -335,6 +335,12 @@ static int load_global_items(DAStorageConfig *storage_cfg,
         storage_cfg->fd_cache_capacity_per_read_thread = 256;
     }
 
+    storage_cfg->fd_cache_capacity_per_write_thread = iniGetIntValue(NULL,
+            "fd_cache_capacity_per_write_thread", ini_ctx->context, 256);
+    if (storage_cfg->fd_cache_capacity_per_write_thread <= 0) {
+        storage_cfg->fd_cache_capacity_per_write_thread = 256;
+    }
+
     storage_cfg->object_block.hashtable_capacity = iniGetInt64Value(NULL,
             "object_block_hashtable_capacity", ini_ctx->context, 11229331);
     if (storage_cfg->object_block.hashtable_capacity <= 0) {
@@ -702,6 +708,7 @@ void storage_config_to_log(DAStorageConfig *storage_cfg)
             "read_threads_per_path: %d, "
             "io_depth_per_read_thread: %d, "
             "fd_cache_capacity_per_read_thread: %d, "
+            "fd_cache_capacity_per_write_thread: %d, "
             "object_block_hashtable_capacity: %"PRId64", "
             "object_block_shared_allocator_count: %d, "
             "object_block_shared_lock_count: %d, "
@@ -730,6 +737,7 @@ void storage_config_to_log(DAStorageConfig *storage_cfg)
             storage_cfg->read_threads_per_path,
             storage_cfg->io_depth_per_read_thread,
             storage_cfg->fd_cache_capacity_per_read_thread,
+            storage_cfg->fd_cache_capacity_per_write_thread,
             storage_cfg->object_block.hashtable_capacity,
             storage_cfg->object_block.shared_allocator_count,
             storage_cfg->object_block.shared_lock_count,

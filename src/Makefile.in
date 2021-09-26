@@ -22,20 +22,20 @@ STORAGE_HEADER = storage/storage_allocator.h storage/storage_config.h \
                  storage/trunk_id_info.h storage/trunk_maker.h  \
                  storage/trunk_prealloc.h storage/trunk_reclaim.h
 
-TOP_OBJS = global.o
+TOP_OBJS = global.lo
 
-BINLOG_OBJS = binlog/common/binlog_fd_cache.o binlog/common/write_fd_cache.o \
-              binlog/common/binlog_reader.o binlog/common/binlog_writer.o \
-              binlog/trunk/trunk_binlog.o binlog/trunk/trunk_space_log.o
+BINLOG_OBJS = binlog/common/binlog_fd_cache.lo binlog/common/write_fd_cache.lo \
+              binlog/common/binlog_reader.lo binlog/common/binlog_writer.lo \
+              binlog/trunk/trunk_binlog.lo binlog/trunk/trunk_space_log.lo
 
-DIO_OBJS =  dio/trunk_write_thread.o dio/trunk_read_thread.o \
-            dio/trunk_fd_cache.o dio/read_buffer_pool.o
+DIO_OBJS =  dio/trunk_write_thread.lo dio/trunk_read_thread.lo \
+            dio/trunk_fd_cache.lo dio/read_buffer_pool.lo
 
-STORAGE_OBJS = storage/storage_config.o storage/store_path_index.o   \
-               storage/trunk_allocator.o storage/storage_allocator.o \
-               storage/trunk_id_info.o storage/trunk_freelist.o
-#               storage/trunk_maker.o storage/trunk_prealloc.o    \
-#               storage/trunk_reclaim.o
+STORAGE_OBJS = storage/storage_config.lo storage/store_path_index.lo   \
+               storage/trunk_allocator.lo storage/storage_allocator.lo \
+               storage/trunk_id_info.lo storage/trunk_freelist.lo
+#               storage/trunk_maker.lo storage/trunk_prealloc.lo    \
+#               storage/trunk_reclaim.lo
 
 SHARED_OBJS = $(TOP_OBJS) $(BINLOG_OBJS) $(DIO_OBJS) $(STORAGE_OBJS)
 

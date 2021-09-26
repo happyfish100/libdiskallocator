@@ -88,6 +88,7 @@ typedef struct {
     int discard_remain_space_size;
     int trunk_prealloc_threads;
     int fd_cache_capacity_per_read_thread;
+    int fd_cache_capacity_per_write_thread;
     struct {
         int shared_lock_count;
         int shared_allocator_count;
