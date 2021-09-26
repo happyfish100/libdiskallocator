@@ -17,9 +17,9 @@
 #ifndef _STORAGE_ALLOCATOR_H
 #define _STORAGE_ALLOCATOR_H
 
-#include "trunk_id_info.h"
-#include "trunk_freelist.h"
-#include "trunk_allocator.h"
+#include "trunk/trunk_id_info.h"
+#include "trunk/trunk_freelist.h"
+#include "trunk/trunk_allocator.h"
 
 typedef struct {
     int count;

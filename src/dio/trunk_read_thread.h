@@ -21,9 +21,8 @@
 #ifdef OS_LINUX
 #include <libaio.h>
 #endif
-#include "../storage/storage_config.h"
-#include "../storage/trunk_allocator.h"
-#include "../storage/storage_allocator.h"
+#include "../storage_config.h"
+#include "../storage_allocator.h"
 #ifdef OS_LINUX
 #include "read_buffer_pool.h"
 #endif

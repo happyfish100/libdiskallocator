@@ -18,7 +18,7 @@
 #define _TRUNK_FD_CACHE_H
 
 #include "fastcommon/fc_list.h"
-#include "../storage/storage_types.h"
+#include "../storage_types.h"
 
 typedef struct trunk_id_fd_pair {
     uint32_t trunk_id;

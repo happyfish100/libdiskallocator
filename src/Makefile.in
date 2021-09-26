@@ -5,7 +5,8 @@ INC_PATH = -Iinclude -I/usr/local/include
 LIB_PATH = $(LIBS) -lfastcommon -lserverframe
 TARGET_LIB = $(TARGET_PREFIX)/$(LIB_VERSION)
 
-TOP_HEADERS = global.h
+TOP_HEADERS = global.h storage_allocator.h storage_config.h storage_types.h \
+              store_path_index.h
 
 BINLOG_COMMON_HEADER = binlog/common/binlog_types.h binlog/common/binlog_fd_cache.h \
                        binlog/common/write_fd_cache.h binlog/common/binlog_reader.h \
@@ -16,13 +17,11 @@ BINLOG_TRUNK_HEADER = binlog/trunk/trunk_binlog.h binlog/trunk/trunk_space_log.h
 DIO_HEADER = dio/read_buffer_pool.h dio/trunk_fd_cache.h \
              dio/trunk_read_thread.h dio/trunk_write_thread.h
 
-STORAGE_HEADER = storage/storage_allocator.h storage/storage_config.h \
-                 storage/storage_types.h storage/store_path_index.h \
-                 storage/trunk_allocator.h storage/trunk_freelist.h \
-                 storage/trunk_id_info.h storage/trunk_maker.h  \
-                 storage/trunk_prealloc.h storage/trunk_reclaim.h
+TRUNK_HEADER = trunk/trunk_allocator.h trunk/trunk_freelist.h \
+               trunk/trunk_id_info.h trunk/trunk_maker.h  \
+               trunk/trunk_prealloc.h trunk/trunk_reclaim.h
 
-TOP_OBJS = global.lo
+TOP_OBJS = global.lo storage_allocator.lo storage_config.lo store_path_index.lo
 
 BINLOG_OBJS = binlog/common/binlog_fd_cache.lo binlog/common/write_fd_cache.lo \
               binlog/common/binlog_reader.lo binlog/common/binlog_writer.lo \
@@ -31,13 +30,12 @@ BINLOG_OBJS = binlog/common/binlog_fd_cache.lo binlog/common/write_fd_cache.lo \
 DIO_OBJS =  dio/trunk_write_thread.lo dio/trunk_read_thread.lo \
             dio/trunk_fd_cache.lo dio/read_buffer_pool.lo
 
-STORAGE_OBJS = storage/storage_config.lo storage/store_path_index.lo   \
-               storage/trunk_allocator.lo storage/storage_allocator.lo \
-               storage/trunk_id_info.lo storage/trunk_freelist.lo
-#               storage/trunk_maker.lo storage/trunk_prealloc.lo    \
-#               storage/trunk_reclaim.lo
+TRUNK_OBJS = trunk/trunk_allocator.lo trunk/trunk_id_info.lo \
+             trunk/trunk_freelist.lo
+#               trunk/trunk_maker.lo trunk/trunk_prealloc.lo    \
+#               trunk/trunk_reclaim.lo
 
-SHARED_OBJS = $(TOP_OBJS) $(BINLOG_OBJS) $(DIO_OBJS) $(STORAGE_OBJS)
+SHARED_OBJS = $(TOP_OBJS) $(BINLOG_OBJS) $(DIO_OBJS) $(TRUNK_OBJS)
 
 ALL_OBJS = $(SHARED_OBJS)
 ALL_LIBS = libdiskallocator.so
@@ -59,14 +57,14 @@ install:
 	mkdir -p $(TARGET_PREFIX)/lib
 	mkdir -p $(TARGET_PREFIX)/include/diskallocator/binlog/common
 	mkdir -p $(TARGET_PREFIX)/include/diskallocator/binlog/trunk
-	mkdir -p $(TARGET_PREFIX)/include/diskallocator/storage
+	mkdir -p $(TARGET_PREFIX)/include/diskallocator/trunk
 	mkdir -p $(TARGET_PREFIX)/include/diskallocator/dio
 
 	install -m 755 $(ALL_LIBS) $(TARGET_LIB)
 	cp -f $(TOP_HEADERS) $(TARGET_PREFIX)/include/diskallocator/
 	cp -f $(BINLOG_COMMON_HEADER) $(TARGET_PREFIX)/include/diskallocator/binlog/common/
 	cp -f $(BINLOG_TRUNK_HEADER) $(TARGET_PREFIX)/include/diskallocator/binlog/trunk/
-	cp -f $(STORAGE_HEADER) $(TARGET_PREFIX)/include/diskallocator/storage/
+	cp -f $(TRUNK_HEADER) $(TARGET_PREFIX)/include/diskallocator/trunk/
 	cp -f $(DIO_HEADER) $(TARGET_PREFIX)/include/diskallocator/dio/
 
 	@BUILDROOT=$$(echo "$(TARGET_PREFIX)" | grep BUILDROOT); \

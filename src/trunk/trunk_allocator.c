@@ -23,7 +23,7 @@
 #include "fastcommon/sched_thread.h"
 #include "sf/sf_global.h"
 #include "trunk_maker.h"
-#include "storage_allocator.h"
+#include "../storage_allocator.h"
 #include "trunk_allocator.h"
 
 TrunkAllocatorGlobalVars g_trunk_allocator_vars;
@@ -151,7 +151,6 @@ int trunk_allocator_add(DATrunkAllocator *allocator,
     PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
 
     PTHREAD_MUTEX_LOCK(&allocator->trunks.lock);
-    FC_INIT_LIST_HEAD(&trunk_info->used.slice_head);
     result = uniq_skiplist_insert(allocator->
             trunks.by_id.skiplist, trunk_info);
     PTHREAD_MUTEX_UNLOCK(&allocator->trunks.lock);

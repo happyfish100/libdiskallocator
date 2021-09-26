@@ -27,8 +27,7 @@
 
 typedef struct trunk_space_log_record {
     char op_type;
-    int64_t data_version;
-    int64_t order;   //for write in order
+    int64_t version;
     DATrunkSpaceInfo space;
     struct trunk_space_log_record *next;
 } TrunkSpaceLogRecord;
@@ -45,7 +44,6 @@ typedef struct trunk_space_log_context {
     TrunkSpaceLogRecordArray record_array;
     TrunkFDCacheContext fd_cache_ctx;
     FastBuffer buffer;
-    volatile int64_t next_version;
 } TrunkSpaceLogContext;
 
 static TrunkSpaceLogContext trunk_space_log_ctx;
@@ -88,7 +86,7 @@ static int record_ptr_compare(const TrunkSpaceLogRecord **record1,
         return sub;
     }
 
-    return fc_compare_int64((*record1)->order, (*record2)->order);
+    return fc_compare_int64((*record1)->version, (*record2)->version);
 }
 
 static int chain_to_array(TrunkSpaceLogRecord *head)
@@ -208,7 +206,7 @@ static int write_to_log_file(TrunkSpaceLogRecord **start,
             trunk_space_log_ctx.buffer.length += sprintf(trunk_space_log_ctx.
                     buffer.data + trunk_space_log_ctx.buffer.length,
                     "%u %"PRId64" %c %d %u %u %u %u\n",
-                    (uint32_t)g_current_time, (*current)->data_version,
+                    (uint32_t)g_current_time, (*current)->version,
                     (*current)->op_type, (*current)->space.store->index,
                     (*current)->space.id_info.id,
                     (*current)->space.id_info.subdir,
@@ -326,7 +324,7 @@ void trunk_space_log_destroy()
 {
 }
 
-int trunk_space_log_write(const int64_t data_version,
+int trunk_space_log_write(const int64_t version,
         const char op_type, DATrunkSpaceInfo *space)
 {
     TrunkSpaceLogRecord *record;
@@ -339,9 +337,7 @@ int trunk_space_log_write(const int64_t data_version,
 
     record->op_type = op_type;
     record->space = *space;
-    record->data_version = data_version;
-    record->order = __sync_add_and_fetch(
-            &trunk_space_log_ctx.next_version, 1);
+    record->version = version;
     fc_queue_push(&trunk_space_log_ctx.queue, record);
     return 0;
 }

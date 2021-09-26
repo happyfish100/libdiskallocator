@@ -21,8 +21,8 @@
 #include "fastcommon/sched_thread.h"
 #include "sf/sf_global.h"
 #include "../global.h"
+#include "../storage_allocator.h"
 #include "trunk_maker.h"
-#include "storage_allocator.h"
 #include "trunk_freelist.h"
 
 int trunk_freelist_init(DATrunkFreelist *freelist)

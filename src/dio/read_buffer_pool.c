@@ -22,7 +22,6 @@
 #include "fastcommon/pthread_func.h"
 #include "fastcommon/fc_atomic.h"
 #include "../global.h"
-#include "../storage/storage_config.h"
 #include "read_buffer_pool.h"
 
 typedef struct {

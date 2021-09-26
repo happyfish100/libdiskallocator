@@ -17,7 +17,7 @@
 #ifndef _TRUNK_SPACE_LOG_H
 #define _TRUNK_SPACE_LOG_H
 
-#include "../../storage/storage_config.h"
+#include "../../storage_config.h"
 
 #define DA_SPACE_OP_TYPE_ALLOCATE      'A'
 #define DA_SPACE_OP_TYPE_RECLAIM       'R'
@@ -29,7 +29,7 @@ extern "C" {
     int trunk_space_log_init();
     void trunk_space_log_destroy();
 
-    int trunk_space_log_write(const int64_t data_version,
+    int trunk_space_log_write(const int64_t version,
             const char op_type, DATrunkSpaceInfo *space);
 
 #ifdef __cplusplus

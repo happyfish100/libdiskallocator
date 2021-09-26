@@ -17,9 +17,8 @@
 #ifndef _TRUNK_WRITE_THREAD_H
 #define _TRUNK_WRITE_THREAD_H
 
-#include "../storage/storage_config.h"
-#include "../storage/trunk_allocator.h"
-#include "../storage/storage_allocator.h"
+#include "../storage_config.h"
+#include "../storage_allocator.h"
 
 #define DA_IO_TYPE_CREATE_TRUNK           'C'
 #define DA_IO_TYPE_DELETE_TRUNK           'D'

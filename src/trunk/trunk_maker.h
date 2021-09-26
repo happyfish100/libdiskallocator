@@ -19,7 +19,7 @@
 
 #include "fastcommon/uniq_skiplist.h"
 #include "fastcommon/multi_skiplist.h"
-#include "storage_config.h"
+#include "../storage_config.h"
 #include "trunk_allocator.h"
 
 typedef void (*trunk_allocate_done_callback)(DATrunkAllocator *allocator,

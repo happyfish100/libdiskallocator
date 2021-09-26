@@ -23,8 +23,8 @@
 #include "sf/sf_binlog_writer.h"
 #include "../../global.h"
 #include "../../dio/trunk_write_thread.h"
-#include "../../storage/storage_allocator.h"
-#include "../../storage/trunk_id_info.h"
+#include "../../storage_allocator.h"
+#include "../../trunk/trunk_id_info.h"
 #include "trunk_binlog.h"
 
 static SFBinlogWriterContext binlog_writer;

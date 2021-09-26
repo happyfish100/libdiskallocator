@@ -24,7 +24,7 @@
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
 #include "../dio/trunk_write_thread.h"
-#include "storage_allocator.h"
+#include "../storage_allocator.h"
 #include "trunk_reclaim.h"
 #include "trunk_maker.h"
 

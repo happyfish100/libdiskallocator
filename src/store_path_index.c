@@ -21,7 +21,7 @@
 #include "fastcommon/hash.h"
 #include "fastcommon/base64.h"
 #include "sf/sf_global.h"
-#include "../global.h"
+#include "global.h"
 #include "store_path_index.h"
 
 typedef struct {

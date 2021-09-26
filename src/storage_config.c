@@ -22,7 +22,7 @@
 #include "fastcommon/sched_thread.h"
 #include "fastcommon/system_info.h"
 #include "sf/sf_global.h"
-#include "../global.h"
+#include "global.h"
 #include "store_path_index.h"
 #include "storage_config.h"
 

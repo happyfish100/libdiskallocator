@@ -81,7 +81,6 @@ typedef struct da_trunk_file_info {
     struct {
         int count;  //slice count
         volatile uint32_t bytes;
-        struct fc_list_head slice_head; //OBSliceEntry double link
     } used;
     uint32_t size;        //file size
     uint32_t free_start;  //free space offset

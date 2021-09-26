@@ -17,7 +17,7 @@
 #ifndef _TRUNK_ID_INFO_H
 #define _TRUNK_ID_INFO_H
 
-#include "storage_config.h"
+#include "../storage_config.h"
 
 #ifdef __cplusplus
 extern "C" {

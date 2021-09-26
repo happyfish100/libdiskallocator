@@ -17,7 +17,7 @@
 #ifndef _TRUNK_FREELIST_H
 #define _TRUNK_FREELIST_H
 
-#include "storage_types.h"
+#include "../storage_types.h"
 
 struct da_trunk_allocator;
 typedef struct {

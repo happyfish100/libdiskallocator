@@ -19,8 +19,8 @@
 #include "fastcommon/logger.h"
 #include "fastcommon/fc_memory.h"
 #include "sf/sf_global.h"
-#include "../global.h"
-#include "trunk_maker.h"
+#include "global.h"
+#include "trunk/trunk_maker.h"
 #include "storage_allocator.h"
 
 static DAStorageAllocatorManager allocator_mgr;
