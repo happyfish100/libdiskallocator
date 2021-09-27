@@ -79,7 +79,7 @@ typedef struct da_trunk_file_info {
     DATrunkIdInfo id_info;
     volatile int status;
     struct {
-        int count;  //slice count
+        uint32_t count;  //slice count
         volatile uint32_t bytes;
     } used;
     uint32_t size;        //file size
@@ -95,5 +95,12 @@ typedef struct da_trunk_file_info {
         struct da_trunk_file_info *next;
     } util;  //for util manager queue
 } DATrunkFileInfo;
+
+typedef struct da_trunk_space_log_record {
+    char op_type;
+    int64_t version;
+    DATrunkSpaceInfo space;
+    struct da_trunk_space_log_record *next;
+} DATrunkSpaceLogRecord;
 
 #endif

@@ -25,15 +25,8 @@
 #include "../../dio/trunk_fd_cache.h"
 #include "trunk_space_log.h"
 
-typedef struct trunk_space_log_record {
-    char op_type;
-    int64_t version;
-    DATrunkSpaceInfo space;
-    struct trunk_space_log_record *next;
-} TrunkSpaceLogRecord;
-
 typedef struct trunk_space_log_record_array {
-    TrunkSpaceLogRecord **records;
+    DATrunkSpaceLogRecord **records;
     int count;
     int alloc;
 } TrunkSpaceLogRecordArray;
@@ -44,6 +37,7 @@ typedef struct trunk_space_log_context {
     TrunkSpaceLogRecordArray record_array;
     TrunkFDCacheContext fd_cache_ctx;
     FastBuffer buffer;
+    int64_t last_version;
 } TrunkSpaceLogContext;
 
 static TrunkSpaceLogContext trunk_space_log_ctx;
@@ -53,20 +47,20 @@ static TrunkSpaceLogContext trunk_space_log_ctx;
 
 static int realloc_record_array(TrunkSpaceLogRecordArray *array)
 {
-    TrunkSpaceLogRecord **records;
+    DATrunkSpaceLogRecord **records;
     int new_alloc;
     int bytes;
 
     new_alloc = (array->alloc > 0) ? 2 * array->alloc : 8 * 1024;
-    bytes = sizeof(TrunkSpaceLogRecord *) * new_alloc;
-    records = (TrunkSpaceLogRecord **)fc_malloc(bytes);
+    bytes = sizeof(DATrunkSpaceLogRecord *) * new_alloc;
+    records = (DATrunkSpaceLogRecord **)fc_malloc(bytes);
     if (records == NULL) {
         return ENOMEM;
     }
 
     if (array->count > 0) {
         memcpy(records, array->records, array->count *
-                sizeof(TrunkSpaceLogRecord *));
+                sizeof(DATrunkSpaceLogRecord *));
         free(array->records);
     }
 
@@ -75,8 +69,8 @@ static int realloc_record_array(TrunkSpaceLogRecordArray *array)
     return 0;
 }
 
-static int record_ptr_compare(const TrunkSpaceLogRecord **record1,
-        const TrunkSpaceLogRecord **record2)
+static int record_ptr_compare(const DATrunkSpaceLogRecord **record1,
+        const DATrunkSpaceLogRecord **record2)
 {
     int sub;
 
@@ -89,10 +83,10 @@ static int record_ptr_compare(const TrunkSpaceLogRecord **record1,
     return fc_compare_int64((*record1)->version, (*record2)->version);
 }
 
-static int chain_to_array(TrunkSpaceLogRecord *head)
+static int chain_to_array(DATrunkSpaceLogRecord *head)
 {
     int result;
-    TrunkSpaceLogRecord *record;
+    DATrunkSpaceLogRecord *record;
 
     RECORD_PTR_ARRAY.count = 0;
     record = head;
@@ -106,10 +100,13 @@ static int chain_to_array(TrunkSpaceLogRecord *head)
         RECORD_PTR_ARRAY.records[RECORD_PTR_ARRAY.count++] = record;
     } while ((record=record->next) != NULL);
 
+    trunk_space_log_ctx.last_version = RECORD_PTR_ARRAY.
+        records[RECORD_PTR_ARRAY.count - 1]->version;
+
     if (RECORD_PTR_ARRAY.count > 1) {
         qsort(RECORD_PTR_ARRAY.records,
                 RECORD_PTR_ARRAY.count,
-                sizeof(TrunkSpaceLogRecord *),
+                sizeof(DATrunkSpaceLogRecord *),
                 (int (*)(const void *, const void *))
                 record_ptr_compare);
     }
@@ -176,12 +173,12 @@ static int do_write_to_file(DATrunkSpaceInfo *space,
     return 0;
 }
 
-static int write_to_log_file(TrunkSpaceLogRecord **start,
-        TrunkSpaceLogRecord **end)
+static int write_to_log_file(DATrunkSpaceLogRecord **start,
+        DATrunkSpaceLogRecord **end)
 {
     int result;
     int fd;
-    TrunkSpaceLogRecord **current;
+    DATrunkSpaceLogRecord **current;
 
     if ((result=get_write_fd(&(*start)->space, &fd)) != 0) {
         return result;
@@ -228,9 +225,9 @@ static int write_to_log_file(TrunkSpaceLogRecord **start,
 static int array_to_log_file(TrunkSpaceLogRecordArray *array)
 {
     int result;
-    TrunkSpaceLogRecord **start;
-    TrunkSpaceLogRecord **end;
-    TrunkSpaceLogRecord **current;
+    DATrunkSpaceLogRecord **start;
+    DATrunkSpaceLogRecord **end;
+    DATrunkSpaceLogRecord **current;
 
     start = array->records;
     current = start;
@@ -247,7 +244,7 @@ static int array_to_log_file(TrunkSpaceLogRecordArray *array)
     return write_to_log_file(start, current);
 }
 
-static int deal_records(TrunkSpaceLogRecord *head)
+static int deal_records(DATrunkSpaceLogRecord *head)
 {
     int result;
 
@@ -264,7 +261,7 @@ static int deal_records(TrunkSpaceLogRecord *head)
 
 static void *trunk_space_log_func(void *arg)
 {
-    TrunkSpaceLogRecord *head;
+    DATrunkSpaceLogRecord *head;
 
 #ifdef OS_LINUX
     prctl(PR_SET_NAME, "trunk-space-log");
@@ -292,14 +289,14 @@ int trunk_space_log_init()
     pthread_t tid;
 
     if ((result=fast_mblock_init_ex1(&trunk_space_log_ctx.record_allocator,
-                    "trunk-space-record", sizeof(TrunkSpaceLogRecord),
+                    "trunk-space-record", sizeof(DATrunkSpaceLogRecord),
                     4 * 1024, 0, NULL, NULL, true)) != 0)
     {
         return result;
     }
 
     if ((result=fc_queue_init(&trunk_space_log_ctx.queue, (long)
-                    (&((TrunkSpaceLogRecord *)NULL)->next))) != 0)
+                    (&((DATrunkSpaceLogRecord *)NULL)->next))) != 0)
     {
         return result;
     }
@@ -327,9 +324,9 @@ void trunk_space_log_destroy()
 int trunk_space_log_write(const int64_t version,
         const char op_type, DATrunkSpaceInfo *space)
 {
-    TrunkSpaceLogRecord *record;
+    DATrunkSpaceLogRecord *record;
 
-    record = (TrunkSpaceLogRecord *)fast_mblock_alloc_object(
+    record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
             &trunk_space_log_ctx.record_allocator);
     if (record == NULL) {
         return ENOMEM;

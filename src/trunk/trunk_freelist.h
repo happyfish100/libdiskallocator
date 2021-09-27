@@ -44,8 +44,6 @@ extern "C" {
             DATrunkFreelist *freelist, const uint64_t blk_hc, const int size,
             DATrunkSpaceWithVersion *spaces, int *count, const bool is_normal);
 
-    int trunk_freelist_free_space(const DATrunkSpaceInfo *space);
-
 #ifdef __cplusplus
 }
 #endif

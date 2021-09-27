@@ -52,9 +52,8 @@ typedef struct {
 typedef struct da_trunk_allocator {
     DAStoragePathInfo *path_info;
     struct {
-        UniqSkiplistPair by_id;   //order by id
-        UniqSkiplistPair by_size; //order by used size and id
-        pthread_mutex_t lock;
+        UniqSkiplistPair by_id;   //order by trunk id
+        UniqSkiplistPair by_size; //order by used size and trunk id
     } trunks;
     DATrunkFreelist freelist; //trunk freelist pool
 

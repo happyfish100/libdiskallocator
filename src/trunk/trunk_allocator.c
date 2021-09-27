@@ -90,10 +90,6 @@ int trunk_allocator_init_instance(DATrunkAllocator *allocator,
         return result;
     }
 
-    if ((result=init_pthread_lock(&(allocator->trunks.lock))) != 0) {
-        return result;
-    }
-
     if ((result=uniq_skiplist_init_pair(&allocator->trunks.by_id,
                     DA_TRUNK_SKIPLIST_INIT_LEVEL_COUNT,
                     DA_TRUNK_SKIPLIST_MAX_LEVEL_COUNT,
@@ -148,12 +144,9 @@ int trunk_allocator_add(DATrunkAllocator *allocator,
     trunk_info->used.bytes = 0;
     trunk_info->used.count = 0;
     trunk_info->free_start = 0;
-    PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
-
-    PTHREAD_MUTEX_LOCK(&allocator->trunks.lock);
     result = uniq_skiplist_insert(allocator->
             trunks.by_id.skiplist, trunk_info);
-    PTHREAD_MUTEX_UNLOCK(&allocator->trunks.lock);
+    PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
 
     if (result != 0) {
         logError("file: "__FILE__", line: %d, "
@@ -175,9 +168,9 @@ int trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
     int result;
 
     target.id_info.id = id;
-    PTHREAD_MUTEX_LOCK(&allocator->trunks.lock);
+    PTHREAD_MUTEX_LOCK(&allocator->freelist.lcp.lock);
     result = uniq_skiplist_delete(allocator->trunks.by_id.skiplist, &target);
-    PTHREAD_MUTEX_UNLOCK(&allocator->trunks.lock);
+    PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
 
     return result;
 }

@@ -12,27 +12,28 @@ BINLOG_COMMON_HEADER = binlog/common/binlog_types.h binlog/common/binlog_fd_cach
                        binlog/common/write_fd_cache.h binlog/common/binlog_reader.h \
                        binlog/common/binlog_writer.h
 
-BINLOG_TRUNK_HEADER = binlog/trunk/trunk_binlog.h binlog/trunk/trunk_space_log.h
+BINLOG_TRUNK_HEADER = binlog/trunk/trunk_binlog.h binlog/trunk/trunk_space_log.h \
+                      binlog/trunk/trunk_index.h
 
 DIO_HEADER = dio/read_buffer_pool.h dio/trunk_fd_cache.h \
              dio/trunk_read_thread.h dio/trunk_write_thread.h
 
 TRUNK_HEADER = trunk/trunk_allocator.h trunk/trunk_freelist.h \
                trunk/trunk_id_info.h trunk/trunk_maker.h  \
-               trunk/trunk_prealloc.h trunk/trunk_reclaim.h \
-               trunk/trunk_index.h
+               trunk/trunk_prealloc.h trunk/trunk_reclaim.h
 
 TOP_OBJS = global.lo storage_allocator.lo storage_config.lo store_path_index.lo
 
 BINLOG_OBJS = binlog/common/binlog_fd_cache.lo binlog/common/write_fd_cache.lo \
               binlog/common/binlog_reader.lo binlog/common/binlog_writer.lo \
-              binlog/trunk/trunk_binlog.lo binlog/trunk/trunk_space_log.lo
+              binlog/trunk/trunk_binlog.lo binlog/trunk/trunk_space_log.lo  \
+              binlog/trunk/trunk_index.lo
 
 DIO_OBJS =  dio/trunk_write_thread.lo dio/trunk_read_thread.lo \
             dio/trunk_fd_cache.lo dio/read_buffer_pool.lo
 
 TRUNK_OBJS = trunk/trunk_allocator.lo trunk/trunk_id_info.lo \
-             trunk/trunk_freelist.lo trunk/trunk_index.lo
+             trunk/trunk_freelist.lo
 #               trunk/trunk_maker.lo trunk/trunk_prealloc.lo    \
 #               trunk/trunk_reclaim.lo
 
