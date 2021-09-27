@@ -19,9 +19,6 @@
 
 #include "../../storage_config.h"
 
-#define DA_SPACE_OP_TYPE_ALLOCATE      'A'
-#define DA_SPACE_OP_TYPE_RECLAIM       'R'
-
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -17,6 +17,7 @@
 #ifndef _STORAGE_ALLOCATOR_H
 #define _STORAGE_ALLOCATOR_H
 
+#include "sf/sf_binlog_index.h"
 #include "trunk/trunk_id_info.h"
 #include "trunk/trunk_freelist.h"
 #include "trunk/trunk_allocator.h"
@@ -187,6 +188,8 @@ extern "C" {
     {
         return g_allocator_mgr->store_path.avail->count;
     }
+
+    int storage_allocator_trunks_to_array(SFBinlogIndexArray *array);
 
 #ifdef __cplusplus
 }

@@ -22,7 +22,9 @@
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
 #include "../../global.h"
+#include "../../storage_allocator.h"
 #include "../../dio/trunk_fd_cache.h"
+#include "trunk_index.h"
 #include "trunk_space_log.h"
 
 typedef struct trunk_space_log_record_array {
@@ -37,13 +39,14 @@ typedef struct trunk_space_log_context {
     TrunkSpaceLogRecordArray record_array;
     TrunkFDCacheContext fd_cache_ctx;
     FastBuffer buffer;
-    int64_t last_version;
+    time_t next_dump_time;
 } TrunkSpaceLogContext;
 
 static TrunkSpaceLogContext trunk_space_log_ctx;
 
 #define RECORD_PTR_ARRAY  trunk_space_log_ctx.record_array
 #define FD_CACHE_CTX      trunk_space_log_ctx.fd_cache_ctx
+#define NEXT_DUMP_TIME    trunk_space_log_ctx.next_dump_time
 
 static int realloc_record_array(TrunkSpaceLogRecordArray *array)
 {
@@ -100,7 +103,7 @@ static int chain_to_array(DATrunkSpaceLogRecord *head)
         RECORD_PTR_ARRAY.records[RECORD_PTR_ARRAY.count++] = record;
     } while ((record=record->next) != NULL);
 
-    trunk_space_log_ctx.last_version = RECORD_PTR_ARRAY.
+    g_trunk_index_ctx.last_version = RECORD_PTR_ARRAY.
         records[RECORD_PTR_ARRAY.count - 1]->version;
 
     if (RECORD_PTR_ARRAY.count > 1) {
@@ -259,6 +262,18 @@ static int deal_records(DATrunkSpaceLogRecord *head)
     return result;
 }
 
+static int dump_trunk_indexes()
+{
+    int result;
+    if ((result=storage_allocator_trunks_to_array(
+                    &g_trunk_index_ctx.index_array)) != 0)
+    {
+        return result;
+    }
+
+    return trunk_index_save();
+}
+
 static void *trunk_space_log_func(void *arg)
 {
     DATrunkSpaceLogRecord *head;
@@ -277,6 +292,18 @@ static void *trunk_space_log_func(void *arg)
                     "deal records fail, program exit!",
                     __LINE__);
             sf_terminate_myself();
+            break;
+        }
+
+        if (g_current_time > NEXT_DUMP_TIME) {
+            if (dump_trunk_indexes() != 0) {
+                logCrit("file: "__FILE__", line: %d, "
+                        "dump trunk index fail, program exit!",
+                        __LINE__);
+                sf_terminate_myself();
+                break;
+            }
+            NEXT_DUMP_TIME += DA_TRUNK_INDEX_DUMP_INTERVAL;
         }
     }
 
@@ -286,6 +313,7 @@ static void *trunk_space_log_func(void *arg)
 int trunk_space_log_init()
 {
     int result;
+    struct tm tm_current;
     pthread_t tid;
 
     if ((result=fast_mblock_init_ex1(&trunk_space_log_ctx.record_allocator,
@@ -312,6 +340,11 @@ int trunk_space_log_init()
     {
         return result;
     }
+
+    g_current_time = time(NULL);
+    localtime_r((time_t *)&g_current_time, &tm_current);
+    NEXT_DUMP_TIME = sched_make_first_call_time(&tm_current,
+            &DA_TRUNK_INDEX_DUMP_BASE_TIME, DA_TRUNK_INDEX_DUMP_INTERVAL);
 
     return fc_create_thread(&tid, trunk_space_log_func,
             NULL, SF_G_THREAD_STACK_SIZE);

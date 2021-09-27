@@ -505,3 +505,57 @@ int da_move_allocator_ptr_array(DATrunkAllocatorPtrArray **src_array,
 
     return result;
 }
+
+static int dump_to_array(DATrunkAllocator *allocator,
+        SFBinlogIndexArray *array)
+{
+    UniqSkiplistIterator it;
+    DATrunkFileInfo *trunk_info;
+    DATrunkIndexRecord *record;
+    int result;
+
+    result = 0;
+    PTHREAD_MUTEX_LOCK(&allocator->freelist.lcp.lock);
+    uniq_skiplist_iterator(allocator->trunks.by_id.skiplist, &it);
+    while ((trunk_info=(DATrunkFileInfo *)uniq_skiplist_next(&it)) != NULL) {
+        if (array->count >= array->alloc) {
+            if ((result=sf_binlog_index_expand_array(array,
+                            sizeof(DATrunkIndexRecord))) != 0)
+            {
+                break;
+            }
+        }
+
+        record = (DATrunkIndexRecord *)array->indexes + array->count++;
+        record->path_index = allocator->path_info->store.index;
+        record->trunk_id = trunk_info->id_info.id;
+        record->used_count = trunk_info->used.count;
+        record->used_bytes = trunk_info->used.bytes;
+        record->free_start = trunk_info->free_start;
+    }
+    PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
+
+    return result;
+}
+
+int storage_allocator_trunks_to_array(SFBinlogIndexArray *array)
+{
+    DATrunkAllocator **allocator;
+    DATrunkAllocator **end;
+    int result;
+
+    array->count = 0;
+    end = g_allocator_mgr->allocator_ptr_array.allocators +
+        g_allocator_mgr->allocator_ptr_array.count;
+    for (allocator=g_allocator_mgr->allocator_ptr_array.
+            allocators; allocator<end; allocator++)
+    {
+        if (*allocator != NULL) {
+            if ((result=dump_to_array(*allocator, array)) != 0) {
+                return result;
+            }
+        }
+    }
+
+    return 0;
+}

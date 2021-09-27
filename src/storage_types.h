@@ -37,6 +37,9 @@
 #define DA_MAX_SPLIT_COUNT_PER_SPACE_ALLOC   2
 #define DA_SLICE_SN_PARRAY_INIT_ALLOC_COUNT  4
 
+#define DA_SPACE_OP_TYPE_ALLOCATE      'A'
+#define DA_SPACE_OP_TYPE_RECLAIM       'R'
+
 struct da_trunk_allocator;
 
 typedef struct {
@@ -102,5 +105,13 @@ typedef struct da_trunk_space_log_record {
     DATrunkSpaceInfo space;
     struct da_trunk_space_log_record *next;
 } DATrunkSpaceLogRecord;
+
+typedef struct da_trunk_index_record {
+    int path_index;
+    uint32_t trunk_id;
+    uint32_t used_count;
+    uint32_t used_bytes;
+    uint32_t free_start;
+} DATrunkIndexRecord;
 
 #endif

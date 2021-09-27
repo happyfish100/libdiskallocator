@@ -26,6 +26,8 @@ typedef struct disk_allocator_global_vars {
         string_t path;   //data path
         int binlog_buffer_size;
         int binlog_subdirs;
+        int trunk_index_dump_interval;
+        TimeInfo trunk_index_dump_base_time;
     } data;
 
     struct {
@@ -43,6 +45,12 @@ typedef struct disk_allocator_global_vars {
 
 #define DA_BINLOG_BUFFER_SIZE  g_disk_allocator_vars.data.binlog_buffer_size
 #define DA_BINLOG_SUBDIRS      g_disk_allocator_vars.data.binlog_subdirs
+
+#define DA_TRUNK_INDEX_DUMP_INTERVAL  g_disk_allocator_vars. \
+    data.trunk_index_dump_interval
+
+#define DA_TRUNK_INDEX_DUMP_BASE_TIME g_disk_allocator_vars.data. \
+    trunk_index_dump_base_time
 
 #define DA_MY_SERVER_ID        g_disk_allocator_vars.my_server_id
 #define DA_STORE_CFG           g_disk_allocator_vars.storage.cfg

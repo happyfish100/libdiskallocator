@@ -21,22 +21,25 @@
 #define TRUNK_INDEX_FILENAME   "trunk_index.dat"
 #define TRUNK_INDEX_RECORD_MAX_SIZE   64
 
-#define TRUNK_RECORD_FIELD_COUNT   4
-#define TRUNK_RECORD_FIELD_INDEX_ID           0
-#define TRUNK_RECORD_FIELD_INDEX_USED_COUNT   1
-#define TRUNK_RECORD_FIELD_INDEX_USED_BYTES   2
-#define TRUNK_RECORD_FIELD_INDEX_FREE_START   3
+#define TRUNK_RECORD_FIELD_COUNT   5
+#define TRUNK_RECORD_FIELD_INDEX_PATH_INDEX   0
+#define TRUNK_RECORD_FIELD_INDEX_TRUNK_ID     1
+#define TRUNK_RECORD_FIELD_INDEX_USED_COUNT   2
+#define TRUNK_RECORD_FIELD_INDEX_USED_BYTES   3
+#define TRUNK_RECORD_FIELD_INDEX_FREE_START   4
 
 SFBinlogIndexContext g_trunk_index_ctx;
 
-static int pack_record(char *buff, FDIRTrunkIndexInfo *record)
+static int pack_record(char *buff, DATrunkIndexRecord *record)
 {
-    return sprintf(buff, "%u %u %u %u\n", record->trunk_id,
-            record->used_count, record->used_bytes, record->free_start);
+    return sprintf(buff, "%d %u %u %u %u\n",
+            record->path_index, record->trunk_id,
+            record->used_count, record->used_bytes,
+            record->free_start);
 }
 
 static int unpack_record(const string_t *line,
-        FDIRTrunkIndexInfo *record, char *error_info)
+        DATrunkIndexRecord *record, char *error_info)
 {
     int count;
     char *endptr;
@@ -50,8 +53,10 @@ static int unpack_record(const string_t *line,
         return EINVAL;
     }
 
+    SF_BINLOG_PARSE_INT_SILENCE(record->path_index, "path index",
+            TRUNK_RECORD_FIELD_INDEX_PATH_INDEX, ' ', 0);
     SF_BINLOG_PARSE_INT_SILENCE(record->trunk_id, "trunk id",
-            TRUNK_RECORD_FIELD_INDEX_ID, ' ', 0);
+            TRUNK_RECORD_FIELD_INDEX_TRUNK_ID, ' ', 0);
     SF_BINLOG_PARSE_INT_SILENCE(record->used_count, "used count",
             TRUNK_RECORD_FIELD_INDEX_USED_COUNT, ' ', 0);
     SF_BINLOG_PARSE_INT_SILENCE(record->used_bytes, "used bytes",
@@ -68,6 +73,6 @@ void trunk_index_init()
     snprintf(filename, sizeof(filename), "%s/%s",
             DA_DATA_PATH_STR, TRUNK_INDEX_FILENAME);
     sf_binlog_index_init(&g_trunk_index_ctx, "trunk", filename,
-            TRUNK_INDEX_RECORD_MAX_SIZE, sizeof(FDIRTrunkIndexInfo),
+            TRUNK_INDEX_RECORD_MAX_SIZE, sizeof(DATrunkIndexRecord),
             (pack_record_func)pack_record, (unpack_record_func)unpack_record);
 }

@@ -19,13 +19,7 @@
 #define _TRUNK_INDEX_H_
 
 #include "sf/sf_binlog_index.h"
-
-typedef struct fdir_trunk_index_info {
-    uint32_t trunk_id;
-    uint32_t used_count;
-    uint32_t used_bytes;
-    uint32_t free_start;
-} FDIRTrunkIndexInfo;
+#include "../../storage_types.h"
 
 #ifdef __cplusplus
 extern "C" {
