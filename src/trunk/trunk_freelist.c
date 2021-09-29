@@ -211,10 +211,12 @@ int trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
                     abort();
                 }
 
-                TRUNK_ALLOC_SPACE(trunk_info, space_info, remain_bytes);
-                space_info++;
+                if (*count >= 2) {
+                    TRUNK_ALLOC_SPACE(trunk_info, space_info, remain_bytes);
+                    space_info++;
+                    aligned_size -= remain_bytes;
+                }
 
-                aligned_size -= remain_bytes;
                 trunk_freelist_remove(freelist);
             }
         }

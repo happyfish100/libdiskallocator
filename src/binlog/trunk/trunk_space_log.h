@@ -26,8 +26,9 @@ extern "C" {
     int trunk_space_log_init();
     void trunk_space_log_destroy();
 
-    int trunk_space_log_write(const int64_t version,
-            const char op_type, DATrunkSpaceInfo *space);
+    int trunk_space_log_write(const int64_t version, const int64_t oid,
+            const unsigned char fid, const char op_type,
+            DATrunkSpaceInfo *space);
 
 #ifdef __cplusplus
 }

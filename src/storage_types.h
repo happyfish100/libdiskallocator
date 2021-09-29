@@ -100,6 +100,8 @@ typedef struct da_trunk_file_info {
 } DATrunkFileInfo;
 
 typedef struct da_trunk_space_log_record {
+    int64_t oid;        //object ID
+    unsigned char fid;  //filed ID (key)
     char op_type;
     int64_t version;
     DATrunkSpaceInfo space;

@@ -205,8 +205,9 @@ static int write_to_log_file(DATrunkSpaceLogRecord **start,
 
             trunk_space_log_ctx.buffer.length += sprintf(trunk_space_log_ctx.
                     buffer.data + trunk_space_log_ctx.buffer.length,
-                    "%u %"PRId64" %c %d %u %u %u %u\n",
+                    "%u %"PRId64" %"PRId64" %u %c %d %u %u %u %u\n",
                     (uint32_t)g_current_time, (*current)->version,
+                    (*current)->oid, (*current)->fid,
                     (*current)->op_type, (*current)->space.store->index,
                     (*current)->space.id_info.id,
                     (*current)->space.id_info.subdir,
@@ -354,8 +355,9 @@ void trunk_space_log_destroy()
 {
 }
 
-int trunk_space_log_write(const int64_t version,
-        const char op_type, DATrunkSpaceInfo *space)
+int trunk_space_log_write(const int64_t version, const int64_t oid,
+        const unsigned char fid, const char op_type,
+        DATrunkSpaceInfo *space)
 {
     DATrunkSpaceLogRecord *record;
 
@@ -365,9 +367,11 @@ int trunk_space_log_write(const int64_t version,
         return ENOMEM;
     }
 
+    record->version = version;
+    record->oid = oid;
+    record->fid = fid;
     record->op_type = op_type;
     record->space = *space;
-    record->version = version;
     fc_queue_push(&trunk_space_log_ctx.queue, record);
     return 0;
 }
