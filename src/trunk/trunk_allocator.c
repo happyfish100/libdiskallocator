@@ -175,8 +175,8 @@ int trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
     return result;
 }
 
-int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord
-        **records, const int64_t count)
+int trunk_allocator_deal_space_changes(const int path_index,
+        DATrunkSpaceLogRecord **records, const int64_t count)
 {
     int result;
     DATrunkAllocator *allocator;
@@ -189,9 +189,8 @@ int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord
         return 0;
     }
 
-    allocator = g_allocator_mgr->allocator_ptr_array.
-        allocators[records[0]->space.store->index];
-    target.id_info.id = records[0]->space.id_info.id;
+    allocator = g_allocator_mgr->allocator_ptr_array.allocators[path_index];
+    target.id_info.id = records[0]->storage.trunk_id;
     PTHREAD_MUTEX_LOCK(&allocator->freelist.lcp.lock);
     if ((trunk_info=(DATrunkFileInfo *)uniq_skiplist_find(allocator->
                     trunks.by_id.skiplist, &target)) == NULL)
@@ -199,17 +198,17 @@ int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord
         logError("file: "__FILE__", line: %d, "
                 "store path index: %d, trunk id: %u not exist",
                 __LINE__, allocator->path_info->store.index,
-                records[0]->space.id_info.id);
+                records[0]->storage.trunk_id);
         result = ENOENT;
     } else {
         end = records + count;
         for (record=records; record<end; record++) {
             if ((*record)->op_type == DA_SPACE_OP_TYPE_ALLOCATE) {
-                trunk_info->used.bytes += (*record)->space.size;
+                trunk_info->used.bytes += (*record)->storage.size;
                 trunk_info->used.count++;
             } else {
                 __sync_fetch_and_sub(&trunk_info->used.bytes,
-                        (*record)->space.size);
+                        (*record)->storage.size);
                 trunk_info->used.count--;
 
                 push_trunk_util_change_event(allocator, trunk_info,

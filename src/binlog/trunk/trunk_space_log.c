@@ -27,28 +27,13 @@
 #include "trunk_index.h"
 #include "trunk_space_log.h"
 
-typedef struct trunk_space_log_record_array {
-    DATrunkSpaceLogRecord **records;
-    int count;
-    int alloc;
-} TrunkSpaceLogRecordArray;
+DATrunkSpaceLogContext g_trunk_space_log_ctx;
 
-typedef struct trunk_space_log_context {
-    struct fc_queue queue;
-    struct fast_mblock_man record_allocator;
-    TrunkSpaceLogRecordArray record_array;
-    TrunkFDCacheContext fd_cache_ctx;
-    FastBuffer buffer;
-    time_t next_dump_time;
-} TrunkSpaceLogContext;
+#define RECORD_PTR_ARRAY  g_trunk_space_log_ctx.record_array
+#define FD_CACHE_CTX      g_trunk_space_log_ctx.fd_cache_ctx
+#define NEXT_DUMP_TIME    g_trunk_space_log_ctx.next_dump_time
 
-static TrunkSpaceLogContext trunk_space_log_ctx;
-
-#define RECORD_PTR_ARRAY  trunk_space_log_ctx.record_array
-#define FD_CACHE_CTX      trunk_space_log_ctx.fd_cache_ctx
-#define NEXT_DUMP_TIME    trunk_space_log_ctx.next_dump_time
-
-static int realloc_record_array(TrunkSpaceLogRecordArray *array)
+static int realloc_record_array(DATrunkSpaceLogRecordArray *array)
 {
     DATrunkSpaceLogRecord **records;
     int new_alloc;
@@ -77,13 +62,14 @@ static int record_ptr_compare(const DATrunkSpaceLogRecord **record1,
 {
     int sub;
 
-    if ((sub=fc_compare_int64((*record1)->space.id_info.id,
-                    (*record2)->space.id_info.id)) != 0)
+    if ((sub=fc_compare_int64((*record1)->storage.trunk_id,
+                    (*record2)->storage.trunk_id)) != 0)
     {
         return sub;
     }
 
-    return fc_compare_int64((*record1)->version, (*record2)->version);
+    return fc_compare_int64((*record1)->storage.version,
+            (*record2)->storage.version);
 }
 
 static int chain_to_array(DATrunkSpaceLogRecord *head)
@@ -104,7 +90,7 @@ static int chain_to_array(DATrunkSpaceLogRecord *head)
     } while ((record=record->next) != NULL);
 
     g_trunk_index_ctx.last_version = RECORD_PTR_ARRAY.
-        records[RECORD_PTR_ARRAY.count - 1]->version;
+        records[RECORD_PTR_ARRAY.count - 1]->storage.version;
 
     if (RECORD_PTR_ARRAY.count > 1) {
         qsort(RECORD_PTR_ARRAY.records,
@@ -117,19 +103,26 @@ static int chain_to_array(DATrunkSpaceLogRecord *head)
     return 0;
 }
 
-static int get_write_fd(DATrunkSpaceInfo *space, int *fd)
+static inline void get_space_log_filename(const uint32_t trunk_id,
+        char *space_log_filename, const int size)
+{
+    //TODO
+    DATrunkSpaceInfo *space = NULL;
+
+    dio_get_space_log_filename(space, space_log_filename, size);
+}
+
+static int get_write_fd(const uint32_t trunk_id, int *fd)
 {
     const int flags = O_WRONLY | O_CREAT | O_APPEND;
     int result;
     char space_log_filename[PATH_MAX];
 
-    if ((*fd=trunk_fd_cache_get(&FD_CACHE_CTX,
-                    space->id_info.id)) >= 0)
-    {
+    if ((*fd=trunk_fd_cache_get(&FD_CACHE_CTX, trunk_id)) >= 0) {
         return 0;
     }
 
-    dio_get_space_log_filename(space, space_log_filename,
+    get_space_log_filename(trunk_id, space_log_filename,
             sizeof(space_log_filename));
     if ((*fd=open(space_log_filename, flags, 0644)) < 0) {
         result = errno != 0 ? errno : EACCES;
@@ -139,11 +132,11 @@ static int get_write_fd(DATrunkSpaceInfo *space, int *fd)
         return result;
     }
 
-    trunk_fd_cache_add(&FD_CACHE_CTX, space->id_info.id, *fd);
+    trunk_fd_cache_add(&FD_CACHE_CTX, trunk_id, *fd);
     return 0;
 }
 
-static int do_write_to_file(DATrunkSpaceInfo *space,
+static int do_write_to_file(const uint32_t trunk_id,
         int fd, char *buff, const int len)
 {
     int result;
@@ -151,7 +144,7 @@ static int do_write_to_file(DATrunkSpaceInfo *space,
 
     if (fc_safe_write(fd, buff, len) != len) {
         result = errno != 0 ? errno : EIO;
-        dio_get_space_log_filename(space, space_log_filename,
+        get_space_log_filename(trunk_id, space_log_filename,
                 sizeof(space_log_filename));
         logError("file: "__FILE__", line: %d, "
                 "write to space log file \"%s\" fail, "
@@ -163,7 +156,7 @@ static int do_write_to_file(DATrunkSpaceInfo *space,
 
     if (fsync(fd) != 0) {
         result = errno != 0 ? errno : EIO;
-        dio_get_space_log_filename(space, space_log_filename,
+        get_space_log_filename(trunk_id, space_log_filename,
                 sizeof(space_log_filename));
         logError("file: "__FILE__", line: %d, "
                 "fsync to space log file \"%s\" fail, "
@@ -183,50 +176,47 @@ static int write_to_log_file(DATrunkSpaceLogRecord **start,
     int fd;
     DATrunkSpaceLogRecord **current;
 
-    if ((result=get_write_fd(&(*start)->space, &fd)) != 0) {
+    if ((result=get_write_fd((*start)->storage.trunk_id, &fd)) != 0) {
         return result;
     }
 
-    trunk_space_log_ctx.buffer.length = 0;
+    g_trunk_space_log_ctx.buffer.length = 0;
     do {
         for (current=start; current<end; current++) {
-            if (trunk_space_log_ctx.buffer.alloc_size -
-                    trunk_space_log_ctx.buffer.length < 128)
+            if (g_trunk_space_log_ctx.buffer.alloc_size -
+                    g_trunk_space_log_ctx.buffer.length < 128)
             {
-                if ((result=do_write_to_file(&(*start)->space, fd,
-                                trunk_space_log_ctx.buffer.data,
-                                trunk_space_log_ctx.buffer.length)) != 0)
+                if ((result=do_write_to_file((*start)->storage.trunk_id,
+                                fd, g_trunk_space_log_ctx.buffer.data,
+                                g_trunk_space_log_ctx.buffer.length)) != 0)
                 {
                     break;
                 }
 
-                trunk_space_log_ctx.buffer.length = 0;
+                g_trunk_space_log_ctx.buffer.length = 0;
             }
 
-            trunk_space_log_ctx.buffer.length += sprintf(trunk_space_log_ctx.
-                    buffer.data + trunk_space_log_ctx.buffer.length,
-                    "%u %"PRId64" %"PRId64" %u %c %d %u %u %u %u\n",
-                    (uint32_t)g_current_time, (*current)->version,
+            g_trunk_space_log_ctx.buffer.length += sprintf(g_trunk_space_log_ctx.
+                    buffer.data + g_trunk_space_log_ctx.buffer.length,
+                    "%u %"PRId64" %"PRId64" %u %c %u %u %u\n",
+                    (uint32_t)g_current_time, (*current)->storage.version,
                     (*current)->oid, (*current)->fid,
-                    (*current)->op_type, (*current)->space.store->index,
-                    (*current)->space.id_info.id,
-                    (*current)->space.id_info.subdir,
-                    (*current)->space.offset,
-                    (*current)->space.size);
+                    (*current)->op_type, (*current)->storage.trunk_id,
+                    (*current)->storage.offset, (*current)->storage.size);
         }
 
-        result = do_write_to_file(&(*start)->space, fd,
-                trunk_space_log_ctx.buffer.data,
-                trunk_space_log_ctx.buffer.length);
+        result = do_write_to_file((*start)->storage.trunk_id,
+                fd, g_trunk_space_log_ctx.buffer.data,
+                g_trunk_space_log_ctx.buffer.length);
     } while (0);
 
     if (result != 0) {
-        trunk_fd_cache_delete(&FD_CACHE_CTX, (*start)->space.id_info.id);
+        trunk_fd_cache_delete(&FD_CACHE_CTX, (*start)->storage.trunk_id);
     }
     return result;
 }
 
-static int array_to_log_file(TrunkSpaceLogRecordArray *array)
+static int array_to_log_file(DATrunkSpaceLogRecordArray *array)
 {
     int result;
     DATrunkSpaceLogRecord **start;
@@ -237,7 +227,7 @@ static int array_to_log_file(TrunkSpaceLogRecordArray *array)
     current = start;
     end = array->records + array->count;
     while (++current < end) {
-        if ((*current)->space.id_info.id != (*start)->space.id_info.id) {
+        if ((*current)->storage.trunk_id != (*start)->storage.trunk_id) {
             if ((result=write_to_log_file(start, current)) != 0) {
                 return result;
             }
@@ -258,7 +248,7 @@ static int deal_records(DATrunkSpaceLogRecord *head)
 
     result = array_to_log_file(&RECORD_PTR_ARRAY);
 
-    fast_mblock_free_objects(&trunk_space_log_ctx.record_allocator,
+    fast_mblock_free_objects(&g_trunk_space_log_ctx.record_allocator,
             (void **)RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count);
     return result;
 }
@@ -284,7 +274,7 @@ static void *trunk_space_log_func(void *arg)
 #endif
 
     while (SF_G_CONTINUE_FLAG) {
-        if ((head=fc_queue_pop(&trunk_space_log_ctx.queue)) == NULL) {
+        if ((head=fc_queue_pop(&g_trunk_space_log_ctx.queue)) == NULL) {
             continue;
         }
 
@@ -311,20 +301,20 @@ static void *trunk_space_log_func(void *arg)
     return NULL;
 }
 
-int trunk_space_log_init()
+int da_trunk_space_log_init()
 {
     int result;
     struct tm tm_current;
     pthread_t tid;
 
-    if ((result=fast_mblock_init_ex1(&trunk_space_log_ctx.record_allocator,
+    if ((result=fast_mblock_init_ex1(&g_trunk_space_log_ctx.record_allocator,
                     "trunk-space-record", sizeof(DATrunkSpaceLogRecord),
-                    4 * 1024, 0, NULL, NULL, true)) != 0)
+                    8 * 1024, 0, NULL, NULL, true)) != 0)
     {
         return result;
     }
 
-    if ((result=fc_queue_init(&trunk_space_log_ctx.queue, (long)
+    if ((result=fc_queue_init(&g_trunk_space_log_ctx.queue, (long)
                     (&((DATrunkSpaceLogRecord *)NULL)->next))) != 0)
     {
         return result;
@@ -336,7 +326,7 @@ int trunk_space_log_init()
         return result;
     }
 
-    if ((result=fast_buffer_init_ex(&trunk_space_log_ctx.buffer,
+    if ((result=fast_buffer_init_ex(&g_trunk_space_log_ctx.buffer,
                     DA_BINLOG_BUFFER_SIZE)) != 0)
     {
         return result;
@@ -351,27 +341,6 @@ int trunk_space_log_init()
             NULL, SF_G_THREAD_STACK_SIZE);
 }
 
-void trunk_space_log_destroy()
+void da_trunk_space_log_destroy()
 {
-}
-
-int trunk_space_log_write(const int64_t version, const int64_t oid,
-        const unsigned char fid, const char op_type,
-        DATrunkSpaceInfo *space)
-{
-    DATrunkSpaceLogRecord *record;
-
-    record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-            &trunk_space_log_ctx.record_allocator);
-    if (record == NULL) {
-        return ENOMEM;
-    }
-
-    record->version = version;
-    record->oid = oid;
-    record->fid = fid;
-    record->op_type = op_type;
-    record->space = *space;
-    fc_queue_push(&trunk_space_log_ctx.queue, record);
-    return 0;
 }

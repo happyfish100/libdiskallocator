@@ -19,16 +19,48 @@
 
 #include "../../storage_config.h"
 
+typedef struct da_trunk_space_log_record_array {
+    DATrunkSpaceLogRecord **records;
+    int count;
+    int alloc;
+} DATrunkSpaceLogRecordArray;
+
+typedef struct da_trunk_space_log_context {
+    struct fc_queue queue;
+    struct fast_mblock_man record_allocator;
+    DATrunkSpaceLogRecordArray record_array;
+    TrunkFDCacheContext fd_cache_ctx;
+    FastBuffer buffer;
+    time_t next_dump_time;
+} DATrunkSpaceLogContext;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int trunk_space_log_init();
-    void trunk_space_log_destroy();
+    extern DATrunkSpaceLogContext g_trunk_space_log_ctx;
 
-    int trunk_space_log_write(const int64_t version, const int64_t oid,
-            const unsigned char fid, const char op_type,
-            DATrunkSpaceInfo *space);
+    int da_trunk_space_log_init();
+    void da_trunk_space_log_destroy();
+
+    static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_record()
+    {
+        return (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
+                &g_trunk_space_log_ctx.record_allocator);
+    }
+
+    static inline int da_trunk_space_log_alloc_chain(const int count,
+            struct fc_queue_info *chain)
+    {
+        return fc_queue_alloc_chain(&g_trunk_space_log_ctx.queue,
+                &g_trunk_space_log_ctx.record_allocator, count, chain);
+    }
+
+    static inline void da_trunk_space_log_push_chain(
+            struct fc_queue_info *qinfo)
+    {
+        fc_queue_push_queue_to_tail(&g_trunk_space_log_ctx.queue, qinfo);
+    }
 
 #ifdef __cplusplus
 }

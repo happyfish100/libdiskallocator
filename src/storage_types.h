@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _STORAGE_TYPES_H
-#define _STORAGE_TYPES_H
+#ifndef _DA_STORAGE_TYPES_H
+#define _DA_STORAGE_TYPES_H
 
 #include "fastcommon/fc_list.h"
 #include "fastcommon/shared_buffer.h"
@@ -99,12 +99,20 @@ typedef struct da_trunk_file_info {
     } util;  //for util manager queue
 } DATrunkFileInfo;
 
+#define DA_PIECE_FIELD_IS_EMPTY(field) ((field)->trunk_id == 0)
+
+typedef struct da_piece_field_storage {
+    int64_t version;
+    uint32_t trunk_id;  //0 for not inited
+    uint32_t offset;
+    uint32_t size;
+} DAPieceFieldStorage;
+
 typedef struct da_trunk_space_log_record {
     int64_t oid;        //object ID
     unsigned char fid;  //filed ID (key)
     char op_type;
-    int64_t version;
-    DATrunkSpaceInfo space;
+    DAPieceFieldStorage storage;
     struct da_trunk_space_log_record *next;
 } DATrunkSpaceLogRecord;
 
