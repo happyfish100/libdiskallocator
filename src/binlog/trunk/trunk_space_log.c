@@ -103,15 +103,6 @@ static int chain_to_array(DATrunkSpaceLogRecord *head)
     return 0;
 }
 
-static inline void get_space_log_filename(const uint32_t trunk_id,
-        char *space_log_filename, const int size)
-{
-    //TODO
-    DATrunkSpaceInfo *space = NULL;
-
-    dio_get_space_log_filename(space, space_log_filename, size);
-}
-
 static int get_write_fd(const uint32_t trunk_id, int *fd)
 {
     const int flags = O_WRONLY | O_CREAT | O_APPEND;
@@ -122,7 +113,7 @@ static int get_write_fd(const uint32_t trunk_id, int *fd)
         return 0;
     }
 
-    get_space_log_filename(trunk_id, space_log_filename,
+    dio_get_space_log_filename(trunk_id, space_log_filename,
             sizeof(space_log_filename));
     if ((*fd=open(space_log_filename, flags, 0644)) < 0) {
         result = errno != 0 ? errno : EACCES;
@@ -144,7 +135,7 @@ static int do_write_to_file(const uint32_t trunk_id,
 
     if (fc_safe_write(fd, buff, len) != len) {
         result = errno != 0 ? errno : EIO;
-        get_space_log_filename(trunk_id, space_log_filename,
+        dio_get_space_log_filename(trunk_id, space_log_filename,
                 sizeof(space_log_filename));
         logError("file: "__FILE__", line: %d, "
                 "write to space log file \"%s\" fail, "
@@ -156,7 +147,7 @@ static int do_write_to_file(const uint32_t trunk_id,
 
     if (fsync(fd) != 0) {
         result = errno != 0 ? errno : EIO;
-        get_space_log_filename(trunk_id, space_log_filename,
+        dio_get_space_log_filename(trunk_id, space_log_filename,
                 sizeof(space_log_filename));
         logError("file: "__FILE__", line: %d, "
                 "fsync to space log file \"%s\" fail, "

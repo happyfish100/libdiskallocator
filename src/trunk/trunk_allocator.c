@@ -22,6 +22,7 @@
 #include "fastcommon/fast_mblock.h"
 #include "fastcommon/sched_thread.h"
 #include "sf/sf_global.h"
+#include "trunk_hashtable.h"
 #include "trunk_maker.h"
 #include "../storage_allocator.h"
 #include "trunk_allocator.h"
@@ -147,6 +148,10 @@ int trunk_allocator_add(DATrunkAllocator *allocator,
     result = uniq_skiplist_insert(allocator->
             trunks.by_id.skiplist, trunk_info);
     PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
+
+    if (result == 0) {
+        result = trunk_hashtable_add(trunk_info);
+    } 
 
     if (result != 0) {
         logError("file: "__FILE__", line: %d, "

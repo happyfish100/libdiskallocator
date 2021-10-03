@@ -93,6 +93,10 @@ typedef struct da_trunk_file_info {
     } alloc;  //for space allocate
 
     struct {
+        struct da_trunk_file_info *next;
+    } htable;  //for hashtable
+
+    struct {
         volatile char event;
         uint32_t last_used_bytes;
         struct da_trunk_file_info *next;
