@@ -19,6 +19,12 @@
 
 #include "../storage_config.h"
 
+typedef struct {
+    DATrunkFileInfo **bucket;
+    DATrunkFileInfo *current;
+    bool need_lock;
+} TrunkHashtableIterator;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -30,6 +36,11 @@ extern "C" {
     int trunk_hashtable_add(DATrunkFileInfo *trunk);
 
     DATrunkFileInfo *trunk_hashtable_get(const uint32_t trunk_id);
+
+    void trunk_hashtable_iterator(TrunkHashtableIterator *it,
+            const bool need_lock);
+
+    DATrunkFileInfo *trunk_hashtable_next(TrunkHashtableIterator *it);
 
 #ifdef __cplusplus
 }

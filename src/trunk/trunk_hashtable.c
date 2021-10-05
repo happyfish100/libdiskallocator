@@ -24,6 +24,7 @@
 
 typedef struct {
     DATrunkFileInfo **buckets;
+    DATrunkFileInfo **end;
     int capacity;
 } TrunkHashtable;
 
@@ -53,6 +54,8 @@ int trunk_hashtable_init()
         return ENOMEM;
     }
     memset(trunk_htable_ctx.htable.buckets, 0, bytes);
+    trunk_htable_ctx.htable.end = trunk_htable_ctx.htable.buckets +
+        trunk_htable_ctx.htable.capacity;
 
     trunk_htable_ctx.lock_array.count = 163;
     bytes = sizeof(pthread_mutex_t) * trunk_htable_ctx.lock_array.count;
@@ -175,4 +178,44 @@ DATrunkFileInfo *trunk_hashtable_get(const uint32_t trunk_id)
                 __LINE__, trunk_id);
         return NULL;
     }
+}
+
+void trunk_hashtable_iterator(TrunkHashtableIterator *it,
+        const bool need_lock)
+{
+    it->bucket = trunk_htable_ctx.htable.buckets;
+    it->current = NULL;
+    it->need_lock = need_lock;
+}
+
+DATrunkFileInfo *trunk_hashtable_next(TrunkHashtableIterator *it)
+{
+    DATrunkFileInfo *trunk = NULL;
+    pthread_mutex_t *lock = NULL;
+
+    do {
+        if (it->need_lock) {
+            lock = trunk_htable_ctx.lock_array.locks + ((it->bucket -
+                        trunk_htable_ctx.htable.buckets) %
+                        trunk_htable_ctx.lock_array.count);
+            PTHREAD_MUTEX_LOCK(lock);
+        }
+
+        if (it->current == NULL) {
+            it->current = *(it->bucket);
+        } else {
+            it->current = it->current->htable.next;
+        }
+
+        if (it->need_lock) {
+            PTHREAD_MUTEX_UNLOCK(lock);
+        }
+
+        if (it->current != NULL) {
+            trunk = it->current;
+            break;
+        }
+    } while (++(it->bucket) < trunk_htable_ctx.htable.end);
+
+    return trunk;
 }

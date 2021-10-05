@@ -37,7 +37,7 @@ TRUNK_OBJS = trunk/trunk_allocator.lo trunk/trunk_id_info.lo \
 #               trunk/trunk_maker.lo trunk/trunk_prealloc.lo    \
 #               trunk/trunk_reclaim.lo
 
-SHARED_OBJS = $(TOP_OBJS) $(BINLOG_OBJS) $(DIO_OBJS) $(TRUNK_OBJS)
+SHARED_OBJS = $(BINLOG_OBJS) $(DIO_OBJS) $(TRUNK_OBJS) $(TOP_OBJS)
 
 ALL_OBJS = $(SHARED_OBJS)
 ALL_LIBS = libdiskallocator.so
