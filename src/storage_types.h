@@ -37,9 +37,6 @@
 #define DA_MAX_SPLIT_COUNT_PER_SPACE_ALLOC   2
 #define DA_SLICE_SN_PARRAY_INIT_ALLOC_COUNT  4
 
-#define DA_SPACE_OP_TYPE_ALLOCATE      'A'
-#define DA_SPACE_OP_TYPE_RECLAIM       'R'
-
 struct da_trunk_allocator;
 
 typedef struct {
@@ -58,11 +55,6 @@ typedef struct {
     uint32_t offset;  //offset of the trunk file
     uint32_t size;    //alloced space size
 } DATrunkSpaceInfo;
-
-typedef struct {
-    DATrunkSpaceInfo space;
-    int64_t version; //for write in order
-} DATrunkSpaceWithVersion;
 
 #ifdef OS_LINUX
 typedef struct aio_buffer_ptr_array {
@@ -104,6 +96,7 @@ typedef struct da_trunk_file_info {
 } DATrunkFileInfo;
 
 #define DA_PIECE_FIELD_IS_EMPTY(field) ((field)->trunk_id == 0)
+#define DA_PIECE_FIELD_DELETE(field)   (field)->trunk_id = 0
 
 typedef struct da_piece_field_storage {
     int64_t version;

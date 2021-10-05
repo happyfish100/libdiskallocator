@@ -71,13 +71,28 @@ extern "C" {
                 NULL, notify_func, notify_arg);
     }
 
-    static inline int trunk_write_thread_push_slice_by_buff(
+    static inline int trunk_write_thread_push_slice_by_buff_ex(
             const int64_t version, DATrunkSpaceInfo *space, char *buff,
             trunk_write_io_notify_func notify_func, void *notify_arg)
     {
         return trunk_write_thread_push(DA_IO_TYPE_WRITE_SLICE_BY_BUFF,
                 version, space, buff, notify_func, notify_arg);
     }
+
+    static inline int trunk_write_thread_push_slice_by_buff(
+            DATrunkSpaceInfo *space, char *buff,
+            trunk_write_io_notify_func notify_func, void *notify_arg)
+    {
+        DATrunkAllocator *allocator;
+        allocator = g_allocator_mgr->allocator_ptr_array.
+            allocators[space->store->index];
+        return trunk_write_thread_push(DA_IO_TYPE_WRITE_SLICE_BY_BUFF,
+                __sync_add_and_fetch(&allocator->allocate.current_version, 1),
+                space, buff, notify_func, notify_arg);
+    }
+
+    int trunk_write_thread_by_buff_synchronize(DATrunkSpaceInfo *space,
+            char *buff, SFSynchronizeContext *sctx);
 
     static inline int trunk_write_thread_push_slice_by_iovec(
             const int64_t version, DATrunkSpaceInfo *space, iovec_array_t

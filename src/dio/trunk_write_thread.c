@@ -773,3 +773,37 @@ static void *trunk_write_thread_func(void *arg)
 
     return NULL;
 }
+
+static void write_io_notify_callback(struct trunk_write_io_buffer
+        *buffer, const int result)
+{
+    SFSynchronizeContext *sctx;
+
+    sctx = (SFSynchronizeContext *)buffer->notify.arg;
+    PTHREAD_MUTEX_LOCK(&sctx->lcp.lock);
+    sctx->result = result;
+    pthread_cond_signal(&sctx->lcp.cond);
+    PTHREAD_MUTEX_UNLOCK(&sctx->lcp.lock);
+}
+
+int trunk_write_thread_by_buff_synchronize(DATrunkSpaceInfo *space,
+        char *buff, SFSynchronizeContext *sctx)
+{
+    int result;
+
+    sctx->result = INT16_MIN;
+    if ((result=trunk_write_thread_push_slice_by_buff(space, buff,
+                    write_io_notify_callback, sctx)) != 0)
+    {
+        return result;
+    }
+
+    PTHREAD_MUTEX_LOCK(&sctx->lcp.lock);
+    while (sctx->result == INT16_MIN) {
+        pthread_cond_wait(&sctx->lcp.cond,
+                &sctx->lcp.lock);
+    }
+    PTHREAD_MUTEX_UNLOCK(&sctx->lcp.lock);
+
+    return sctx->result;
+}

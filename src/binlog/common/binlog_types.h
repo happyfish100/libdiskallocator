@@ -27,9 +27,12 @@ typedef struct da_binlog_id_type_pair {
     int type;
 } DABinlogIdTypePair;
 
+#define da_binlog_op_type_consume_space  da_binlog_op_type_create
+#define da_binlog_op_type_reclaim_space  da_binlog_op_type_remove
+
 typedef enum da_binlog_op_type {
     da_binlog_op_type_create = 'c',
-    da_binlog_op_type_remove = 'd',
+    da_binlog_op_type_remove = 'r',
     da_binlog_op_type_update = 'u',
     da_binlog_op_type_synchronize = 's'
 } DABinlogOpType;

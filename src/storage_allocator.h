@@ -92,7 +92,7 @@ extern "C" {
 
     static inline int storage_allocator_normal_alloc_ex(
             const uint64_t blk_hc, const int size,
-            DATrunkSpaceWithVersion *spaces,
+            DATrunkSpaceInfo *spaces,
             int *count, const bool is_normal)
     {
         DATrunkAllocatorPtrArray *avail_array;
@@ -118,7 +118,7 @@ extern "C" {
     }
 
     static inline int storage_allocator_reclaim_alloc(const uint64_t blk_hc,
-            const int size, DATrunkSpaceWithVersion *spaces, int *count)
+            const int size, DATrunkSpaceInfo *spaces, int *count)
     {
         const bool is_normal = false;
         int result;
