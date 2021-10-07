@@ -40,14 +40,16 @@ typedef enum da_binlog_op_type {
 typedef struct da_binlog_writer {
     DABinlogIdTypePair key;
     volatile int updating_count;
+    int arg_size;
+    struct fast_mblock_man record_allocator;
 } DABinlogWriter;
 
 typedef struct da_binlog_record {
     DABinlogWriter *writer;
     DABinlogOpType op_type;
     int64_t version;  //for stable sort
-    void *args;
     struct da_binlog_record *next;  //for queue
+    char args[0];
 } DABinlogRecord;
 
 typedef int (*da_binlog_pack_record_func)(void *args,

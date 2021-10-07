@@ -36,6 +36,22 @@
 #include "binlog_writer.h"
 
 #define BINLOG_RECORD_BATCH_SIZE  1024
+#define BINLOG_RECORD_MAX_WRITERS    2
+
+#define BINLOG_RECORD_INIT_NODE_CHAINS(pairs) \
+    FC_INIT_CHAIN(pairs[0].chain); \
+    FC_INIT_CHAIN(pairs[1].chain)
+
+typedef struct binlog_writer_chain_pair {
+    DABinlogWriter *writer;
+    struct fast_mblock_chain chain;
+} BinlogWriterChainPair;
+
+typedef struct binlog_writer_chain_array {
+    BinlogWriterChainPair pairs[BINLOG_RECORD_MAX_WRITERS];
+    BinlogWriterChainPair *end;
+    int count;
+} BinlogWriterChainArray;
 
 typedef struct binlog_writer_synchronize_args {
     struct {
@@ -54,13 +70,13 @@ typedef struct binlog_writer_shrink_task {
 typedef struct {
     struct {
         struct fast_mblock_man sargs;  //synchronize args
-        struct fast_mblock_man record;
         struct fast_mblock_man stask;  //shrink task
     } allocators;
     struct {
         struct fc_queue normal; //update and load
         struct fc_queue shrink; //array shrink
     } queues;
+    BinlogWriterChainArray writer_chain_array;
     time_t last_shrink_time;
     volatile int64_t current_version;
     volatile bool running;
@@ -70,6 +86,7 @@ static BinlogWriterContext binlog_writer_ctx;
 
 #define WRITER_NORMAL_QUEUE   binlog_writer_ctx.queues.normal
 #define WRITER_SHRINK_QUEUE   binlog_writer_ctx.queues.shrink
+#define WRITER_CHAIN_ARRAY    binlog_writer_ctx.writer_chain_array
 
 static inline void notify(BWriterSynchronizeArgs *sync_args)
 {
@@ -240,29 +257,38 @@ static int deal_binlog_records(DABinlogRecord *head)
 {
     int result;
     int count;
-    DABinlogRecord *records[BINLOG_RECORD_BATCH_SIZE];
+    DABinlogRecord *records[BINLOG_RECORD_MAX_WRITERS *
+        BINLOG_RECORD_BATCH_SIZE];
     DABinlogRecord **pp;
     DABinlogRecord *record;
     struct fast_mblock_node *node;
-    struct fast_mblock_chain chain;
+    BinlogWriterChainPair *pair = NULL;
 
-    chain.head = chain.tail = NULL;
+    BINLOG_RECORD_INIT_NODE_CHAINS(WRITER_CHAIN_ARRAY.pairs);
     pp = records;
     record = head;
     do {
         *pp++ = record;
 
-        node = fast_mblock_to_node_ptr(record);
-        if (chain.head == NULL) {
-            chain.head = node;
-        } else {
-            chain.tail->next = node;
+        for (pair = WRITER_CHAIN_ARRAY.pairs;
+                pair < WRITER_CHAIN_ARRAY.end;
+                pair++)
+        {
+            if (pair->writer == record->writer) {
+                break;
+            }
         }
-        chain.tail = node;
+
+        node = fast_mblock_to_node_ptr(record);
+        if (pair->chain.head == NULL) {
+            pair->chain.head = node;
+        } else {
+            pair->chain.tail->next = node;
+        }
+        pair->chain.tail = node;
 
         record = record->next;
     } while (record != NULL);
-    chain.tail->next = NULL;
 
     count = pp - records;
     if (count > 1) {
@@ -272,7 +298,15 @@ static int deal_binlog_records(DABinlogRecord *head)
 
     result = deal_sorted_record(records, count);
     dec_updating_count(records, count);
-    fast_mblock_batch_free(&binlog_writer_ctx.allocators.record, &chain);
+
+    for (pair=WRITER_CHAIN_ARRAY.pairs; pair<WRITER_CHAIN_ARRAY.end; pair++) {
+        if (!FC_IS_CHAIN_EMPTY(pair->chain)) {
+            pair->chain.tail->next = NULL;
+            fast_mblock_batch_free(&pair->writer->
+                    record_allocator, &pair->chain);
+        }
+    }
+
     return result;
 }
 
@@ -350,7 +384,7 @@ static int sargs_alloc_init_func(BWriterSynchronizeArgs *element, void *args)
     return init_pthread_lock_cond_pair(&element->notify.lcp);
 }
 
-int da_binlog_writer_init()
+int da_binlog_writer_global_init()
 {
     int result;
     pthread_t tid;
@@ -362,16 +396,6 @@ int da_binlog_writer_init()
     {
         return result;
     }
-
-    if ((result=fast_mblock_init_ex1(&binlog_writer_ctx.allocators.record,
-                    "inode-binlog-record", sizeof(DABinlogRecord),
-                    BINLOG_RECORD_BATCH_SIZE, BINLOG_RECORD_BATCH_SIZE,
-                    NULL, NULL, true)) != 0)
-    {
-        return result;
-    }
-    fast_mblock_set_need_wait(&binlog_writer_ctx.allocators.record,
-            true, (bool *)&SF_G_CONTINUE_FLAG);
 
     if ((result=fast_mblock_init_ex1(&binlog_writer_ctx.allocators.stask,
                     "shrink-task", sizeof(BinlogWriterShrinkTask),
@@ -396,13 +420,45 @@ int da_binlog_writer_init()
             NULL, SF_G_THREAD_STACK_SIZE);
 }
 
+int da_binlog_writer_init(DABinlogWriter *writer, const int arg_size)
+{
+    int result;
+    int element_size;
+    char name[32];
+
+    writer->arg_size = arg_size;
+    snprintf(name, sizeof(name), "binlog-record[%d]",
+            WRITER_CHAIN_ARRAY.count);
+    element_size = sizeof(DABinlogRecord) + arg_size;
+    if ((result=fast_mblock_init_ex1(&writer->record_allocator,
+                    name, element_size, BINLOG_RECORD_BATCH_SIZE,
+                    BINLOG_RECORD_BATCH_SIZE, NULL, NULL, true)) != 0)
+    {
+        return result;
+    }
+    fast_mblock_set_need_wait(&writer->record_allocator,
+            true, (bool *)&SF_G_CONTINUE_FLAG);
+
+    if (WRITER_CHAIN_ARRAY.count >= BINLOG_RECORD_MAX_WRITERS) {
+        logError("file: "__FILE__", line: %d, "
+                "too many binlog writers exceeds %d",
+                __LINE__, BINLOG_RECORD_MAX_WRITERS);
+        return EOVERFLOW;
+    }
+
+    WRITER_CHAIN_ARRAY.pairs[WRITER_CHAIN_ARRAY.count++].writer = writer;
+    WRITER_CHAIN_ARRAY.end = WRITER_CHAIN_ARRAY.pairs +
+        WRITER_CHAIN_ARRAY.count;
+    return 0;
+}
+
 static inline int push_to_normal_queue(DABinlogWriter *writer,
         const DABinlogOpType op_type, void *args)
 {
     DABinlogRecord *record;
 
     if ((record=(DABinlogRecord *)fast_mblock_alloc_object(
-                    &binlog_writer_ctx.allocators.record)) == NULL)
+                    &writer->record_allocator)) == NULL)
     {
         return ENOMEM;
     }
@@ -411,7 +467,7 @@ static inline int push_to_normal_queue(DABinlogWriter *writer,
     record->version = __sync_add_and_fetch(&binlog_writer_ctx.
             current_version, 1);
     record->op_type = op_type;
-    record->args = args;
+    memcpy(record->args, args, writer->arg_size);
     fc_queue_push(&WRITER_NORMAL_QUEUE, record);
     return 0;
 }

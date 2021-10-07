@@ -22,9 +22,10 @@
 #include "fastcommon/fast_mblock.h"
 #include "fastcommon/sched_thread.h"
 #include "sf/sf_global.h"
+#include "../binlog/common/binlog_types.h"
+#include "../storage_allocator.h"
 #include "trunk_hashtable.h"
 #include "trunk_maker.h"
-#include "../storage_allocator.h"
 #include "trunk_allocator.h"
 
 TrunkAllocatorGlobalVars g_trunk_allocator_vars;
@@ -208,7 +209,7 @@ int trunk_allocator_deal_space_changes(const int path_index,
     } else {
         end = records + count;
         for (record=records; record<end; record++) {
-            if ((*record)->op_type == DA_SPACE_OP_TYPE_ALLOCATE) {
+            if ((*record)->op_type == da_binlog_op_type_consume_space) {
                 trunk_info->used.bytes += (*record)->storage.size;
                 trunk_info->used.count++;
             } else {

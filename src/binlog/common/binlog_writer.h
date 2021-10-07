@@ -54,7 +54,9 @@ static inline int da_binlog_writer_cache_write(DABinlogWriterCache *cache)
     return fc_safe_write(cache->fd, cache->buff, len);
 }
 
-int da_binlog_writer_init();
+int da_binlog_writer_global_init();
+
+int da_binlog_writer_init(DABinlogWriter *writer, const int arg_size);
 
 int da_binlog_writer_log(DABinlogWriter *writer,
         const DABinlogOpType op_type, void *args);
