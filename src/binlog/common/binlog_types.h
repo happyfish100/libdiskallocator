@@ -58,9 +58,6 @@ typedef int (*da_binlog_pack_record_func)(void *args,
 typedef int (*da_binlog_unpack_record_func)(const string_t *line,
         void *args, char *error_info);
 
-typedef int (*da_binlog_batch_update_func)(DABinlogWriter *writer,
-            DABinlogRecord **records, const int count);
-
 typedef int (*da_binlog_shrink_func)(DABinlogWriter *writer, void *args);
 
 #define DA_DECLARE_BINLOG_ID_TYPE_VAR(var, bid, tp) \

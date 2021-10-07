@@ -124,20 +124,6 @@ static int log(DABinlogRecord *record, DABinlogWriterCache *cache)
     return 0;
 }
 
-static inline int batch_update_index(DABinlogRecord **start,
-        DABinlogRecord **end)
-{
-    da_binlog_batch_update_func callback;
-
-    callback = g_da_write_cache_ctx.type_subdir_array.pairs[
-        (*start)->writer->key.type].batch_update;
-    if (callback != NULL) {
-        return callback((*start)->writer, start, end - start);
-    } else {
-        return 0;
-    }
-}
-
 #define dec_writer_updating_count(start, end)  \
     FC_ATOMIC_DEC_EX(((DABinlogWriter *)(*start)-> \
                 args)->updating_count, end - start)
@@ -147,35 +133,17 @@ static int deal_sorted_record(DABinlogRecord **records,
 {
     DABinlogRecord **record;
     DABinlogRecord **end;
-    DABinlogRecord **start;
     DABinlogWriterCache cache;
     int r;
     int result;
 
     da_binlog_writer_cache_init(&cache);
-    start = NULL;
     result = 0;
     end = records + count;
     for (record=records; record<end; record++) {
         if ((*record)->op_type == da_binlog_op_type_synchronize) {
-            if (start != NULL) {
-                if ((result=batch_update_index(start, record)) != 0) {
-                    break;
-                }
-                start = NULL;
-            }
             notify((BWriterSynchronizeArgs *)(*record)->args);
         } else {
-            if (start == NULL) {
-                start = record;
-            } else if (!DA_BINLOG_ID_TYPE_EQUALS((*record)->
-                        writer->key, (*start)->writer->key))
-            {
-                if ((result=batch_update_index(start, record)) != 0) {
-                    break;
-                }
-                start = record;
-            }
             if ((result=log(*record, &cache)) != 0) {
                 break;
             }
@@ -184,11 +152,6 @@ static int deal_sorted_record(DABinlogRecord **records,
 
     r = da_binlog_writer_cache_write(&cache);
     if (record == end) {
-        if (start != NULL) {
-            if ((result=batch_update_index(start, end)) != 0) {
-                return result;
-            }
-        }
         return r;
     }
 
