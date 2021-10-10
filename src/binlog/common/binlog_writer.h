@@ -58,8 +58,7 @@ int da_binlog_writer_global_init();
 
 int da_binlog_writer_init(DABinlogWriter *writer, const int arg_size);
 
-int da_binlog_writer_log(DABinlogWriter *writer,
-        const DABinlogOpType op_type, void *args);
+int da_binlog_writer_log(DABinlogWriter *writer, void *args);
 
 int da_binlog_writer_synchronize(DABinlogWriter *writer);
 

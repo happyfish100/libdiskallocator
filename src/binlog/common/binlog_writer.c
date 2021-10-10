@@ -119,7 +119,7 @@ static int log(DABinlogRecord *record, DABinlogWriterCache *cache)
     }
 
     cache->current += g_da_write_cache_ctx.type_subdir_array.pairs[
-        record->writer->key.type].pack_record(record->args, record->op_type,
+        record->writer->key.type].pack_record(record->args,
                 cache->current, cache->buff_end - cache->current);
     return 0;
 }
@@ -435,11 +435,10 @@ static inline int push_to_normal_queue(DABinlogWriter *writer,
     return 0;
 }
 
-int da_binlog_writer_log(DABinlogWriter *writer,
-        const DABinlogOpType op_type, void *args)
+int da_binlog_writer_log(DABinlogWriter *writer, void *args)
 {
     FC_ATOMIC_INC(writer->updating_count);
-    return push_to_normal_queue(writer, op_type, args);
+    return push_to_normal_queue(writer, da_binlog_op_type_update, args);
 }
 
 int da_binlog_writer_shrink(DABinlogWriter *writer, void *args)

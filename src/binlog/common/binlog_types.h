@@ -53,7 +53,7 @@ typedef struct da_binlog_record {
 } DABinlogRecord;
 
 typedef int (*da_binlog_pack_record_func)(void *args,
-        const DABinlogOpType op_type, char *buff, const int size);
+        char *buff, const int size);
 
 typedef int (*da_binlog_unpack_record_func)(const string_t *line,
         void *args, char *error_info);

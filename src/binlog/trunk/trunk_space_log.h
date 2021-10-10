@@ -108,6 +108,20 @@ extern "C" {
         fc_queue_push_queue_to_tail(&g_trunk_space_log_ctx.queue, qinfo);
     }
 
+    static inline void da_trunk_space_log_pack(const DATrunkSpaceLogRecord
+            *record, FastBuffer *buffer)
+    {
+        buffer->length += sprintf(buffer->data + buffer->length,
+                "%u %"PRId64" %"PRId64" %c %u %u %u %u\n",
+                (uint32_t)g_current_time, record->storage.version,
+                record->oid, record->op_type, record->fid,
+                record->storage.trunk_id, record->storage.offset,
+                record->storage.size);
+    }
+
+    int da_trunk_space_log_unpack(const string_t *line,
+            DATrunkSpaceLogRecord *record, char *error_info);
+
 #ifdef __cplusplus
 }
 #endif

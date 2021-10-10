@@ -19,6 +19,7 @@
 
 #include "fastcommon/common_define.h"
 #include "sf/sf_global.h"
+#include "binlog/common/binlog_types.h"
 #include "storage_config.h"
 
 typedef struct disk_allocator_global_vars {

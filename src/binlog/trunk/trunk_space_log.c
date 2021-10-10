@@ -33,6 +33,55 @@ DATrunkSpaceLogContext g_trunk_space_log_ctx;
 #define FD_CACHE_CTX      g_trunk_space_log_ctx.fd_cache_ctx
 #define NEXT_DUMP_TIME    g_trunk_space_log_ctx.next_dump_time
 
+#define SPACE_LOG_FIELD_COUNT             8
+
+#define SPACE_LOG_FIELD_INDEX_TIMESTAMP   0
+#define SPACE_LOG_FIELD_INDEX_VERSION     1
+#define SPACE_LOG_FIELD_INDEX_INODE       2
+#define SPACE_LOG_FIELD_INDEX_OP_TYPE     3
+#define SPACE_LOG_FIELD_INDEX_FINDEX      4
+#define SPACE_LOG_FIELD_INDEX_TRUNK_ID    5
+#define SPACE_LOG_FIELD_INDEX_OFFSET      6
+#define SPACE_LOG_FIELD_INDEX_SIZE        7
+
+int da_trunk_space_log_unpack(const string_t *line,
+        DATrunkSpaceLogRecord *record, char *error_info)
+{
+    int count;
+    char *endptr;
+    string_t cols[SPACE_LOG_FIELD_COUNT];
+
+    count = split_string_ex(line, ' ', cols,
+            SPACE_LOG_FIELD_COUNT, false);
+    if (count != SPACE_LOG_FIELD_COUNT) {
+        sprintf(error_info, "record count: %d != %d",
+                count, SPACE_LOG_FIELD_COUNT);
+        return EINVAL;
+    }
+
+    SF_BINLOG_PARSE_INT_SILENCE(record->storage.version,
+            "version", SPACE_LOG_FIELD_INDEX_VERSION, ' ', 0);
+    SF_BINLOG_PARSE_INT_SILENCE(record->oid, "object ID",
+            SPACE_LOG_FIELD_INDEX_INODE, ' ', 0);
+    record->op_type = cols[SPACE_LOG_FIELD_INDEX_OP_TYPE].str[0];
+    if (!(record->op_type == da_binlog_op_type_consume_space ||
+                record->op_type == da_binlog_op_type_reclaim_space))
+    {
+        sprintf(error_info, "unkown op type: %d (0x%02x)",
+                record->op_type, (unsigned char)record->op_type);
+        return EINVAL;
+    }
+    SF_BINLOG_PARSE_INT_SILENCE(record->fid, "field index",
+            SPACE_LOG_FIELD_INDEX_FINDEX, ' ', 0);
+    SF_BINLOG_PARSE_INT_SILENCE(record->storage.trunk_id,
+            "trunk id", SPACE_LOG_FIELD_INDEX_TRUNK_ID, ' ', 0);
+    SF_BINLOG_PARSE_INT_SILENCE(record->storage.offset, "offset",
+            SPACE_LOG_FIELD_INDEX_OFFSET, ' ', 0);
+    SF_BINLOG_PARSE_INT_SILENCE(record->storage.size, "size",
+            SPACE_LOG_FIELD_INDEX_SIZE, '\n', 0);
+    return 0;
+}
+
 static int realloc_record_array(DATrunkSpaceLogRecordArray *array)
 {
     DATrunkSpaceLogRecord **records;
@@ -187,13 +236,7 @@ static int write_to_log_file(DATrunkSpaceLogRecord **start,
                 g_trunk_space_log_ctx.buffer.length = 0;
             }
 
-            g_trunk_space_log_ctx.buffer.length += sprintf(g_trunk_space_log_ctx.
-                    buffer.data + g_trunk_space_log_ctx.buffer.length,
-                    "%u %"PRId64" %"PRId64" %u %c %u %u %u\n",
-                    (uint32_t)g_current_time, (*current)->storage.version,
-                    (*current)->oid, (*current)->fid,
-                    (*current)->op_type, (*current)->storage.trunk_id,
-                    (*current)->storage.offset, (*current)->storage.size);
+            da_trunk_space_log_pack(*current, &g_trunk_space_log_ctx.buffer);
         }
 
         result = do_write_to_file((*start)->storage.trunk_id,

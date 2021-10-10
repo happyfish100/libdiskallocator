@@ -95,8 +95,10 @@ typedef struct da_trunk_file_info {
     } util;  //for util manager queue
 } DATrunkFileInfo;
 
-#define DA_PIECE_FIELD_IS_EMPTY(field) ((field)->trunk_id == 0)
-#define DA_PIECE_FIELD_DELETE(field)   (field)->trunk_id = 0
+#define DA_PIECE_FIELD_IS_EMPTY(field)  ((field)->trunk_id == 0)
+#define DA_PIECE_FIELD_SET_EMPTY(field) (field)->trunk_id = 0
+#define DA_PIECE_FIELD_DELETE(field)   \
+    (field)->trunk_id = 0; (field)->offset = 0; (field)->size = 0
 
 typedef struct da_piece_field_storage {
     int64_t version;
