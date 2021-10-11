@@ -100,13 +100,13 @@ static int log(DABinlogRecord *record, DABinlogWriterCache *cache)
 {
     int result;
 
-    if (!DA_BINLOG_ID_TYPE_EQUALS(record->writer->key,
+    if (!DA_BINLOG_ID_TYPE_EQUALS(record->key,
                 cache->key) || cache->fd < 0)
     {
         if ((result=da_binlog_writer_cache_write(cache)) != 0) {
             return result;
         }
-        cache->key = record->writer->key;
+        cache->key = record->key;
         if ((cache->fd=da_write_fd_cache_get(&cache->key)) < 0) {
             return -1 * cache->fd;
         }
@@ -119,7 +119,7 @@ static int log(DABinlogRecord *record, DABinlogWriterCache *cache)
     }
 
     cache->current += g_da_write_cache_ctx.type_subdir_array.pairs[
-        record->writer->key.type].pack_record(record->args,
+        record->key.type].pack_record(record->args,
                 cache->current, cache->buff_end - cache->current);
     return 0;
 }
@@ -169,14 +169,14 @@ static int record_compare(const DABinlogRecord **record1,
 {
     int sub;
 
-    sub = fc_compare_int64((*record1)->writer->key.id,
-            (*record2)->writer->key.id);
+    sub = fc_compare_int64((*record1)->key.id,
+            (*record2)->key.id);
     if (sub != 0) {
         return sub;
     }
 
-    sub = (int)(*record1)->writer->key.type -
-        (int)(*record2)->writer->key.type;
+    sub = (int)(*record1)->key.type -
+        (int)(*record2)->key.type;
     if (sub == 0) {
         return fc_compare_int64((*record1)->version, (*record2)->version);
     } else {
@@ -202,8 +202,8 @@ static void dec_updating_count(DABinlogRecord **records,
         } else {
             if (start == NULL) {
                 start = record;
-            } else if (!DA_BINLOG_ID_TYPE_EQUALS((*record)->
-                        writer->key, (*start)->writer->key))
+            } else if (!DA_BINLOG_ID_TYPE_EQUALS((*record)->key,
+                        (*start)->key))
             {
                 dec_writer_updating_count(start, record);
                 start = record;
@@ -237,7 +237,7 @@ static int deal_binlog_records(DABinlogRecord *head)
                 pair < WRITER_CHAIN_ARRAY.end;
                 pair++)
         {
-            if (pair->writer == record->writer) {
+            if (pair->writer->type == record->key.type) {
                 break;
             }
         }
@@ -299,7 +299,7 @@ static void deal_shrink_queue()
 
     binlog_writer_ctx.last_shrink_time = g_current_time;
     result = g_da_write_cache_ctx.type_subdir_array.pairs[
-        stask->writer->key.type].shrink(stask->writer, stask->args);
+        stask->writer->type].shrink(stask->writer, stask->args);
     if (result != 0) {
         logCrit("file: "__FILE__", line: %d, "
                 "deal_shrink_queue fail, "
@@ -383,19 +383,30 @@ int da_binlog_writer_global_init()
             NULL, SF_G_THREAD_STACK_SIZE);
 }
 
-int da_binlog_writer_init(DABinlogWriter *writer, const int arg_size)
+static int binlog_record_alloc_init(DABinlogRecord *record,
+        DABinlogWriter *writer)
+{
+    record->buffer.buff = (char *)(record + 1);
+    record->buffer.alloc_size = writer->max_record_size;
+    return 0;
+}
+
+int da_binlog_writer_init(DABinlogWriter *writer, const int type,
+        const int max_record_size)
 {
     int result;
     int element_size;
     char name[32];
 
-    writer->arg_size = arg_size;
+    writer->type = type;
+    writer->max_record_size = max_record_size;
     snprintf(name, sizeof(name), "binlog-record[%d]",
             WRITER_CHAIN_ARRAY.count);
-    element_size = sizeof(DABinlogRecord) + arg_size;
+    element_size = sizeof(DABinlogRecord) + max_record_size;
     if ((result=fast_mblock_init_ex1(&writer->record_allocator,
                     name, element_size, BINLOG_RECORD_BATCH_SIZE,
-                    BINLOG_RECORD_BATCH_SIZE, NULL, NULL, true)) != 0)
+                    BINLOG_RECORD_BATCH_SIZE, (fast_mblock_alloc_init_func)
+                    binlog_record_alloc_init, writer, true)) != 0)
     {
         return result;
     }
@@ -416,7 +427,8 @@ int da_binlog_writer_init(DABinlogWriter *writer, const int arg_size)
 }
 
 static inline int push_to_normal_queue(DABinlogWriter *writer,
-        const DABinlogOpType op_type, void *args)
+        const uint64_t binlog_id, const DABinlogOpType op_type,
+        const BufferInfo *buffer, void *args)
 {
     DABinlogRecord *record;
 
@@ -426,19 +438,30 @@ static inline int push_to_normal_queue(DABinlogWriter *writer,
         return ENOMEM;
     }
 
-    record->writer = writer;
+    record->key.id = binlog_id;
+    record->key.type = writer->type;
     record->version = __sync_add_and_fetch(&binlog_writer_ctx.
             current_version, 1);
     record->op_type = op_type;
-    memcpy(record->args, args, writer->arg_size);
+
+    if (buffer != NULL) {
+        memcpy(record->buffer.buff, buffer->buff, buffer->length);
+        record->buffer.length = buffer->length;
+    } else {
+        record->buffer.length = 0;
+    }
+
+    record->args = args;
     fc_queue_push(&WRITER_NORMAL_QUEUE, record);
     return 0;
 }
 
-int da_binlog_writer_log(DABinlogWriter *writer, void *args)
+int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
+        const BufferInfo *buffer)
 {
     FC_ATOMIC_INC(writer->updating_count);
-    return push_to_normal_queue(writer, da_binlog_op_type_update, args);
+    return push_to_normal_queue(writer, binlog_id,
+            da_binlog_op_type_update, buffer, NULL);
 }
 
 int da_binlog_writer_shrink(DABinlogWriter *writer, void *args)
@@ -470,9 +493,9 @@ int da_binlog_writer_synchronize(DABinlogWriter *writer)
     sync_args->writer = writer;
 
     do {
-        result = push_to_normal_queue(writer,
+        result = push_to_normal_queue(writer, 0,
                 da_binlog_op_type_synchronize,
-                sync_args);
+                NULL, sync_args);
         if (result != 0) {
             break;
         }

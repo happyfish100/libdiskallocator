@@ -38,18 +38,19 @@ typedef enum da_binlog_op_type {
 } DABinlogOpType;
 
 typedef struct da_binlog_writer {
-    DABinlogIdTypePair key;
+    int type;
+    int max_record_size;
     volatile int updating_count;
-    int arg_size;
     struct fast_mblock_man record_allocator;
 } DABinlogWriter;
 
 typedef struct da_binlog_record {
-    DABinlogWriter *writer;
+    DABinlogIdTypePair key;
     DABinlogOpType op_type;
     int64_t version;  //for stable sort
     struct da_binlog_record *next;  //for queue
-    char args[0];
+    BufferInfo buffer;
+    void *args;
 } DABinlogRecord;
 
 typedef int (*da_binlog_pack_record_func)(void *args,

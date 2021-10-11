@@ -23,7 +23,7 @@
 
 typedef struct {
     DABinlogIdTypePair key;
-    char buff[8 * 1024];
+    char buff[16 * 1024];
     char *current;
     char *buff_end;
     int fd;
@@ -56,9 +56,11 @@ static inline int da_binlog_writer_cache_write(DABinlogWriterCache *cache)
 
 int da_binlog_writer_global_init();
 
-int da_binlog_writer_init(DABinlogWriter *writer, const int arg_size);
+int da_binlog_writer_init(DABinlogWriter *writer, const int type,
+        const int max_record_size);
 
-int da_binlog_writer_log(DABinlogWriter *writer, void *args);
+int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
+        const BufferInfo *buffer);
 
 int da_binlog_writer_synchronize(DABinlogWriter *writer);
 

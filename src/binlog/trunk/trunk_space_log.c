@@ -308,7 +308,7 @@ static void *trunk_space_log_func(void *arg)
 #endif
 
     while (SF_G_CONTINUE_FLAG) {
-        if ((head=fc_queue_pop(&g_trunk_space_log_ctx.queue)) == NULL) {
+        if ((head=fc_queue_pop_all(&g_trunk_space_log_ctx.queue)) == NULL) {
             continue;
         }
 
