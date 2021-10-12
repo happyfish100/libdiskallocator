@@ -27,7 +27,6 @@
 #include <pthread.h>
 #include "fastcommon/logger.h"
 #include "fastcommon/pthread_func.h"
-#include "fastcommon/fc_atomic.h"
 #include "fastcommon/sched_thread.h"
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
@@ -96,6 +95,44 @@ static inline void notify(BWriterSynchronizeArgs *sync_args)
     PTHREAD_MUTEX_UNLOCK(&sync_args->notify.lcp.lock);
 }
 
+int da_binlog_writer_cache_write(DABinlogWriterCache *cache, const bool flush)
+{
+    int len;
+    int result;
+    char full_filename[PATH_MAX];
+
+    if ((len=cache->current - cache->buff) == 0) {
+        return 0;
+    }
+
+    cache->current = cache->buff;
+    if (fc_safe_write(cache->fd, cache->buff, len) != len) {
+        result = errno != 0 ? errno : EIO;
+        da_write_fd_cache_filename(&cache->key,
+                full_filename, sizeof(full_filename));
+        logError("file: "__FILE__", line: %d, "
+                "write to log file \"%s\" fail, "
+                "errno: %d, error info: %s",
+                __LINE__, full_filename,
+                result, STRERROR(result));
+        return result;
+    }
+
+    if (flush && fsync(cache->fd) != 0) {
+        result = errno != 0 ? errno : EIO;
+        da_write_fd_cache_filename(&cache->key,
+                full_filename, sizeof(full_filename));
+        logError("file: "__FILE__", line: %d, "
+                "fsync to log file \"%s\" fail, "
+                "errno: %d, error info: %s",
+                __LINE__, full_filename,
+                result, STRERROR(result));
+        return result;
+    }
+
+    return 0;
+}
+
 static int log(DABinlogRecord *record, DABinlogWriterCache *cache)
 {
     int result;
@@ -103,7 +140,7 @@ static int log(DABinlogRecord *record, DABinlogWriterCache *cache)
     if (!DA_BINLOG_ID_TYPE_EQUALS(record->key,
                 cache->key) || cache->fd < 0)
     {
-        if ((result=da_binlog_writer_cache_write(cache)) != 0) {
+        if ((result=da_binlog_writer_cache_write(cache, true)) != 0) {
             return result;
         }
         cache->key = record->key;
@@ -113,7 +150,7 @@ static int log(DABinlogRecord *record, DABinlogWriterCache *cache)
     }
 
     if (cache->buff_end - cache->current < DA_BINLOG_RECORD_MAX_SIZE) {
-        if ((result=da_binlog_writer_cache_write(cache)) != 0) {
+        if ((result=da_binlog_writer_cache_write(cache, false)) != 0) {
             return result;
         }
     }
@@ -124,12 +161,15 @@ static int log(DABinlogRecord *record, DABinlogWriterCache *cache)
     return 0;
 }
 
-#define dec_writer_updating_count(start, end)  \
-    FC_ATOMIC_DEC_EX(((DABinlogWriter *)(*start)-> \
-                args)->updating_count, end - start)
+#define dec_writer_waiting_count(start, end)  \
+    if (FC_ATOMIC_DEC_EX(((DABinlogWriter *)(*start)-> \
+                args)->notify.waiting_count, end - start) == 0) \
+    {  \
+        pthread_cond_signal(&((DABinlogWriter *)  \
+                    (*start)->args)->notify.lcp.cond); \
+    }
 
-static int deal_sorted_record(DABinlogRecord **records,
-        const int count)
+static int deal_sorted_record(DABinlogRecord **records, const int count)
 {
     DABinlogRecord **record;
     DABinlogRecord **end;
@@ -150,7 +190,7 @@ static int deal_sorted_record(DABinlogRecord **records,
         }
     }
 
-    r = da_binlog_writer_cache_write(&cache);
+    r = da_binlog_writer_cache_write(&cache, true);
     if (record == end) {
         return r;
     }
@@ -184,8 +224,7 @@ static int record_compare(const DABinlogRecord **record1,
     }
 }
 
-static void dec_updating_count(DABinlogRecord **records,
-        const int count)
+static void dec_waiting_count(DABinlogRecord **records, const int count)
 {
     DABinlogRecord **record;
     DABinlogRecord **end;
@@ -196,7 +235,7 @@ static void dec_updating_count(DABinlogRecord **records,
     for (record=records; record<end; record++) {
         if ((*record)->op_type == da_binlog_op_type_synchronize) {
             if (start != NULL) {
-                dec_writer_updating_count(start, record);
+                dec_writer_waiting_count(start, record);
                 start = NULL;
             }
         } else {
@@ -205,14 +244,14 @@ static void dec_updating_count(DABinlogRecord **records,
             } else if (!DA_BINLOG_ID_TYPE_EQUALS((*record)->key,
                         (*start)->key))
             {
-                dec_writer_updating_count(start, record);
+                dec_writer_waiting_count(start, record);
                 start = record;
             }
         }
     }
 
     if (start != NULL) {
-        dec_writer_updating_count(start, end);
+        dec_writer_waiting_count(start, end);
     }
 }
 
@@ -260,7 +299,7 @@ static int deal_binlog_records(DABinlogRecord *head)
     }
 
     result = deal_sorted_record(records, count);
-    dec_updating_count(records, count);
+    dec_waiting_count(records, count);
 
     for (pair=WRITER_CHAIN_ARRAY.pairs; pair<WRITER_CHAIN_ARRAY.end; pair++) {
         if (!FC_IS_CHAIN_EMPTY(pair->chain)) {
@@ -413,6 +452,10 @@ int da_binlog_writer_init(DABinlogWriter *writer, const int type,
     fast_mblock_set_need_wait(&writer->record_allocator,
             true, (bool *)&SF_G_CONTINUE_FLAG);
 
+    if ((result=sf_synchronize_ctx_init(&writer->notify)) != 0) {
+        return result;
+    }
+
     if (WRITER_CHAIN_ARRAY.count >= BINLOG_RECORD_MAX_WRITERS) {
         logError("file: "__FILE__", line: %d, "
                 "too many binlog writers exceeds %d",
@@ -459,7 +502,6 @@ static inline int push_to_normal_queue(DABinlogWriter *writer,
 int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
         const BufferInfo *buffer)
 {
-    FC_ATOMIC_INC(writer->updating_count);
     return push_to_normal_queue(writer, binlog_id,
             da_binlog_op_type_update, buffer, NULL);
 }

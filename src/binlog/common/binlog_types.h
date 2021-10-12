@@ -40,7 +40,7 @@ typedef enum da_binlog_op_type {
 typedef struct da_binlog_writer {
     int type;
     int max_record_size;
-    volatile int updating_count;
+    SFSynchronizeContext notify;
     struct fast_mblock_man record_allocator;
 } DABinlogWriter;
 

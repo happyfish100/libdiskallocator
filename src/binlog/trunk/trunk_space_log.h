@@ -28,6 +28,7 @@ typedef struct da_trunk_space_log_record_array {
 
 typedef struct da_trunk_space_log_context {
     struct fc_queue queue;
+    SFSynchronizeContext notify;
     struct fast_mblock_man record_allocator;
     DATrunkSpaceLogRecordArray record_array;
     TrunkFDCacheContext fd_cache_ctx;
@@ -121,6 +122,16 @@ extern "C" {
 
     int da_trunk_space_log_unpack(const string_t *line,
             DATrunkSpaceLogRecord *record, char *error_info);
+
+    static inline void da_trunk_space_log_inc_waiting_count(const int count)
+    {
+        FC_ATOMIC_INC_EX(g_trunk_space_log_ctx.notify.waiting_count, count);
+    }
+
+    static inline void da_trunk_space_log_wait()
+    {
+        sf_synchronize_counter_wait(&g_trunk_space_log_ctx.notify);
+    }
 
 #ifdef __cplusplus
 }

@@ -176,8 +176,8 @@ static int get_write_fd(const uint32_t trunk_id, int *fd)
     return 0;
 }
 
-static int do_write_to_file(const uint32_t trunk_id,
-        int fd, char *buff, const int len)
+static int do_write_to_file(const uint32_t trunk_id, int fd,
+        char *buff, const int len, const bool flush)
 {
     int result;
     char space_log_filename[PATH_MAX];
@@ -194,7 +194,7 @@ static int do_write_to_file(const uint32_t trunk_id,
         return result;
     }
 
-    if (fsync(fd) != 0) {
+    if (flush && fsync(fd) != 0) {
         result = errno != 0 ? errno : EIO;
         dio_get_space_log_filename(trunk_id, space_log_filename,
                 sizeof(space_log_filename));
@@ -228,7 +228,8 @@ static int write_to_log_file(DATrunkSpaceLogRecord **start,
             {
                 if ((result=do_write_to_file((*start)->storage.trunk_id,
                                 fd, g_trunk_space_log_ctx.buffer.data,
-                                g_trunk_space_log_ctx.buffer.length)) != 0)
+                                g_trunk_space_log_ctx.buffer.length,
+                                false)) != 0)
                 {
                     break;
                 }
@@ -241,7 +242,7 @@ static int write_to_log_file(DATrunkSpaceLogRecord **start,
 
         result = do_write_to_file((*start)->storage.trunk_id,
                 fd, g_trunk_space_log_ctx.buffer.data,
-                g_trunk_space_log_ctx.buffer.length);
+                g_trunk_space_log_ctx.buffer.length, true);
     } while (0);
 
     if (result != 0) {
@@ -281,6 +282,12 @@ static int deal_records(DATrunkSpaceLogRecord *head)
     }
 
     result = array_to_log_file(&RECORD_PTR_ARRAY);
+
+    if (FC_ATOMIC_DEC_EX(g_trunk_space_log_ctx.notify.waiting_count,
+                RECORD_PTR_ARRAY.count) == 0)
+    {
+        pthread_cond_signal(&g_trunk_space_log_ctx.notify.lcp.cond);
+    }
 
     fast_mblock_free_objects(&g_trunk_space_log_ctx.record_allocator,
             (void **)RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count);
@@ -351,6 +358,10 @@ int da_trunk_space_log_init()
     if ((result=fc_queue_init(&g_trunk_space_log_ctx.queue, (long)
                     (&((DATrunkSpaceLogRecord *)NULL)->next))) != 0)
     {
+        return result;
+    }
+
+    if ((result=sf_synchronize_ctx_init(&g_trunk_space_log_ctx.notify)) != 0) {
         return result;
     }
 

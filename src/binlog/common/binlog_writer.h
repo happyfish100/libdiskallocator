@@ -19,6 +19,8 @@
 #define _DA_BINLOG_WRITER_H_
 
 #include "fastcommon/shared_func.h"
+#include "fastcommon/fc_atomic.h"
+#include "sf/sf_func.h"
 #include "../common/binlog_types.h"
 
 typedef struct {
@@ -42,17 +44,8 @@ static inline void da_binlog_writer_cache_init(DABinlogWriterCache *cache)
     cache->buff_end = cache->buff + sizeof(cache->buff);
 }
 
-static inline int da_binlog_writer_cache_write(DABinlogWriterCache *cache)
-{
-    int len;
 
-    if ((len=cache->current - cache->buff) == 0) {
-        return 0;
-    }
-
-    cache->current = cache->buff;
-    return fc_safe_write(cache->fd, cache->buff, len);
-}
+int da_binlog_writer_cache_write(DABinlogWriterCache *cache, const bool flush);
 
 int da_binlog_writer_global_init();
 
@@ -67,6 +60,23 @@ int da_binlog_writer_synchronize(DABinlogWriter *writer);
 int da_binlog_writer_shrink(DABinlogWriter *writer, void *args);
 
 void da_binlog_writer_finish();
+
+static inline void da_binlog_writer_inc_waiting_count(
+        DABinlogWriter *writer, const int count)
+{
+    FC_ATOMIC_INC_EX(writer->notify.waiting_count, count);
+}
+
+static inline int da_binlog_writer_get_waiting_count(
+        DABinlogWriter *writer)
+{
+    return FC_ATOMIC_GET(writer->notify.waiting_count);
+}
+
+static inline void da_binlog_writer_wait(DABinlogWriter *writer)
+{
+    sf_synchronize_counter_wait(&writer->notify);
+}
 
 #ifdef __cplusplus
 }
