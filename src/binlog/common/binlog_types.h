@@ -33,8 +33,7 @@ typedef struct da_binlog_id_type_pair {
 typedef enum da_binlog_op_type {
     da_binlog_op_type_create = 'c',
     da_binlog_op_type_remove = 'r',
-    da_binlog_op_type_update = 'u',
-    da_binlog_op_type_synchronize = 's'
+    da_binlog_op_type_update = 'u'
 } DABinlogOpType;
 
 typedef struct da_binlog_writer {
@@ -46,15 +45,11 @@ typedef struct da_binlog_writer {
 
 typedef struct da_binlog_record {
     DABinlogIdTypePair key;
-    DABinlogOpType op_type;
     int64_t version;  //for stable sort
-    struct da_binlog_record *next;  //for queue
     BufferInfo buffer;
-    void *args;
+    DABinlogWriter *writer;
+    struct da_binlog_record *next;  //for queue
 } DABinlogRecord;
-
-typedef int (*da_binlog_pack_record_func)(void *args,
-        char *buff, const int size);
 
 typedef int (*da_binlog_unpack_record_func)(const string_t *line,
         void *args, char *error_info);

@@ -25,7 +25,6 @@
 typedef struct da_binlog_type_subdir_pair {
     int type;
     char subdir_name[64];
-    da_binlog_pack_record_func pack_record;
     da_binlog_unpack_record_func unpack_record;
     da_binlog_shrink_func shrink;
 } DABinlogTypeSubdirPair;
@@ -65,14 +64,13 @@ typedef struct {
 } DABinlogFDCacheContext;
 
 
-#define DA_BINLOG_SET_TYPE_SUBDIR_PAIR(pair, _type, _subdir_name, \
-        _pack_record, _unpack_record, _shrink) \
+#define DA_BINLOG_SET_TYPE_SUBDIR_PAIR(pair, _type, \
+        _subdir_name, _unpack_record, _shrink) \
         do {  \
             (pair).type = _type;  \
             snprintf((pair).subdir_name, \
                     sizeof((pair).subdir_name), \
                     "%s", _subdir_name);  \
-            (pair).pack_record = _pack_record;  \
             (pair).unpack_record = _unpack_record; \
             (pair).shrink = _shrink;  \
         } while (0)
