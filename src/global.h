@@ -63,11 +63,6 @@ extern "C" {
 
     extern DiskAllocatorGlobalVars g_disk_allocator_vars;
 
-    /*
-       //TODO
-    const int my_server_id, const int file_block_size
-    */
-
 #ifdef __cplusplus
 }
 #endif
