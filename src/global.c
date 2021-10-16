@@ -13,6 +13,61 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "dio/trunk_read_thread.h"
+#include "dio/trunk_write_thread.h"
+#include "binlog/trunk/trunk_binlog.h"
+#include "trunk/trunk_hashtable.h"
+#include "storage_allocator.h"
 #include "global.h"
 
 DiskAllocatorGlobalVars g_disk_allocator_vars;
+
+int da_load_config(const int my_server_id, const int file_block_size,
+        const DADataGlobalConfig *data_cfg, const char *storage_filename)
+{
+    DA_MY_SERVER_ID = my_server_id;
+    DA_FILE_BLOCK_SIZE = file_block_size;
+    g_disk_allocator_vars.data = *data_cfg;
+    return storage_config_load(&DA_STORE_CFG, storage_filename);
+}
+
+int da_init_start()
+{
+    int result;
+
+    if ((result=trunk_hashtable_init()) != 0) {
+        return result;
+    }
+
+    if ((result=trunk_write_thread_init()) != 0) {
+        return result;
+    }
+
+    if ((result=trunk_read_thread_init()) != 0) {
+        return result;
+    }
+
+    if ((result=storage_allocator_init()) != 0) {
+        return result;
+    }
+
+    if ((result=trunk_binlog_init()) != 0) {
+        return result;
+    }
+
+    if ((result=storage_allocator_prealloc_trunk_freelists()) != 0) {
+        return result;
+    }
+
+    /*
+    if ((result=trunk_prealloc_init()) != 0) {
+        return result;
+    }
+
+    if ((result=trunk_maker_init()) != 0) {
+        return result;
+    }
+    */
+
+    return 0;
+}

@@ -34,11 +34,12 @@ static int load_one_path(DAStorageConfig *storage_cfg,
 
     path_str = iniGetStrValue(ini_ctx->section_name,
             "path", ini_ctx->context);
-    if (path_str == NULL || *path_str == '\0') {
+    if (path_str == NULL) {
+        path_str = DA_DATA_PATH_STR;
+    } else if (*path_str == '\0') {
         logError("file: "__FILE__", line: %d, "
-                "config file: %s, section: %s, item: path "
-                "not exist or is empty", __LINE__,
-                ini_ctx->filename, ini_ctx->section_name);
+                "config file: %s, section: %s, item: path is empty",
+                __LINE__, ini_ctx->filename, ini_ctx->section_name);
         return ENOENT;
     }
 

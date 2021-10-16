@@ -22,14 +22,16 @@
 #include "binlog/common/binlog_types.h"
 #include "storage_config.h"
 
-typedef struct disk_allocator_global_vars {
-    struct {
-        string_t path;   //data path
-        int binlog_buffer_size;
-        int binlog_subdirs;
-        int trunk_index_dump_interval;
-        TimeInfo trunk_index_dump_base_time;
-    } data;
+typedef struct {
+    string_t path;   //data path
+    int binlog_buffer_size;
+    int binlog_subdirs;
+    int trunk_index_dump_interval;
+    TimeInfo trunk_index_dump_base_time;
+} DADataGlobalConfig;
+
+typedef struct {
+    DADataGlobalConfig data;
 
     struct {
         int file_block_size;
@@ -62,6 +64,11 @@ extern "C" {
 #endif
 
     extern DiskAllocatorGlobalVars g_disk_allocator_vars;
+
+    int da_load_config(const int my_server_id, const int file_block_size,
+            const DADataGlobalConfig *data_cfg, const char *storage_filename);
+
+    int da_init_start();
 
 #ifdef __cplusplus
 }

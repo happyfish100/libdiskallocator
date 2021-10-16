@@ -342,7 +342,6 @@ static void *binlog_writer_func(void *arg)
 int da_binlog_writer_global_init()
 {
     int result;
-    pthread_t tid;
 
     if ((result=fast_mblock_init_ex1(&binlog_writer_ctx.allocators.stask,
                     "shrink-task", sizeof(BinlogWriterShrinkTask),
@@ -362,6 +361,13 @@ int da_binlog_writer_global_init()
     {
         return result;
     }
+
+    return 0;
+}
+
+int da_binlog_writer_start()
+{
+    pthread_t tid;
 
     return fc_create_thread(&tid, binlog_writer_func,
             NULL, SF_G_THREAD_STACK_SIZE);
