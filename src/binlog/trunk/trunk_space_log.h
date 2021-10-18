@@ -52,12 +52,13 @@ extern "C" {
     }
 
 #define DA_TRUNK_SPACE_LOG_SET_RECORD_EX(record, _version, \
-        _oid, _fid, _op_type, _trunk_id, _offset, _size)   \
+        _oid, _fid, _op_type, _trunk_id, _length, _offset, _size) \
         (record)->oid = _oid;         \
         (record)->fid = _fid;         \
         (record)->op_type = _op_type; \
         (record)->storage.version = _version;   \
         (record)->storage.trunk_id = _trunk_id; \
+        (record)->storage.length = _length;     \
         (record)->storage.offset = _offset;     \
         (record)->storage.size = _size
 
@@ -65,20 +66,20 @@ extern "C" {
         _oid, _fid, _op_type, _storage)  \
     DA_TRUNK_SPACE_LOG_SET_RECORD_EX(record, _version, \
         _oid, _fid, _op_type, (_storage).trunk_id,  \
-        (_storage).offset, (_storage).size)
+        (_storage).length, (_storage).offset, (_storage).size)
 
     static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_fill_record_ex(
             const int64_t version, const int64_t oid, const unsigned char fid,
-            const char op_type, const uint32_t trunk_id, const uint32_t offset,
-            const uint32_t size)
+            const char op_type, const uint32_t trunk_id, const uint32_t length,
+            const uint32_t offset, const uint32_t size)
     {
         DATrunkSpaceLogRecord *record;
         if ((record=da_trunk_space_log_alloc_record()) == NULL) {
             return NULL;
         }
 
-        DA_TRUNK_SPACE_LOG_SET_RECORD_EX(record, version,
-                oid, fid, op_type, trunk_id, offset, size);
+        DA_TRUNK_SPACE_LOG_SET_RECORD_EX(record, version, oid,
+                fid, op_type, trunk_id, length, offset, size);
         return record;
     }
 
@@ -113,11 +114,11 @@ extern "C" {
             *record, FastBuffer *buffer)
     {
         buffer->length += sprintf(buffer->data + buffer->length,
-                "%u %"PRId64" %"PRId64" %c %u %u %u %u\n",
+                "%u %"PRId64" %"PRId64" %c %u %u %u %u %u\n",
                 (uint32_t)g_current_time, record->storage.version,
                 record->oid, record->op_type, record->fid,
-                record->storage.trunk_id, record->storage.offset,
-                record->storage.size);
+                record->storage.trunk_id, record->storage.length,
+                record->storage.offset, record->storage.size);
     }
 
     int da_trunk_space_log_unpack(const string_t *line,

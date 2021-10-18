@@ -33,7 +33,7 @@ DATrunkSpaceLogContext g_trunk_space_log_ctx;
 #define FD_CACHE_CTX      g_trunk_space_log_ctx.fd_cache_ctx
 #define NEXT_DUMP_TIME    g_trunk_space_log_ctx.next_dump_time
 
-#define SPACE_LOG_FIELD_COUNT             8
+#define SPACE_LOG_FIELD_COUNT             9
 
 #define SPACE_LOG_FIELD_INDEX_TIMESTAMP   0
 #define SPACE_LOG_FIELD_INDEX_VERSION     1
@@ -41,8 +41,9 @@ DATrunkSpaceLogContext g_trunk_space_log_ctx;
 #define SPACE_LOG_FIELD_INDEX_OP_TYPE     3
 #define SPACE_LOG_FIELD_INDEX_FINDEX      4
 #define SPACE_LOG_FIELD_INDEX_TRUNK_ID    5
-#define SPACE_LOG_FIELD_INDEX_OFFSET      6
-#define SPACE_LOG_FIELD_INDEX_SIZE        7
+#define SPACE_LOG_FIELD_INDEX_LENGTH      6
+#define SPACE_LOG_FIELD_INDEX_OFFSET      7
+#define SPACE_LOG_FIELD_INDEX_SIZE        8
 
 int da_trunk_space_log_unpack(const string_t *line,
         DATrunkSpaceLogRecord *record, char *error_info)
@@ -75,6 +76,8 @@ int da_trunk_space_log_unpack(const string_t *line,
             SPACE_LOG_FIELD_INDEX_FINDEX, ' ', 0);
     SF_BINLOG_PARSE_INT_SILENCE(record->storage.trunk_id,
             "trunk id", SPACE_LOG_FIELD_INDEX_TRUNK_ID, ' ', 0);
+    SF_BINLOG_PARSE_INT_SILENCE(record->storage.length,
+            "data length", SPACE_LOG_FIELD_INDEX_LENGTH, ' ', 0);
     SF_BINLOG_PARSE_INT_SILENCE(record->storage.offset, "offset",
             SPACE_LOG_FIELD_INDEX_OFFSET, ' ', 0);
     SF_BINLOG_PARSE_INT_SILENCE(record->storage.size, "size",

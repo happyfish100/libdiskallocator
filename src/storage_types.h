@@ -98,13 +98,15 @@ typedef struct da_trunk_file_info {
 #define DA_PIECE_FIELD_IS_EMPTY(field)  ((field)->trunk_id == 0)
 #define DA_PIECE_FIELD_SET_EMPTY(field) (field)->trunk_id = 0
 #define DA_PIECE_FIELD_DELETE(field)   \
-    (field)->trunk_id = 0; (field)->offset = 0; (field)->size = 0
+    (field)->trunk_id = 0; (field)->length = 0; \
+    (field)->offset = 0; (field)->size = 0
 
 typedef struct da_piece_field_storage {
     int64_t version;
-    uint32_t trunk_id;  //0 for not inited
-    uint32_t offset;
-    uint32_t size;
+    uint32_t trunk_id; //0 for not inited
+    uint32_t length;   //data length
+    uint32_t offset;   //space offset
+    uint32_t size;     //space size
 } DAPieceFieldStorage;
 
 typedef struct da_trunk_space_log_record {
