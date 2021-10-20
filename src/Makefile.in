@@ -32,10 +32,10 @@ BINLOG_OBJS = binlog/common/binlog_fd_cache.lo binlog/common/write_fd_cache.lo \
 DIO_OBJS =  dio/trunk_write_thread.lo dio/trunk_read_thread.lo \
             dio/trunk_fd_cache.lo dio/read_buffer_pool.lo
 
-TRUNK_OBJS = trunk/trunk_allocator.lo trunk/trunk_id_info.lo \
-             trunk/trunk_hashtable.lo trunk/trunk_freelist.lo
-#               trunk/trunk_maker.lo trunk/trunk_prealloc.lo    \
-#               trunk/trunk_reclaim.lo
+TRUNK_OBJS = trunk/trunk_allocator.lo trunk/trunk_id_info.lo  \
+             trunk/trunk_hashtable.lo trunk/trunk_freelist.lo \
+             trunk/trunk_prealloc.lo  trunk/trunk_maker.lo    \
+             trunk/trunk_reclaim.lo
 
 SHARED_OBJS = $(BINLOG_OBJS) $(DIO_OBJS) $(TRUNK_OBJS) $(TOP_OBJS)
 

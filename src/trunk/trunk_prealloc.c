@@ -23,8 +23,8 @@
 #include "fastcommon/fc_queue.h"
 #include "fastcommon/thread_pool.h"
 #include "sf/sf_global.h"
-#include "../server_global.h"
-#include "storage_allocator.h"
+#include "../global.h"
+#include "../storage_allocator.h"
 #include "trunk_maker.h"
 #include "trunk_prealloc.h"
 
@@ -299,8 +299,8 @@ static int do_prealloc_trunks()
 
     current_time = g_current_time;
     localtime_r(&current_time, &tm_end);
-    tm_end.tm_hour = g_storage_cfg.prealloc_space.end_time.hour;
-    tm_end.tm_min = g_storage_cfg.prealloc_space.end_time.minute;
+    tm_end.tm_hour = DA_STORE_CFG.prealloc_space.end_time.hour;
+    tm_end.tm_min = DA_STORE_CFG.prealloc_space.end_time.minute;
     prealloc_ctx.prealloc_end_time = mktime(&tm_end);
     if (g_current_time > prealloc_ctx.prealloc_end_time) {
         logWarning("file: "__FILE__", line: %d, "
@@ -319,7 +319,7 @@ static int do_prealloc_trunks()
         return 0;
     }
 
-    thread_count = FC_MIN(count, g_storage_cfg.trunk_prealloc_threads);
+    thread_count = FC_MIN(count, DA_STORE_CFG.trunk_prealloc_threads);
     prealloc_ctx.finished = false;
     for (i=0; i<thread_count; i++) {
         fc_thread_pool_run(&prealloc_ctx.thread_pool,
@@ -372,7 +372,7 @@ static int trunk_prealloc_setup_schedule()
     ScheduleEntry scheduleEntry;
 
     INIT_SCHEDULE_ENTRY_EX1(scheduleEntry, sched_generate_next_id(),
-            g_storage_cfg.prealloc_space.start_time, 86400,
+            DA_STORE_CFG.prealloc_space.start_time, 86400,
             prealloc_trunks_func, NULL, true);
     scheduleArray.entries = &scheduleEntry;
     scheduleArray.count = 1;
@@ -387,12 +387,12 @@ static int init_thread_args()
 
     prealloc_ctx.thread_args = (TrunkPreallocThreadArg *)fc_malloc(
             sizeof(TrunkPreallocThreadArg) *
-            g_storage_cfg.trunk_prealloc_threads);
+            DA_STORE_CFG.trunk_prealloc_threads);
     if (prealloc_ctx.thread_args == NULL) {
         return ENOMEM;
     }
 
-    end = prealloc_ctx.thread_args + g_storage_cfg.trunk_prealloc_threads;
+    end = prealloc_ctx.thread_args + DA_STORE_CFG.trunk_prealloc_threads;
     for (p=prealloc_ctx.thread_args; p<end; p++) {
         p->result = -1;
         if ((result=init_pthread_lock_cond_pair(&p->lcp)) != 0) {
@@ -412,7 +412,7 @@ int trunk_prealloc_init()
     int alloc_elements_once;
     int alloc_elements_limit;
 
-    alloc_elements_once = g_storage_cfg.trunk_prealloc_threads * 2;
+    alloc_elements_once = DA_STORE_CFG.trunk_prealloc_threads * 2;
     alloc_elements_limit = alloc_elements_once;
     if ((result=fast_mblock_init_ex1(&prealloc_ctx.task_allocator,
                     "prealloc_task", sizeof(TrunkPreallocTask),
@@ -443,7 +443,7 @@ int trunk_prealloc_init()
         return result;
     }
 
-    limit = g_storage_cfg.trunk_prealloc_threads;
+    limit = DA_STORE_CFG.trunk_prealloc_threads;
     if ((result=fc_thread_pool_init(&prealloc_ctx.thread_pool,
                     "prealloc", limit, SF_G_THREAD_STACK_SIZE,
                     max_idle_time, min_idle_count,

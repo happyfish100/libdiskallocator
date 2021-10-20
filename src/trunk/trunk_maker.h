@@ -31,20 +31,9 @@ extern "C" {
 
     int trunk_maker_init();
 
-    //TODO
-    /*
     int trunk_maker_allocate_ex(DATrunkAllocator *allocator,
             const bool urgent, const bool need_lock,
             trunk_allocate_done_callback callback, void *arg);
-            */
-
-    //TODO
-    static inline int trunk_maker_allocate_ex(DATrunkAllocator *allocator,
-            const bool urgent, const bool need_lock,
-            trunk_allocate_done_callback callback, void *arg)
-    {
-        return 0;
-    }
 
 #define trunk_maker_allocate(allocator) \
     trunk_maker_allocate_ex(allocator, false, true, NULL, NULL)

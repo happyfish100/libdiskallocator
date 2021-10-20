@@ -205,7 +205,7 @@ static int do_prealloc_trunk(TrunkMakerThreadInfo *thread,
         return result;
     }
     space.offset = 0;
-    space.size = g_storage_cfg.trunk_file_size;
+    space.size = DA_STORE_CFG.trunk_file_size;
 
     if ((result=trunk_write_thread_push_trunk_op(DA_IO_TYPE_CREATE_TRUNK,
                     &space, create_trunk_done, thread)) == 0)
@@ -256,7 +256,7 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     }
 
     used_bytes = __sync_fetch_and_add(&trunk->used.bytes, 0);
-    if (trunk->size - used_bytes < DA_DA_FILE_BLOCK_SIZE) {
+    if ((int64_t)trunk->size - used_bytes < DA_FILE_BLOCK_SIZE) {
         return ENOENT;
     }
 
@@ -291,8 +291,8 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     long_to_comma_str(time_used, time_buff);
     sprintf(time_prompt, "time used: %s ms", time_buff);
     logInfo("file: "__FILE__", line: %d, "
-            "path index: %d, reclaiming trunk id: %"PRId64", "
-            "last used bytes: %"PRId64", current used bytes: %"PRId64", "
+            "path index: %d, reclaiming trunk id: %u, "
+            "last used bytes: %"PRId64", current used bytes: %u, "
             "last usage ratio: %.2f%%, result: %d, %s", __LINE__, task->
             allocator->path_info->store.index, trunk->id_info.id,
             used_bytes, trunk->used.bytes, 100.00 * (double)used_bytes /
@@ -328,10 +328,10 @@ static int do_allocate_trunk(TrunkMakerThreadInfo *thread, TrunkMakerTask *task,
     }
 
     avail_enough = task->allocator->path_info->space_stat.avail -
-        g_storage_cfg.trunk_file_size > task->allocator->
+        DA_STORE_CFG.trunk_file_size > task->allocator->
         path_info->reserved_space.value;
     if (task->allocator->path_info->space_stat.used_ratio <=
-            g_storage_cfg.reclaim_trunks_on_path_usage)
+            DA_STORE_CFG.reclaim_trunks_on_path_usage)
     {
         need_reclaim = !avail_enough;
     } else {
@@ -429,7 +429,7 @@ int trunk_maker_init()
     TrunkMakerThreadInfo *thread;
     TrunkMakerThreadInfo *end;
 
-    tmaker_ctx.thread_array.count = g_storage_cfg.trunk_prealloc_threads;
+    tmaker_ctx.thread_array.count = DA_STORE_CFG.trunk_prealloc_threads;
     bytes = sizeof(TrunkMakerThreadInfo) * tmaker_ctx.thread_array.count;
     tmaker_ctx.thread_array.threads =
         (TrunkMakerThreadInfo *)fc_malloc(bytes);

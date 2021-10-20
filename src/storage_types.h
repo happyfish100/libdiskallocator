@@ -37,7 +37,11 @@
 #define DA_MAX_SPLIT_COUNT_PER_SPACE_ALLOC   2
 #define DA_SLICE_SN_PARRAY_INIT_ALLOC_COUNT  4
 
+struct da_slice_op_context;
 struct da_trunk_allocator;
+
+typedef void (*da_rw_done_callback_func)(
+        struct da_slice_op_context *op_ctx, void *arg);
 
 typedef struct {
     int index;   //the inner index is important!
@@ -114,6 +118,7 @@ typedef struct da_trunk_space_log_record {
     unsigned char fid;  //filed ID (key)
     char op_type;
     DAPieceFieldStorage storage;
+    struct fast_mblock_man *allocator;
     struct da_trunk_space_log_record *next;
 } DATrunkSpaceLogRecord;
 
@@ -124,5 +129,27 @@ typedef struct da_trunk_index_record {
     uint32_t used_bytes;
     uint32_t free_start;
 } DATrunkIndexRecord;
+
+typedef struct da_slice_op_context {
+    da_rw_done_callback_func rw_done_callback; //for caller (data or nio thread)
+    void *arg;  //for signal data thread or nio task
+    short result;
+    int done_bytes;
+
+    struct {
+        DATrunkSpaceLogRecord *record;
+
+#ifdef OS_LINUX
+        FSIOBufferType buffer_type;
+#endif
+        char *buff;  //read or write buffer
+    } info;
+
+#ifdef OS_LINUX
+    iovec_array_t iovec_array;
+    AIOBufferPtrArray aio_buffer_parray;
+#endif
+
+} DASliceOpContext;
 
 #endif

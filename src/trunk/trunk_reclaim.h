@@ -18,21 +18,12 @@
 #define _TRUNK_RECLAIM_H
 
 #include "fastcommon/uniq_skiplist.h"
-#include "fastcommon/multi_skiplist.h"
-#include "storage_config.h"
+#include "../storage_config.h"
 #include "trunk_allocator.h"
 
-struct trunk_reclaim_slice_info;
-
 typedef struct trunk_reclaim_block_info {
-    OBEntry *ob;
-    struct trunk_reclaim_slice_info *head;
+    DATrunkSpaceLogRecord *head;
 } TrunkReclaimBlockInfo;
-
-typedef struct trunk_reclaim_slice_info {
-    DABlockSliceKeyInfo bs_key;
-    struct trunk_reclaim_slice_info *next;
-} TrunkReclaimSliceInfo;
 
 typedef struct trunk_reclaim_block_array {
     int count;
@@ -40,15 +31,10 @@ typedef struct trunk_reclaim_block_array {
     TrunkReclaimBlockInfo *blocks;
 } TrunkReclaimBlockArray;
 
-typedef struct trunk_reclaim_slice_array {
-    int count;
-    int alloc;
-    TrunkReclaimSliceInfo *slices;
-} TrunkReclaimSliceArray;
-
 typedef struct trunk_reclaim_context {
+    struct fast_mblock_man record_allocator;
+    UniqSkiplistPair spair;
     TrunkReclaimBlockArray barray;
-    TrunkReclaimSliceArray sarray;
     DASliceOpContext op_ctx;
     int buffer_size;
     struct {

@@ -17,8 +17,7 @@
 #ifndef _TRUNK_RPEALLOC_H
 #define _TRUNK_RPEALLOC_H
 
-#include "../../common/da_types.h"
-#include "storage_config.h"
+#include "../storage_config.h"
 #include "trunk_allocator.h"
 
 #ifdef __cplusplus
