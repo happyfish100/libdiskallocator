@@ -23,6 +23,7 @@
 
 typedef struct trunk_reclaim_block_info {
     DATrunkSpaceLogRecord *head;
+    int total_size;
 } TrunkReclaimBlockInfo;
 
 typedef struct trunk_reclaim_block_array {
@@ -37,10 +38,7 @@ typedef struct trunk_reclaim_context {
     TrunkReclaimBlockArray barray;
     DASliceOpContext op_ctx;
     int buffer_size;
-    struct {
-        bool finished;
-        pthread_lock_cond_pair_t lcp; //for notify
-    } notify;
+    SFSynchronizeContext notify;
 } TrunkReclaimContext;
 
 

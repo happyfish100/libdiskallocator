@@ -27,20 +27,13 @@
 #include "../global.h"
 #include "../storage_allocator.h"
 #include "../dio/trunk_fd_cache.h"
+#include "../dio/trunk_read_thread.h"
+#include "../dio/trunk_write_thread.h"
 #include "../binlog/trunk/trunk_space_log.h"
 #include "trunk_reclaim.h"
 
 #define SKPLIST_INIT_LEVEL_COUNT  4
 #define SKPLIST_MAX_LEVEL_COUNT  12
-
-static void reclaim_slice_rw_done_callback(DASliceOpContext *op_ctx,
-        TrunkReclaimContext *rctx)
-{
-    PTHREAD_MUTEX_LOCK(&rctx->notify.lcp.lock);
-    rctx->notify.finished = true;
-    pthread_cond_signal(&rctx->notify.lcp.cond);
-    PTHREAD_MUTEX_UNLOCK(&rctx->notify.lcp.lock);
-}
 
 static int space_log_record_alloc_init(void *element, void *args)
 {
@@ -67,13 +60,13 @@ int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
     int result;
 
 #ifdef OS_LINUX
-    rctx->op_ctx.info.buffer_type = da_buffer_type_array;
+    rctx->op_ctx.buffer_type = da_buffer_type_array;
     rctx->buffer_size = 0;
-    rctx->op_ctx.info.buff = NULL;
+    rctx->op_ctx.buff = NULL;
 #else
     rctx->buffer_size = 256 * 1024;
-    rctx->op_ctx.info.buff = (char *)fc_malloc(rctx->buffer_size);
-    if (rctx->op_ctx.info.buff == NULL) {
+    rctx->op_ctx.buff = (char *)fc_malloc(rctx->buffer_size);
+    if (rctx->op_ctx.buff == NULL) {
         return ENOMEM;
     }
 #endif
@@ -98,24 +91,17 @@ int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
         return result;
     }
 
-    rctx->notify.finished = false;
-    rctx->op_ctx.rw_done_callback = (da_rw_done_callback_func)
-        reclaim_slice_rw_done_callback;
-    rctx->op_ctx.arg = rctx;
+    rctx->notify.result = 0;
     return 0;
 }
 
-static int realloc_rb_array(TrunkReclaimBlockArray *array,
-        const int target_count)
+static int realloc_rb_array(TrunkReclaimBlockArray *array)
 {
     TrunkReclaimBlockInfo *blocks;
     int new_alloc;
     int bytes;
 
     new_alloc = (array->alloc > 0) ? 2 * array->alloc : 1024;
-    while (new_alloc < target_count) {
-        new_alloc *= 2;
-    }
     bytes = sizeof(TrunkReclaimBlockInfo) * new_alloc;
     blocks = (TrunkReclaimBlockInfo *)fc_malloc(bytes);
     if (blocks == NULL) {
@@ -243,41 +229,38 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
         TrunkReclaimBlockArray *barray)
 {
     int result;
+    UniqSkiplistIterator it;
     DATrunkSpaceLogRecord *record;
     DATrunkSpaceLogRecord *tail;
     TrunkReclaimBlockInfo *block;
 
+    uniq_skiplist_iterator(rctx->spair.skiplist, &it);
     block = barray->blocks;
-    /*
-    while (record < send) {
-
-    if (barray->alloc <= barray->count) {
-        if ((result=realloc_rb_array(barray, sarray->count)) != 0) {
-            return result;
-        }
-    }
-
-        block->head = tail = record;
-        record++;
-
-        //TODO
-        while (record < send && 1 == 0)
-        {
-            if (tail->storage.offset + tail->storage.length ==
-                    record->storage.offset)
-            {  //combine slices
-                tail->storage.length += record->storage.length;
-            } else {
-                tail->next = record;
-                tail = record;
+    record = uniq_skiplist_next(&it);
+    while (record != NULL) {
+        if (barray->alloc <= block - barray->blocks) {
+            barray->count = block - barray->blocks;
+            if ((result=realloc_rb_array(barray)) != 0) {
+                return result;
             }
-            record++;
+            block = barray->blocks + barray->count;
         }
 
-        block++;
+        block->total_size = record->storage.size;
+        block->head = tail = record;
+        while ((record=uniq_skiplist_next(&it)) != NULL &&
+                (tail->storage.offset + tail->storage.size ==
+                 record->storage.offset) && (block->total_size +
+                     record->storage.size <= DA_FILE_BLOCK_SIZE))
+        {
+            block->total_size += record->storage.size;
+            tail->next = record;
+            tail = record;
+        }
+
         tail->next = NULL;  //end of record chain
+        block++;
     }
-    */
 
     barray->count = block - barray->blocks;
     return 0;
@@ -286,16 +269,16 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
 static int migrate_prepare(TrunkReclaimContext *rctx,
         DATrunkSpaceLogRecord *record)
 {
-    rctx->op_ctx.info.record = record;
+    rctx->op_ctx.storage = &record->storage;
 
 #ifdef OS_LINUX
 #else
-    if (rctx->buffer_size < record->storage.length) {
+    if (rctx->buffer_size < record->storage.size) {
         char *buff;
         int buffer_size;
 
         buffer_size = rctx->buffer_size * 2;
-        while (buffer_size < record->storage.length) {
+        while (buffer_size < record->storage.size) {
             buffer_size *= 2;
         }
         buff = (char *)fc_malloc(buffer_size);
@@ -303,8 +286,8 @@ static int migrate_prepare(TrunkReclaimContext *rctx,
             return ENOMEM;
         }
 
-        free(rctx->op_ctx.info.buff);
-        rctx->op_ctx.info.buff = buff;
+        free(rctx->op_ctx.buff);
+        rctx->op_ctx.buff = buff;
         rctx->buffer_size = buffer_size;
     }
 #endif
@@ -319,84 +302,88 @@ static inline void log_rw_error(DASliceOpContext *op_ctx,
     log_level = (result == ignore_errno) ? LOG_DEBUG : LOG_ERR;
     log_it_ex(&g_log_context, log_level,
             "file: "__FILE__", line: %d, %s slice fail, "
-            "oid: %"PRId64", fid: %u, slice offset: %d, length: %d, "
+            "trunk id: %u, offset: %u, length: %u, size: %u, "
             "errno: %d, error info: %s", __LINE__, caption,
-            op_ctx->info.record->oid, op_ctx->info.record->fid,
-            op_ctx->info.record->storage.offset,
-            op_ctx->info.record->storage.length,
+            op_ctx->storage->trunk_id, op_ctx->storage->offset,
+            op_ctx->storage->length, op_ctx->storage->size,
             result, STRERROR(result));
+}
+
+static int slice_write(TrunkReclaimContext *rctx,
+        const uint64_t oid, DATrunkSpaceInfo *space)
+{
+    int count;
+    int result;
+    char *buff;
+
+    count = 1;
+    if ((result=storage_allocator_reclaim_alloc(oid, rctx->op_ctx.
+                    storage->length, space, &count)) != 0)
+    {
+        logError("file: "__FILE__", line: %d, "
+                "alloc disk space %d bytes fail, "
+                "errno: %d, error info: %s", __LINE__,
+                rctx->op_ctx.storage->length,
+                result, STRERROR(result));
+        return result;
+    }
+
+#ifdef OS_LINUX
+    buff = op_ctx->aligned_buffer->buff + op_ctx->aligned_buffer->offset;
+#else
+    buff = rctx->op_ctx.buff;
+#endif
+
+    return trunk_write_thread_by_buff_synchronize(space, buff, &rctx->notify);
 }
 
 static int migrate_one_slice(TrunkReclaimContext *rctx,
         DATrunkSpaceLogRecord *record)
 {
     int result;
+    DATrunkSpaceInfo space;
 
     if ((result=migrate_prepare(rctx, record)) != 0) {
         return result;
     }
 
-    /*
-    if ((result=da_slice_read(&rctx->op_ctx)) == 0) {
-        PTHREAD_MUTEX_LOCK(&rctx->notify.lcp.lock);
-        while (!rctx->notify.finished && SF_G_CONTINUE_FLAG) {
-            pthread_cond_wait(&rctx->notify.lcp.cond,
-                    &rctx->notify.lcp.lock);
-        }
-        result = rctx->notify.finished ? rctx->op_ctx.result : EINTR;
-        rctx->notify.finished = false;  //reset for next call
-        PTHREAD_MUTEX_UNLOCK(&rctx->notify.lcp.lock);
-    }
-    */
-
-    if (result != 0) {
+    if ((result=da_slice_read(&rctx->op_ctx, &rctx->notify)) != 0) {
         log_rw_error(&rctx->op_ctx, result, ENOENT, "read");
         return result == ENOENT ? 0 : result;
     }
 
-    rctx->op_ctx.info.record->storage.length = rctx->op_ctx.done_bytes;
-    /*
-    if ((result=da_slice_write(&rctx->op_ctx)) == 0) {
-        PTHREAD_MUTEX_LOCK(&rctx->notify.lcp.lock);
-        while (!rctx->notify.finished && SF_G_CONTINUE_FLAG) {
-            pthread_cond_wait(&rctx->notify.lcp.cond,
-                    &rctx->notify.lcp.lock);
-        }
-        if (rctx->notify.finished) {
-            rctx->notify.finished = false;  //reset for next call
-        } else {
-            rctx->op_ctx.result = EINTR;
-        }
-        PTHREAD_MUTEX_UNLOCK(&rctx->notify.lcp.lock);
-    } else {
-        rctx->op_ctx.result = result;
+    if ((result=slice_write(rctx, record->oid, &space)) != 0) {
+        log_rw_error(&rctx->op_ctx, result, 0, "write");
+        return result;
     }
-     */
+
+    record->storage.trunk_id = space.id_info.id;
+    record->storage.offset = space.offset;
+    record->storage.size = space.size;
 
 #ifdef OS_LINUX
     da_release_aio_buffers(&rctx->op_ctx);
 #endif
 
-    if (rctx->op_ctx.result != 0) {
-        log_rw_error(&rctx->op_ctx, rctx->op_ctx.result, 0, "write");
-        return rctx->op_ctx.result;
-    }
-
-    //TODO
     return 0;
 }
 
 static int migrate_one_block(TrunkReclaimContext *rctx,
         TrunkReclaimBlockInfo *block)
 {
+    DATrunkSpaceLogRecord holder;
     DATrunkSpaceLogRecord *record;
     int result;
 
+    holder = *(block->head);
+    holder.storage.length = holder.storage.size = block->total_size;
+    if ((result=migrate_one_slice(rctx, &holder)) != 0) {
+        return result;
+    }
+
+    //TODO
     record = block->head;
     while (record != NULL) {
-        if ((result=migrate_one_slice(rctx, record)) != 0) {
-            return result;
-        }
         record = record->next;
     }
 

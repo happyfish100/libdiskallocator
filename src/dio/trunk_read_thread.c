@@ -35,6 +35,7 @@
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
 #include "../global.h"
+#include "../trunk/trunk_hashtable.h"
 #include "trunk_fd_cache.h"
 #ifdef OS_LINUX
 #include "read_buffer_pool.h"
@@ -664,4 +665,55 @@ static void *trunk_read_thread_func(void *arg)
 #endif
 
     return NULL;
+}
+
+static void slice_read_done(struct trunk_read_io_buffer
+        *record, const int result)
+{
+    SFSynchronizeContext *sctx;
+
+    sctx = (SFSynchronizeContext *)record->notify.arg;
+    PTHREAD_MUTEX_LOCK(&sctx->lcp.lock);
+    sctx->result = result;
+    pthread_cond_signal(&sctx->lcp.cond);
+    PTHREAD_MUTEX_UNLOCK(&sctx->lcp.lock);
+}
+
+int da_slice_read(DASliceOpContext *op_ctx, SFSynchronizeContext *sctx)
+{
+    int result;
+    DATrunkSpaceInfo space;
+    DATrunkFileInfo *trunk;
+
+    if ((trunk=trunk_hashtable_get(op_ctx->storage->trunk_id)) == NULL) {
+        return ENOENT;
+    }
+
+    sctx->result = INT16_MIN;
+    space.store = &trunk->allocator->path_info->store;
+    space.id_info = trunk->id_info;
+    space.offset = op_ctx->storage->offset;
+    space.size = op_ctx->storage->size;
+
+#ifdef OS_LINUX
+    result = trunk_read_thread_push(&space, op_ctx->storage->length,
+            &op_ctx->aligned_buffer, slice_read_done, sctx);
+#else
+    result = trunk_read_thread_push(&space, op_ctx->storage->length,
+            op_ctx->buff, slice_read_done, sctx);
+#endif
+
+    if (result != 0) {
+        return result;
+    }
+
+    PTHREAD_MUTEX_LOCK(&sctx->lcp.lock);
+    while (sctx->result == INT16_MIN && SF_G_CONTINUE_FLAG) {
+        pthread_cond_wait(&sctx->lcp.cond,
+                &sctx->lcp.lock);
+    }
+    result = sctx->result == INT16_MIN ? EINTR : sctx->result;
+    PTHREAD_MUTEX_UNLOCK(&sctx->lcp.lock);
+
+    return result;
 }

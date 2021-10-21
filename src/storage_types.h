@@ -131,23 +131,17 @@ typedef struct da_trunk_index_record {
 } DATrunkIndexRecord;
 
 typedef struct da_slice_op_context {
-    da_rw_done_callback_func rw_done_callback; //for caller (data or nio thread)
-    void *arg;  //for signal data thread or nio task
-    short result;
     int done_bytes;
 
-    struct {
-        DATrunkSpaceLogRecord *record;
+    DAPieceFieldStorage *storage;
 
 #ifdef OS_LINUX
-        FSIOBufferType buffer_type;
+    FSIOBufferType buffer_type;
 #endif
-        char *buff;  //read or write buffer
-    } info;
+    char *buff;  //read or write buffer
 
 #ifdef OS_LINUX
-    iovec_array_t iovec_array;
-    AIOBufferPtrArray aio_buffer_parray;
+    AlignedReadBuffer *aio_buffer;
 #endif
 
 } DASliceOpContext;

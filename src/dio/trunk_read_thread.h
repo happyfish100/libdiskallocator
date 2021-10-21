@@ -87,6 +87,8 @@ extern "C" {
 
 #endif
 
+    int da_slice_read(DASliceOpContext *op_ctx, SFSynchronizeContext *sctx);
+
 #ifdef __cplusplus
 }
 #endif
