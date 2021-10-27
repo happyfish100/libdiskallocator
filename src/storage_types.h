@@ -21,6 +21,7 @@
 #include "fastcommon/shared_buffer.h"
 #include "fastcommon/uniq_skiplist.h"
 #include "sf/sf_types.h"
+#include "binlog/common/binlog_types.h"
 
 #define DA_SPACE_ALIGN_SIZE  8
 #define DA_TRUNK_BINLOG_MAX_RECORD_SIZE    128
@@ -39,9 +40,13 @@
 
 struct da_slice_op_context;
 struct da_trunk_allocator;
+struct da_piece_field_info;
 
 typedef void (*da_rw_done_callback_func)(
         struct da_slice_op_context *op_ctx, void *arg);
+
+typedef int (*da_redo_queue_push_func)(const struct
+        da_piece_field_info *field, struct fc_queue_info *space_chain);
 
 typedef struct {
     int index;   //the inner index is important!
@@ -112,6 +117,13 @@ typedef struct da_piece_field_storage {
     uint32_t offset;   //space offset
     uint32_t size;     //space size
 } DAPieceFieldStorage;
+
+typedef struct da_piece_field_info {
+    uint64_t oid;
+    unsigned char fid;  //filed ID (key)
+    DABinlogOpType op_type;
+    DAPieceFieldStorage storage;
+} DAPieceFieldInfo;
 
 typedef struct da_trunk_space_log_record {
     int64_t oid;        //object ID

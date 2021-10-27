@@ -17,6 +17,8 @@
 #include "dio/trunk_write_thread.h"
 #include "binlog/trunk/trunk_binlog.h"
 #include "trunk/trunk_hashtable.h"
+#include "trunk/trunk_prealloc.h"
+#include "trunk/trunk_maker.h"
 #include "storage_allocator.h"
 #include "global.h"
 
@@ -31,10 +33,11 @@ int da_load_config(const int my_server_id, const int file_block_size,
     return storage_config_load(&DA_STORE_CFG, storage_filename);
 }
 
-int da_init_start()
+int da_init_start(da_redo_queue_push_func redo_queue_push_func)
 {
     int result;
 
+    DA_REDO_QUEUE_PUSH_FUNC = redo_queue_push_func;
     if ((result=trunk_hashtable_init()) != 0) {
         return result;
     }
@@ -59,7 +62,6 @@ int da_init_start()
         return result;
     }
 
-    /*
     if ((result=trunk_prealloc_init()) != 0) {
         return result;
     }
@@ -67,7 +69,6 @@ int da_init_start()
     if ((result=trunk_maker_init()) != 0) {
         return result;
     }
-    */
 
     return 0;
 }

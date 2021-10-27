@@ -373,7 +373,12 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
 {
     DATrunkSpaceLogRecord holder;
     DATrunkSpaceLogRecord *record;
+    DATrunkSpaceLogRecord *old_record;
+    DATrunkSpaceLogRecord *new_record;
     int result;
+    uint32_t offset;
+    DAPieceFieldInfo field;
+    struct fc_queue_info space_chain;
 
     holder = *(block->head);
     holder.storage.length = holder.storage.size = block->total_size;
@@ -381,9 +386,49 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
         return result;
     }
 
-    //TODO
+    offset = holder.storage.offset;
     record = block->head;
     while (record != NULL) {
+        old_record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
+                &rctx->record_allocator);
+        if (old_record == NULL) {
+            return ENOMEM;
+        }
+
+        new_record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
+                &rctx->record_allocator);
+        if (new_record == NULL) {
+            return ENOMEM;
+        }
+
+        old_record->oid = record->oid;
+        old_record->fid = record->fid;
+        old_record->op_type = da_binlog_op_type_reclaim_space;
+        old_record->storage = record->storage;
+
+        new_record->oid = record->oid;
+        new_record->fid = record->fid;
+        new_record->op_type = da_binlog_op_type_consume_space;
+        new_record->storage.version = record->storage.version;
+        new_record->storage.trunk_id = holder.storage.trunk_id;
+        new_record->storage.offset = offset;
+        new_record->storage.length = record->storage.length;
+        new_record->storage.size = record->storage.size;
+
+        old_record->next = new_record;
+        new_record->next = NULL;
+        space_chain.head = old_record;
+        space_chain.tail = new_record;
+
+        field.oid = record->oid;
+        field.fid = record->fid;
+        field.op_type = da_binlog_op_type_update;
+        field.storage = new_record->storage;
+        if ((result=DA_REDO_QUEUE_PUSH_FUNC(&field, &space_chain)) != 0) {
+            return result;
+        }
+
+        offset += record->storage.size;
         record = record->next;
     }
 

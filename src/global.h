@@ -40,6 +40,7 @@ typedef struct {
 
     int my_server_id;
 
+    da_redo_queue_push_func redo_queue_push_func;
 } DiskAllocatorGlobalVars;
 
 #define DA_DATA_PATH           g_disk_allocator_vars.data.path
@@ -59,6 +60,8 @@ typedef struct {
 #define DA_STORE_CFG           g_disk_allocator_vars.storage.cfg
 #define DA_FILE_BLOCK_SIZE     g_disk_allocator_vars.storage.file_block_size
 
+#define DA_REDO_QUEUE_PUSH_FUNC g_disk_allocator_vars.redo_queue_push_func
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -68,7 +71,7 @@ extern "C" {
     int da_load_config(const int my_server_id, const int file_block_size,
             const DADataGlobalConfig *data_cfg, const char *storage_filename);
 
-    int da_init_start();
+    int da_init_start(da_redo_queue_push_func redo_queue_push_func);
 
 #ifdef __cplusplus
 }
