@@ -78,6 +78,13 @@ extern "C" {
                 &g_trunk_space_log_ctx.record_allocator, count, chain);
     }
 
+    static inline void da_trunk_space_log_free_chain(
+            struct fc_queue_info *chain)
+    {
+        fc_queue_free_chain(&g_trunk_space_log_ctx.queue,
+                &g_trunk_space_log_ctx.record_allocator, chain);
+    }
+
     static inline void da_trunk_space_log_push_chain(
             struct fc_queue_info *qinfo)
     {

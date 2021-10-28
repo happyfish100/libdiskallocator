@@ -87,11 +87,16 @@ int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
         return result;
     }
 
-    if ((result=init_pthread_lock_cond_pair(&rctx->notify.lcp)) != 0) {
+    if ((result=init_pthread_lock_cond_pair(&rctx->notifies.rw.lcp)) != 0) {
         return result;
     }
+    rctx->notifies.rw.result = 0;
 
-    rctx->notify.result = 0;
+    if ((result=init_pthread_lock_cond_pair(&rctx->notifies.log.lcp)) != 0) {
+        return result;
+    }
+    rctx->notifies.log.waiting_count = 0;
+
     return 0;
 }
 
@@ -234,6 +239,7 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
     DATrunkSpaceLogRecord *tail;
     TrunkReclaimBlockInfo *block;
 
+    rctx->slice_count = 0;
     uniq_skiplist_iterator(rctx->spair.skiplist, &it);
     block = barray->blocks;
     record = uniq_skiplist_next(&it);
@@ -245,6 +251,7 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
             }
             block = barray->blocks + barray->count;
         }
+        rctx->slice_count++;
 
         block->total_size = record->storage.size;
         block->head = tail = record;
@@ -256,6 +263,7 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
             block->total_size += record->storage.size;
             tail->next = record;
             tail = record;
+            rctx->slice_count++;
         }
 
         tail->next = NULL;  //end of record chain
@@ -334,7 +342,8 @@ static int slice_write(TrunkReclaimContext *rctx,
     buff = rctx->op_ctx.buff;
 #endif
 
-    return trunk_write_thread_by_buff_synchronize(space, buff, &rctx->notify);
+    return trunk_write_thread_by_buff_synchronize(
+            space, buff, &rctx->notifies.rw);
 }
 
 static int migrate_one_slice(TrunkReclaimContext *rctx,
@@ -347,7 +356,7 @@ static int migrate_one_slice(TrunkReclaimContext *rctx,
         return result;
     }
 
-    if ((result=da_slice_read(&rctx->op_ctx, &rctx->notify)) != 0) {
+    if ((result=da_slice_read(&rctx->op_ctx, &rctx->notifies.rw)) != 0) {
         log_rw_error(&rctx->op_ctx, result, ENOENT, "read");
         return result == ENOENT ? 0 : result;
     }
@@ -424,7 +433,9 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
         field.fid = record->fid;
         field.op_type = da_binlog_op_type_update;
         field.storage = new_record->storage;
-        if ((result=DA_REDO_QUEUE_PUSH_FUNC(&field, &space_chain)) != 0) {
+        if ((result=DA_REDO_QUEUE_PUSH_FUNC(&field, &space_chain,
+                        &rctx->notifies.log)) != 0)
+        {
             return result;
         }
 
@@ -441,6 +452,9 @@ static int migrate_blocks(TrunkReclaimContext *rctx)
     TrunkReclaimBlockInfo *bend;
     int result;
 
+    __sync_add_and_fetch(&rctx->notifies.log.
+            waiting_count, rctx->slice_count);
+
     bend = rctx->barray.blocks + rctx->barray.count;
     for (block=rctx->barray.blocks; block<bend; block++) {
         if ((result=migrate_one_block(rctx, block)) != 0) {
@@ -448,6 +462,7 @@ static int migrate_blocks(TrunkReclaimContext *rctx)
         }
     }
 
+    sf_synchronize_counter_wait(&rctx->notifies.log);
     return 0;
 }
 

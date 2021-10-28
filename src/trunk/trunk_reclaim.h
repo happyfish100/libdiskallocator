@@ -37,8 +37,12 @@ typedef struct trunk_reclaim_context {
     UniqSkiplistPair spair;
     TrunkReclaimBlockArray barray;
     DASliceOpContext op_ctx;
+    int slice_count;
     int buffer_size;
-    SFSynchronizeContext notify;
+    struct {
+        SFSynchronizeContext rw;   //for read and write
+        SFSynchronizeContext log;  //for binlog
+    } notifies;
 } TrunkReclaimContext;
 
 

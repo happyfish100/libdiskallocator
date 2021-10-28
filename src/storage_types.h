@@ -45,8 +45,8 @@ struct da_piece_field_info;
 typedef void (*da_rw_done_callback_func)(
         struct da_slice_op_context *op_ctx, void *arg);
 
-typedef int (*da_redo_queue_push_func)(const struct
-        da_piece_field_info *field, struct fc_queue_info *space_chain);
+typedef int (*da_redo_queue_push_func)(const struct da_piece_field_info *field,
+        struct fc_queue_info *space_chain, SFSynchronizeContext *sctx);
 
 typedef struct {
     int index;   //the inner index is important!
