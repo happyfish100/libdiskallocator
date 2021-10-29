@@ -20,7 +20,6 @@
 #include "fastcommon/logger.h"
 #include "fastcommon/fast_buffer.h"
 #include "sf/sf_global.h"
-#include "sf/sf_func.h"
 #include "../../global.h"
 #include "../../storage_allocator.h"
 #include "../../dio/trunk_fd_cache.h"

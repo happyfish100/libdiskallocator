@@ -17,6 +17,8 @@
 #ifndef _TRUNK_SPACE_LOG_H
 #define _TRUNK_SPACE_LOG_H
 
+#include "fastcommon/fc_atomic.h"
+#include "sf/sf_func.h"
 #include "../../storage_config.h"
 #include "../../dio/trunk_fd_cache.h"
 

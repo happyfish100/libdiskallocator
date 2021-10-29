@@ -16,6 +16,7 @@
 #include "dio/trunk_read_thread.h"
 #include "dio/trunk_write_thread.h"
 #include "binlog/trunk/trunk_binlog.h"
+#include "binlog/trunk/trunk_space_log.h"
 #include "trunk/trunk_hashtable.h"
 #include "trunk/trunk_prealloc.h"
 #include "trunk/trunk_maker.h"
@@ -27,10 +28,16 @@ DiskAllocatorGlobalVars g_disk_allocator_vars;
 int da_load_config(const int my_server_id, const int file_block_size,
         const DADataGlobalConfig *data_cfg, const char *storage_filename)
 {
+    int result;
+
     DA_MY_SERVER_ID = my_server_id;
     DA_FILE_BLOCK_SIZE = file_block_size;
     g_disk_allocator_vars.data = *data_cfg;
-    return storage_config_load(&DA_STORE_CFG, storage_filename);
+    if ((result=storage_config_load(&DA_STORE_CFG, storage_filename)) == 0) {
+        storage_config_to_log(&DA_STORE_CFG);
+    }
+
+    return result;
 }
 
 int da_init_start(da_redo_queue_push_func redo_queue_push_func)
@@ -50,6 +57,10 @@ int da_init_start(da_redo_queue_push_func redo_queue_push_func)
         return result;
     }
 
+    if ((result=da_trunk_space_log_init()) != 0) {
+        return result;
+    }
+
     if ((result=storage_allocator_init()) != 0) {
         return result;
     }
@@ -58,15 +69,15 @@ int da_init_start(da_redo_queue_push_func redo_queue_push_func)
         return result;
     }
 
+    if ((result=trunk_maker_init()) != 0) {
+        return result;
+    }
+
     if ((result=storage_allocator_prealloc_trunk_freelists()) != 0) {
         return result;
     }
 
     if ((result=trunk_prealloc_init()) != 0) {
-        return result;
-    }
-
-    if ((result=trunk_maker_init()) != 0) {
         return result;
     }
 
