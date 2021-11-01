@@ -36,6 +36,12 @@ static int check_make_subdirs(const char *subdir_name)
     char filepath1[PATH_MAX];
     char filepath2[PATH_MAX];
 
+    snprintf(filepath1, sizeof(filepath1), "%s/%s",
+            DA_DATA_PATH_STR, subdir_name);
+    if ((result=fc_check_mkdir(filepath1, 0755)) != 0) {
+        return result;
+    }
+
     if (subdir_exists(subdir_name, 0) && subdir_exists(
                 subdir_name, DA_BINLOG_SUBDIRS - 1))
     {
