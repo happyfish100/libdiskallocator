@@ -21,6 +21,7 @@
 #include "sf/sf_func.h"
 #include "../../storage_config.h"
 #include "../../dio/trunk_fd_cache.h"
+#include "space_log_reader.h"
 
 typedef struct da_trunk_space_log_record_array {
     DATrunkSpaceLogRecord **records;
@@ -31,12 +32,15 @@ typedef struct da_trunk_space_log_record_array {
 typedef struct da_trunk_space_log_context {
     struct fc_queue queue;
     SFSynchronizeContext notify;
-    struct fast_mblock_man record_allocator;
+    DASpaceLogReader reader;
     DATrunkSpaceLogRecordArray record_array;
     TrunkFDCacheContext fd_cache_ctx;
     FastBuffer buffer;
     time_t next_dump_time;
 } DATrunkSpaceLogContext;
+
+#define DA_SPACE_LOG_RECORD_ALLOCATOR g_trunk_space_log_ctx.reader.record_allocator
+#define DA_SPACE_LOG_SKIPLIST_FACTORY g_trunk_space_log_ctx.reader.factory
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,7 +54,7 @@ extern "C" {
     static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_record()
     {
         return (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &g_trunk_space_log_ctx.record_allocator);
+                &DA_SPACE_LOG_RECORD_ALLOCATOR);
     }
 
     static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_fill_record(
@@ -77,14 +81,14 @@ extern "C" {
             struct fc_queue_info *chain)
     {
         return fc_queue_alloc_chain(&g_trunk_space_log_ctx.queue,
-                &g_trunk_space_log_ctx.record_allocator, count, chain);
+                &DA_SPACE_LOG_RECORD_ALLOCATOR, count, chain);
     }
 
     static inline void da_trunk_space_log_free_chain(
             struct fc_queue_info *chain)
     {
         fc_queue_free_chain(&g_trunk_space_log_ctx.queue,
-                &g_trunk_space_log_ctx.record_allocator, chain);
+                &DA_SPACE_LOG_RECORD_ALLOCATOR, chain);
     }
 
     static inline void da_trunk_space_log_push_chain(
@@ -92,6 +96,8 @@ extern "C" {
     {
         fc_queue_push_queue_to_tail(&g_trunk_space_log_ctx.queue, qinfo);
     }
+
+    int da_trunk_space_log_redo(struct fc_queue_info *qinfo);
 
     static inline void da_trunk_space_log_pack(const DATrunkSpaceLogRecord
             *record, FastBuffer *buffer)

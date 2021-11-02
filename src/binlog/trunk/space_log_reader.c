@@ -18,16 +18,14 @@
 #include <sys/stat.h>
 #include "fastcommon/shared_func.h"
 #include "fastcommon/logger.h"
-#include "fastcommon/fast_buffer.h"
-#include "sf/sf_global.h"
 #include "../../global.h"
 #include "../../storage_allocator.h"
 #include "../../dio/trunk_fd_cache.h"
 #include "trunk_space_log.h"
 #include "space_log_reader.h"
 
-#define SKPLIST_INIT_LEVEL_COUNT  4
-#define SKPLIST_MAX_LEVEL_COUNT  12
+#define DA_SPACE_SKPLIST_INIT_LEVEL_COUNT  4
+#define DA_SPACE_SKPLIST_MAX_LEVEL_COUNT  12
 
 static int space_log_record_alloc_init(void *element, void *args)
 {
@@ -64,7 +62,7 @@ int da_space_log_reader_init(DASpaceLogReader *reader,
     }
 
     if ((result=uniq_skiplist_init_ex2(&reader->factory,
-                    SKPLIST_MAX_LEVEL_COUNT, (skiplist_compare_func)
+                    DA_SPACE_SKPLIST_MAX_LEVEL_COUNT, (skiplist_compare_func)
                     compare_by_trunk_offset, space_log_record_free_func,
                     alloc_skiplist_once, min_alloc_elements_once,
                     delay_free_seconds, bidirection,
@@ -155,7 +153,8 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
     char buff[64 * 1024];
     char error_info[256];
 
-    *skiplist = uniq_skiplist_new(&reader->factory, SKPLIST_INIT_LEVEL_COUNT);
+    *skiplist = uniq_skiplist_new(&reader->factory,
+            DA_SPACE_SKPLIST_INIT_LEVEL_COUNT);
     if (*skiplist == NULL) {
         return ENOMEM;
     }

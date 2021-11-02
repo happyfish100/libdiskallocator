@@ -32,31 +32,10 @@
 #include "../binlog/trunk/trunk_space_log.h"
 #include "trunk_reclaim.h"
 
-#define SKPLIST_INIT_LEVEL_COUNT  4
-#define SKPLIST_MAX_LEVEL_COUNT  12
-
-static int space_log_record_alloc_init(void *element, void *args)
-{
-    ((DATrunkSpaceLogRecord *)element)->allocator =
-        (struct fast_mblock_man *)args;
-    return 0;
-}
-
-static int compare_by_trunk_offset(const DATrunkSpaceLogRecord *s1,
-        const DATrunkSpaceLogRecord *s2)
-{
-    return fc_compare_int64(s1->storage.offset, s2->storage.offset);
-}
-
-static void space_log_record_free_func(void *ptr, const int delay_seconds)
-{
-    fast_mblock_free_object(((DATrunkSpaceLogRecord *)ptr)->allocator, ptr);
-}
-
 int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
 {
-    const int min_alloc_elements_once = 4;
-    const int delay_free_seconds = 0;
+    const int alloc_skiplist_once = 1;
+    const bool allocator_use_lock = false;
     int result;
 
 #ifdef OS_LINUX
@@ -71,18 +50,8 @@ int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
     }
 #endif
 
-    if ((result=fast_mblock_init_ex1(&rctx->record_allocator,
-                    "space-log-record", sizeof(DATrunkSpaceLogRecord),
-                    8 * 1024, 0, space_log_record_alloc_init,
-                    &rctx->record_allocator, false)) != 0)
-    {
-        return result;
-    }
-
-    if ((result=uniq_skiplist_init_pair(&rctx->spair, SKPLIST_INIT_LEVEL_COUNT,
-                    SKPLIST_MAX_LEVEL_COUNT, (skiplist_compare_func)
-                    compare_by_trunk_offset, space_log_record_free_func,
-                    min_alloc_elements_once, delay_free_seconds)) != 0)
+    if ((result=da_space_log_reader_init(&rctx->reader,
+                    alloc_skiplist_once, allocator_use_lock)) != 0)
     {
         return result;
     }
@@ -126,110 +95,6 @@ static int realloc_rb_array(TrunkReclaimBlockArray *array)
     return 0;
 }
 
-static int parse_to_rs_array(string_t *content,
-        TrunkReclaimContext *rctx, char *error_info)
-{
-    int result;
-    bool need_free;
-    string_t line;
-    char *line_start;
-    char *buff_end;
-    char *line_end;
-    DATrunkSpaceLogRecord *record;
-
-    result = 0;
-    line_start = content->str;
-    buff_end = content->str + content->len;
-    while (line_start < buff_end) {
-        line_end = (char *)memchr(line_start, '\n', buff_end - line_start);
-        if (line_end == NULL) {
-            break;
-        }
-
-        record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &rctx->record_allocator);
-        if (record == NULL) {
-            sprintf(error_info, "alloc record object fail "
-                    "because out of memory");
-            return ENOMEM;
-        }
-
-        ++line_end;
-        line.str = line_start;
-        line.len = line_end - line_start;
-        if ((result=da_trunk_space_log_unpack(&line,
-                        record, error_info)) != 0)
-        {
-            return result;
-        }
-
-        if (record->op_type == da_binlog_op_type_consume_space) {
-            result = uniq_skiplist_insert(rctx->spair.skiplist, record);
-            need_free = (result != 0);
-        } else {
-            result = uniq_skiplist_delete(rctx->spair.skiplist, record);
-            need_free = true;
-        }
-
-        if (need_free) {
-            fast_mblock_free_object(&rctx->record_allocator, record);
-        }
-
-        if (result == ENOMEM) {
-            sprintf(error_info, "alloc skiplist node fail "
-                    "because out of memory");
-            return result;
-        }
-
-        line_start = line_end;
-    }
-
-    return 0;
-}
-
-static int load_from_space_log(DATrunkAllocator *allocator,
-        DATrunkFileInfo *trunk, TrunkReclaimContext *rctx)
-{
-    int result;
-    int fd;
-    string_t content;
-    char space_log_filename[PATH_MAX];
-    char buff[64 * 1024];
-    char error_info[256];
-
-    dio_get_space_log_filename(trunk->id_info.id,
-            space_log_filename, sizeof(space_log_filename));
-    if ((fd=open(space_log_filename, O_RDONLY)) < 0) {
-        result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
-                "open file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, space_log_filename, result, STRERROR(result));
-        return result;
-    }
-
-    result = 0;
-    *error_info = '\0';
-    content.str = buff;
-    while ((content.len=fc_read_lines(fd, buff, sizeof(buff))) > 0) {
-        if ((result=parse_to_rs_array(&content, rctx, error_info)) != 0) {
-            logError("file: "__FILE__", line: %d, "
-                    "parse file: %s fail, errno: %d, error info: %s",
-                    __LINE__, space_log_filename, result, error_info);
-            break;
-        }
-    }
-
-    if (content.len < 0) {
-        result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
-                "read from file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, space_log_filename, result, STRERROR(result));
-    }
-    close(fd);
-
-    return result;
-}
-
 static int combine_to_rb_array(TrunkReclaimContext *rctx,
         TrunkReclaimBlockArray *barray)
 {
@@ -240,7 +105,7 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
     TrunkReclaimBlockInfo *block;
 
     rctx->slice_count = 0;
-    uniq_skiplist_iterator(rctx->spair.skiplist, &it);
+    uniq_skiplist_iterator(rctx->skiplist, &it);
     block = barray->blocks;
     record = uniq_skiplist_next(&it);
     while (record != NULL) {
@@ -399,13 +264,13 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
     record = block->head;
     while (record != NULL) {
         old_record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &rctx->record_allocator);
+                &rctx->reader.record_allocator);
         if (old_record == NULL) {
             return ENOMEM;
         }
 
         new_record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &rctx->record_allocator);
+                &rctx->reader.record_allocator);
         if (new_record == NULL) {
             return ENOMEM;
         }
@@ -471,17 +336,13 @@ int trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
 {
     int result;
 
-    if (uniq_skiplist_new_by_pair(&rctx->spair,
-                SKPLIST_INIT_LEVEL_COUNT) == NULL)
+    if ((result=da_space_log_reader_load(&rctx->reader,
+                    trunk->id_info.id, &rctx->skiplist)) != 0)
     {
-        return ENOMEM;
+        return result;
     }
 
     do {
-        if ((result=load_from_space_log(allocator, trunk, rctx)) != 0) {
-            break;
-        }
-
         if ((result=combine_to_rb_array(rctx, &rctx->barray)) != 0) {
             break;
         }
@@ -491,6 +352,6 @@ int trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
         }
     } while (0);
 
-    uniq_skiplist_free_by_pair(&rctx->spair);
+    uniq_skiplist_free(rctx->skiplist);
     return result;
 }

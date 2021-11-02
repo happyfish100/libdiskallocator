@@ -19,6 +19,7 @@
 
 #include "fastcommon/uniq_skiplist.h"
 #include "../storage_config.h"
+#include "../binlog/trunk/space_log_reader.h"
 #include "trunk_allocator.h"
 
 typedef struct trunk_reclaim_block_info {
@@ -33,8 +34,8 @@ typedef struct trunk_reclaim_block_array {
 } TrunkReclaimBlockArray;
 
 typedef struct trunk_reclaim_context {
-    struct fast_mblock_man record_allocator;
-    UniqSkiplistPair spair;
+    DASpaceLogReader reader;
+    UniqSkiplist *skiplist;
     TrunkReclaimBlockArray barray;
     DASliceOpContext op_ctx;
     int slice_count;

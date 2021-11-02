@@ -17,10 +17,7 @@
 #ifndef _SPACE_LOG_READER_H
 #define _SPACE_LOG_READER_H
 
-#include "fastcommon/fc_atomic.h"
-#include "sf/sf_func.h"
-#include "../../storage_config.h"
-#include "../../dio/trunk_fd_cache.h"
+#include "fastcommon/uniq_skiplist.h"
 
 typedef struct da_space_log_reader {
     struct fast_mblock_man record_allocator;

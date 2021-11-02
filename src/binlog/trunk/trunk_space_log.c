@@ -291,7 +291,113 @@ static int deal_records(DATrunkSpaceLogRecord *head)
         pthread_cond_signal(&g_trunk_space_log_ctx.notify.lcp.cond);
     }
 
-    fast_mblock_free_objects(&g_trunk_space_log_ctx.record_allocator,
+    fast_mblock_free_objects(&DA_SPACE_LOG_RECORD_ALLOCATOR,
+            (void **)RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count);
+    return result;
+}
+
+static int redo_by_trunk(DATrunkSpaceLogRecord **start,
+        DATrunkSpaceLogRecord **end)
+{
+#define FIXED_RECORD_COUNT   1024
+    const bool ignore_enoent = true;
+    bool found;
+    bool keep;
+    int result;
+    int count;
+    DATrunkSpaceLogRecord *fixed[FIXED_RECORD_COUNT];
+    DATrunkSpaceLogRecord **current;
+    UniqSkiplist *skiplist;
+    DATrunkSpaceLogRecord target;
+    DATrunkSpaceLogRecordArray array;
+
+    if ((result=da_space_log_reader_load_ex(&g_trunk_space_log_ctx.
+                    reader, (*start)->storage.trunk_id,
+                    &skiplist, ignore_enoent)) != 0)
+    {
+        return result;
+    }
+
+    count = end - start;
+    if (count <= FIXED_RECORD_COUNT) {
+        array.records = fixed;
+        array.alloc = FIXED_RECORD_COUNT;
+    } else {
+        array.alloc = count;
+        array.records = (DATrunkSpaceLogRecord **)fc_malloc(
+                sizeof(DATrunkSpaceLogRecord *) * array.alloc);
+        if (array.records == NULL) {
+            return ENOMEM;
+        }
+    }
+
+    array.count = 0;
+    for (current=start; current<end; current++) {
+        if (skiplist != NULL) {
+            target.storage.offset = (*current)->storage.offset;
+            found = (uniq_skiplist_find(skiplist, &target) != NULL);
+        } else {
+            found = false;
+        }
+        if ((*current)->op_type == da_binlog_op_type_consume_space) {
+            keep = !found;
+        } else {  //da_binlog_op_type_reclaim_space
+            keep = found;
+        }
+
+        if (keep) {
+            array.records[array.count++] = *current;
+        }
+    }
+
+    if (array.count > 0) {
+        result = write_to_log_file(array.records,
+                array.records + array.count);
+    }
+
+    if (array.records != fixed) {
+        free(array.records);
+    }
+    if (skiplist != NULL) {
+        uniq_skiplist_free(skiplist);
+    }
+
+    return result;
+}
+
+static int redo_by_array(DATrunkSpaceLogRecordArray *array)
+{
+    int result;
+    DATrunkSpaceLogRecord **start;
+    DATrunkSpaceLogRecord **end;
+    DATrunkSpaceLogRecord **current;
+
+    start = array->records;
+    current = start;
+    end = array->records + array->count;
+    while (++current < end) {
+        if ((*current)->storage.trunk_id != (*start)->storage.trunk_id) {
+            if ((result=redo_by_trunk(start, current)) != 0) {
+                return result;
+            }
+            start = current;
+        }
+    }
+
+    return redo_by_trunk(start, current);
+}
+
+int da_trunk_space_log_redo(struct fc_queue_info *qinfo)
+{
+    int result;
+
+    if ((result=chain_to_array(qinfo->head)) != 0) {
+        return result;
+    }
+
+    result = redo_by_array(&RECORD_PTR_ARRAY);
+
+    fast_mblock_free_objects(&DA_SPACE_LOG_RECORD_ALLOCATOR,
             (void **)RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count);
     return result;
 }
@@ -346,13 +452,14 @@ static void *trunk_space_log_func(void *arg)
 
 int da_trunk_space_log_init()
 {
+    const int alloc_skiplist_once = 256;
+    const bool allocator_use_lock = true;
     int result;
     struct tm tm_current;
     pthread_t tid;
 
-    if ((result=fast_mblock_init_ex1(&g_trunk_space_log_ctx.record_allocator,
-                    "trunk-space-record", sizeof(DATrunkSpaceLogRecord),
-                    8 * 1024, 0, NULL, NULL, true)) != 0)
+    if ((result=da_space_log_reader_init(&g_trunk_space_log_ctx.reader,
+                    alloc_skiplist_once, allocator_use_lock)) != 0)
     {
         return result;
     }
