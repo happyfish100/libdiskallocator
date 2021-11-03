@@ -27,9 +27,10 @@
 #define DA_TRUNK_SKIPLIST_DELAY_FREE_SECONDS   600
 
 #define DA_TRUNK_STATUS_NONE        0
-#define DA_TRUNK_STATUS_REPUSH      1  //intermediate state
-#define DA_TRUNK_STATUS_ALLOCING    2
-#define DA_TRUNK_STATUS_RECLAIMING  3
+#define DA_TRUNK_STATUS_LOADED      1
+#define DA_TRUNK_STATUS_REPUSH      2  //intermediate state
+#define DA_TRUNK_STATUS_ALLOCING    3
+#define DA_TRUNK_STATUS_RECLAIMING  4
 
 #define DA_TRUNK_UTIL_EVENT_NONE      0
 #define DA_TRUNK_UTIL_EVENT_CREATE   'C'

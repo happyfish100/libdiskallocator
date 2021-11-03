@@ -19,6 +19,7 @@
 #include "fastcommon/logger.h"
 #include "fastcommon/fc_memory.h"
 #include "sf/sf_global.h"
+#include "binlog/trunk/trunk_space_log.h"
 #include "global.h"
 #include "trunk/trunk_maker.h"
 #include "storage_allocator.h"
@@ -137,13 +138,11 @@ static int deal_allocator_on_ready(DAStorageAllocatorContext *allocator_ctx)
     for (allocator=allocator_ctx->all.allocators; allocator<end; allocator++) {
         trunk_allocator_deal_on_ready(allocator);
 
-        /*
         logInfo("path index: %d, total: %"PRId64" MB, used: %"PRId64" MB, "
                 "avail: %"PRId64" MB", allocator->path_info->store.index,
                 allocator->path_info->trunk_stat.total / (1024 * 1024),
                 allocator->path_info->trunk_stat.used / (1024 * 1024),
                 allocator->path_info->trunk_stat.avail / (1024 * 1024));
-                */
     }
 
     return 0;
@@ -527,7 +526,8 @@ static int dump_to_array(DATrunkAllocator *allocator,
         }
 
         record = (DATrunkIndexRecord *)array->indexes + array->count++;
-        record->path_index = allocator->path_info->store.index;
+        da_trunk_space_log_calc_version(trunk_info->
+                id_info.id, &record->version);
         record->trunk_id = trunk_info->id_info.id;
         record->used_count = trunk_info->used.count;
         record->used_bytes = trunk_info->used.bytes;

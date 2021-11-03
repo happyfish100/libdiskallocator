@@ -135,7 +135,7 @@ typedef struct da_trunk_space_log_record {
 } DATrunkSpaceLogRecord;
 
 typedef struct da_trunk_index_record {
-    int path_index;
+    int64_t version;  //for check dirty
     uint32_t trunk_id;
     uint32_t used_count;
     uint32_t used_bytes;

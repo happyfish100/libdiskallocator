@@ -15,6 +15,7 @@
 
 #include "dio/trunk_read_thread.h"
 #include "dio/trunk_write_thread.h"
+#include "binlog/trunk/trunk_index.h"
 #include "binlog/trunk/trunk_binlog.h"
 #include "binlog/trunk/trunk_space_log.h"
 #include "trunk/trunk_hashtable.h"
@@ -45,6 +46,8 @@ int da_init_start(da_redo_queue_push_func redo_queue_push_func)
     int result;
 
     DA_REDO_QUEUE_PUSH_FUNC = redo_queue_push_func;
+    trunk_index_init();
+
     if ((result=trunk_hashtable_init()) != 0) {
         return result;
     }
@@ -66,6 +69,10 @@ int da_init_start(da_redo_queue_push_func redo_queue_push_func)
     }
 
     if ((result=trunk_binlog_init()) != 0) {
+        return result;
+    }
+
+    if ((result=da_trunk_space_log_start()) != 0) {
         return result;
     }
 

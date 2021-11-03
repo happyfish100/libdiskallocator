@@ -18,6 +18,7 @@
 #include <sys/statvfs.h>
 #include "fastcommon/pthread_func.h"
 #include "fastcommon/logger.h"
+#include "fastcommon/fc_atomic.h"
 #include "sf/sf_global.h"
 #include "../global.h"
 #include "trunk_hashtable.h"
@@ -26,6 +27,7 @@ typedef struct {
     DATrunkFileInfo **buckets;
     DATrunkFileInfo **end;
     int capacity;
+    volatile int count;
 } TrunkHashtable;
 
 typedef struct {
@@ -39,6 +41,11 @@ typedef struct {
 } TrunkHtableContext;
 
 static TrunkHtableContext trunk_htable_ctx;
+
+int trunk_hashtable_count()
+{
+    return FC_ATOMIC_GET(trunk_htable_ctx.htable.count);
+}
 
 int trunk_hashtable_init()
 {
@@ -142,6 +149,8 @@ int trunk_hashtable_add(DATrunkFileInfo *trunk)
             trunk->htable.next = current;
             previous->htable.next = trunk;
         }
+
+        FC_ATOMIC_INC(trunk_htable_ctx.htable.count);
     }
     PTHREAD_MUTEX_UNLOCK(lock);
 

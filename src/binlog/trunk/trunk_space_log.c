@@ -154,6 +154,31 @@ static int chain_to_array(DATrunkSpaceLogRecord *head)
     return 0;
 }
 
+int da_trunk_space_log_calc_version(const uint32_t trunk_id, int64_t *version)
+{
+    int result;
+    struct stat buf;
+    char space_log_filename[PATH_MAX];
+
+    dio_get_space_log_filename(trunk_id, space_log_filename,
+            sizeof(space_log_filename));
+    if (stat(space_log_filename, &buf) < 0) {
+        result = errno != 0 ? errno : EACCES;
+        if (result == ENOENT) {
+            *version = 0;
+            return 0;
+        }
+
+        logError("file: "__FILE__", line: %d, "
+                "stat file \"%s\" fail, errno: %d, error info: %s",
+                __LINE__, space_log_filename, result, STRERROR(result));
+        return result;
+    }
+
+    *version = ((buf.st_size << 32) | buf.st_mtime);
+    return 0;
+}
+
 static int get_write_fd(const uint32_t trunk_id, int *fd)
 {
     const int flags = O_WRONLY | O_CREAT | O_APPEND;
@@ -434,6 +459,102 @@ static int dump_trunk_indexes()
     return trunk_index_save();
 }
 
+static int set_trunk_by_space_log(DATrunkFileInfo *trunk)
+{
+    const bool ignore_enoent = true;
+    int result;
+    UniqSkiplist *skiplist;
+    UniqSkiplistIterator it;
+    DATrunkSpaceLogRecord *record;
+    DATrunkSpaceLogRecord *last;
+
+    if ((result=da_space_log_reader_load_ex(&g_trunk_space_log_ctx.reader,
+                    trunk->id_info.id, &skiplist, ignore_enoent)) != 0)
+    {
+        return result;
+    }
+
+    trunk->used.count = 0;
+    trunk->used.bytes = 0;
+    if (skiplist == NULL) {
+        trunk->free_start = 0;
+        return 0;
+    }
+
+    last = NULL;
+    uniq_skiplist_iterator(skiplist, &it);
+    while ((record=uniq_skiplist_next(&it)) != NULL) {
+        trunk->used.count++;
+        trunk->used.bytes += record->storage.size;
+        last = record;
+    }
+
+    if (last != NULL) {
+        trunk->free_start = last->storage.offset + last->storage.size;
+    } else {
+        trunk->free_start = 0;
+    }
+
+    uniq_skiplist_free(skiplist);
+    return 0;
+}
+
+static int load_trunk_indexes()
+{
+    int result;
+    int64_t version;
+    DATrunkFileInfo *trunk;
+    DATrunkIndexRecord *index;
+    DATrunkIndexRecord *end;
+    TrunkHashtableIterator it;
+
+    if ((result=trunk_index_load()) != 0) {
+        return result;
+    }
+
+    end = (DATrunkIndexRecord *)g_trunk_index_ctx.index_array.indexes +
+        g_trunk_index_ctx.index_array.count;
+    for (index=g_trunk_index_ctx.index_array.indexes; index<end; index++) {
+        if ((trunk=trunk_hashtable_get(index->trunk_id)) == NULL) {
+            return ENOENT;
+        }
+
+        da_trunk_space_log_calc_version(index->trunk_id, &version);
+        if (index->version == version) {
+            trunk->used.count = index->used_count;
+            trunk->used.bytes = index->used_bytes;
+            trunk->free_start = index->free_start;
+        } else {
+            if ((result=set_trunk_by_space_log(trunk)) != 0) {
+                return result;
+            }
+        }
+        trunk->status = DA_TRUNK_STATUS_LOADED;
+
+        logInfo("trunk id: %u, version: %"PRId64", calculate: %d, "
+                "used_count: %u, used_bytes: %u, free_start: %u",
+                trunk->id_info.id, version, index->version != version,
+                trunk->used.count, trunk->used.bytes, trunk->free_start);
+    }
+
+    trunk_hashtable_iterator(&it, false);
+    while ((trunk=trunk_hashtable_next(&it)) != NULL) {
+        logInfo("trunk id: %u, status: %d", trunk->id_info.id, trunk->status);
+        if (trunk->status == DA_TRUNK_STATUS_NONE) {
+            if ((result=set_trunk_by_space_log(trunk)) != 0) {
+                return result;
+            }
+            trunk->status = DA_TRUNK_STATUS_LOADED;
+
+            logInfo("trunk id: %u, used_count: %u, used_bytes: %u, "
+                    "free_start: %u", trunk->id_info.id, trunk->used.count,
+                    trunk->used.bytes, trunk->free_start);
+        }
+    }
+
+    return 0;
+}
+
 static void *trunk_space_log_func(void *arg)
 {
     DATrunkSpaceLogRecord *head;
@@ -475,8 +596,6 @@ int da_trunk_space_log_init()
     const int alloc_skiplist_once = 256;
     const bool allocator_use_lock = true;
     int result;
-    struct tm tm_current;
-    pthread_t tid;
 
     if ((result=da_space_log_reader_init(&g_trunk_space_log_ctx.reader,
                     alloc_skiplist_once, allocator_use_lock)) != 0)
@@ -503,6 +622,19 @@ int da_trunk_space_log_init()
     if ((result=fast_buffer_init_ex(&g_trunk_space_log_ctx.buffer,
                     DA_BINLOG_BUFFER_SIZE)) != 0)
     {
+        return result;
+    }
+
+    return 0;
+}
+
+int da_trunk_space_log_start()
+{
+    struct tm tm_current;
+    pthread_t tid;
+    int result;
+
+    if ((result=load_trunk_indexes()) != 0) {
         return result;
     }
 

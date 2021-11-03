@@ -33,6 +33,8 @@ extern "C" {
 
     void trunk_hashtable_destroy();
 
+    int trunk_hashtable_count();
+
     int trunk_hashtable_add(DATrunkFileInfo *trunk);
 
     DATrunkFileInfo *trunk_hashtable_get(const uint32_t trunk_id);

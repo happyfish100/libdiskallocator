@@ -22,7 +22,7 @@
 #define TRUNK_INDEX_RECORD_MAX_SIZE   64
 
 #define TRUNK_RECORD_FIELD_COUNT   5
-#define TRUNK_RECORD_FIELD_INDEX_PATH_INDEX   0
+#define TRUNK_RECORD_FIELD_INDEX_VERSION      0
 #define TRUNK_RECORD_FIELD_INDEX_TRUNK_ID     1
 #define TRUNK_RECORD_FIELD_INDEX_USED_COUNT   2
 #define TRUNK_RECORD_FIELD_INDEX_USED_BYTES   3
@@ -32,10 +32,9 @@ SFBinlogIndexContext g_trunk_index_ctx;
 
 static int pack_record(char *buff, DATrunkIndexRecord *record)
 {
-    return sprintf(buff, "%d %u %u %u %u\n",
-            record->path_index, record->trunk_id,
-            record->used_count, record->used_bytes,
-            record->free_start);
+    return sprintf(buff, "%"PRId64" %u %u %u %u\n",
+            record->version, record->trunk_id, record->used_count,
+            record->used_bytes, record->free_start);
 }
 
 static int unpack_record(const string_t *line,
@@ -53,8 +52,8 @@ static int unpack_record(const string_t *line,
         return EINVAL;
     }
 
-    SF_BINLOG_PARSE_INT_SILENCE(record->path_index, "path index",
-            TRUNK_RECORD_FIELD_INDEX_PATH_INDEX, ' ', 0);
+    SF_BINLOG_PARSE_INT_SILENCE(record->version, "version",
+            TRUNK_RECORD_FIELD_INDEX_VERSION, ' ', 0);
     SF_BINLOG_PARSE_INT_SILENCE(record->trunk_id, "trunk id",
             TRUNK_RECORD_FIELD_INDEX_TRUNK_ID, ' ', 0);
     SF_BINLOG_PARSE_INT_SILENCE(record->used_count, "used count",

@@ -350,6 +350,7 @@ int trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
         if ((result=migrate_blocks(rctx)) != 0) {
             break;
         }
+
     } while (0);
 
     uniq_skiplist_free(rctx->skiplist);

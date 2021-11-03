@@ -49,7 +49,11 @@ extern "C" {
     extern DATrunkSpaceLogContext g_trunk_space_log_ctx;
 
     int da_trunk_space_log_init();
+    int da_trunk_space_log_start();
     void da_trunk_space_log_destroy();
+
+    int da_trunk_space_log_calc_version(const uint32_t trunk_id,
+            int64_t *version);
 
     static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_record()
     {
