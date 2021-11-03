@@ -120,10 +120,12 @@ static int load_current_trunk_id()
     id_info_context.current_subdir_id  = iniGetInt64Value(NULL,
             ITEM_NAME_SUBDIR_ID, &ini_context, 0);
 
+    /*
     if (!iniGetBoolValue(NULL, ITEM_NAME_NORMAL_EXIT, &ini_context, false)) {
         id_info_context.current_trunk_id += 10000;
         id_info_context.current_subdir_id += 100;
     }
+    */
 
     iniFreeContext(&ini_context);
     return result;

@@ -297,7 +297,7 @@ static int deal_records(DATrunkSpaceLogRecord *head)
 }
 
 static int redo_by_trunk(DATrunkSpaceLogRecord **start,
-        DATrunkSpaceLogRecord **end)
+        DATrunkSpaceLogRecord **end, int *redo_count)
 {
 #define FIXED_RECORD_COUNT   1024
     const bool ignore_enoent = true;
@@ -351,6 +351,7 @@ static int redo_by_trunk(DATrunkSpaceLogRecord **start,
     }
 
     if (array.count > 0) {
+        *redo_count += array.count;
         result = write_to_log_file(array.records,
                 array.records + array.count);
     }
@@ -368,30 +369,49 @@ static int redo_by_trunk(DATrunkSpaceLogRecord **start,
 static int redo_by_array(DATrunkSpaceLogRecordArray *array)
 {
     int result;
+    int redo_count;
     DATrunkSpaceLogRecord **start;
     DATrunkSpaceLogRecord **end;
     DATrunkSpaceLogRecord **current;
 
+    redo_count = 0;
     start = array->records;
     current = start;
     end = array->records + array->count;
     while (++current < end) {
         if ((*current)->storage.trunk_id != (*start)->storage.trunk_id) {
-            if ((result=redo_by_trunk(start, current)) != 0) {
+            if ((result=redo_by_trunk(start, current, &redo_count)) != 0) {
                 return result;
             }
             start = current;
         }
     }
 
-    return redo_by_trunk(start, current);
+    if ((result=redo_by_trunk(start, current, &redo_count)) != 0) {
+        return result;
+    }
+
+    logInfo("file: "__FILE__", line: %d, "
+            "space record count: %d, redo count: %d",
+            __LINE__, array->count, redo_count);
+    return 0;
 }
 
-int da_trunk_space_log_redo(struct fc_queue_info *qinfo)
+int da_trunk_space_log_redo(const char *space_log_filename)
 {
+    struct fc_queue_info chain;
     int result;
 
-    if ((result=chain_to_array(qinfo->head)) != 0) {
+    if ((result=da_space_log_reader_load_to_chain(&g_trunk_space_log_ctx.
+                    reader, space_log_filename, &chain)) != 0)
+    {
+        return result;
+    }
+    if (chain.head == NULL) {
+        return 0;
+    }
+
+    if ((result=chain_to_array(chain.head)) != 0) {
         return result;
     }
 

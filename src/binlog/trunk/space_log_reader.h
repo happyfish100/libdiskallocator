@@ -45,6 +45,9 @@ extern "C" {
                 trunk_id, skiplist, ignore_enoent);
     }
 
+    int da_space_log_reader_load_to_chain(DASpaceLogReader *reader,
+            const char *space_log_filename, struct fc_queue_info *chain);
+
 #ifdef __cplusplus
 }
 #endif

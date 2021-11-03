@@ -97,7 +97,7 @@ extern "C" {
         fc_queue_push_queue_to_tail(&g_trunk_space_log_ctx.queue, qinfo);
     }
 
-    int da_trunk_space_log_redo(struct fc_queue_info *qinfo);
+    int da_trunk_space_log_redo(const char *space_log_filename);
 
     static inline void da_trunk_space_log_pack(const DATrunkSpaceLogRecord
             *record, FastBuffer *buffer)

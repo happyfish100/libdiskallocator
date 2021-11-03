@@ -80,7 +80,7 @@ void da_space_log_reader_destroy(DASpaceLogReader *reader)
     uniq_skiplist_destroy(&reader->factory);
 }
 
-static int parse_to_rs_array(DASpaceLogReader *reader,
+static int parse_to_skiplist(DASpaceLogReader *reader,
         UniqSkiplist *skiplist, string_t *content, char *error_info)
 {
     int result;
@@ -141,7 +141,6 @@ static int parse_to_rs_array(DASpaceLogReader *reader,
     return 0;
 }
 
-
 int da_space_log_reader_load_ex(DASpaceLogReader *reader,
         const uint32_t trunk_id, UniqSkiplist **skiplist,
         const bool ignore_enoent)
@@ -179,7 +178,7 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
     *error_info = '\0';
     content.str = buff;
     while ((content.len=fc_read_lines(fd, buff, sizeof(buff))) > 0) {
-        if ((result=parse_to_rs_array(reader, *skiplist,
+        if ((result=parse_to_skiplist(reader, *skiplist,
                         &content, error_info)) != 0)
         {
             logError("file: "__FILE__", line: %d, "
@@ -200,6 +199,102 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
     if (result != 0) {
         uniq_skiplist_free(*skiplist);
         *skiplist = NULL;
+    }
+
+    return result;
+}
+
+static int parse_to_chain(DASpaceLogReader *reader, struct fc_queue_info
+        *chain, string_t *content, char *error_info)
+{
+    int result;
+    string_t line;
+    char *line_start;
+    char *buff_end;
+    char *line_end;
+    DATrunkSpaceLogRecord *record;
+
+    result = 0;
+    line_start = content->str;
+    buff_end = content->str + content->len;
+    while (line_start < buff_end) {
+        line_end = (char *)memchr(line_start, '\n', buff_end - line_start);
+        if (line_end == NULL) {
+            break;
+        }
+
+        record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
+                &reader->record_allocator);
+        if (record == NULL) {
+            sprintf(error_info, "alloc record object fail "
+                    "because out of memory");
+            return ENOMEM;
+        }
+
+        ++line_end;
+        line.str = line_start;
+        line.len = line_end - line_start;
+        if ((result=da_trunk_space_log_unpack(&line,
+                        record, error_info)) != 0)
+        {
+            return result;
+        }
+
+        if (chain->head == NULL) {
+            chain->head = record;
+        } else {
+            FC_SET_CHAIN_TAIL_NEXT(*chain, DATrunkSpaceLogRecord, record);
+        }
+        chain->tail = record;
+
+        line_start = line_end;
+    }
+
+    return 0;
+}
+
+int da_space_log_reader_load_to_chain(DASpaceLogReader *reader,
+        const char *space_log_filename, struct fc_queue_info *chain)
+{
+    int result;
+    int fd;
+    string_t content;
+    char buff[64 * 1024];
+    char error_info[256];
+
+    chain->head = chain->tail = NULL;
+    if ((fd=open(space_log_filename, O_RDONLY)) < 0) {
+        result = errno != 0 ? errno : EACCES;
+        logError("file: "__FILE__", line: %d, "
+                "open file \"%s\" fail, errno: %d, error info: %s",
+                __LINE__, space_log_filename, result, STRERROR(result));
+        return result;
+    }
+
+    result = 0;
+    *error_info = '\0';
+    content.str = buff;
+    while ((content.len=fc_read_lines(fd, buff, sizeof(buff))) > 0) {
+        if ((result=parse_to_chain(reader, chain,
+                        &content, error_info)) != 0)
+        {
+            logError("file: "__FILE__", line: %d, "
+                    "parse file: %s fail, errno: %d, error info: %s",
+                    __LINE__, space_log_filename, result, error_info);
+            break;
+        }
+    }
+
+    if (content.len < 0) {
+        result = errno != 0 ? errno : EACCES;
+        logError("file: "__FILE__", line: %d, "
+                "read from file \"%s\" fail, errno: %d, error info: %s",
+                __LINE__, space_log_filename, result, STRERROR(result));
+    }
+    close(fd);
+
+    if (chain->tail != NULL) {
+        FC_SET_CHAIN_TAIL_NEXT(*chain, DATrunkSpaceLogRecord, NULL);
     }
 
     return result;
