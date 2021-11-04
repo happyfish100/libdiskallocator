@@ -181,52 +181,39 @@ int trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
     return result;
 }
 
-int trunk_allocator_deal_space_changes(const int path_index,
-        DATrunkSpaceLogRecord **records, const int64_t count)
+int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
+        const int count)
 {
-    int result;
-    DATrunkAllocator *allocator;
     DATrunkSpaceLogRecord **record;
     DATrunkSpaceLogRecord **end;
-    DATrunkFileInfo target;
-    DATrunkFileInfo *trunk_info;
+    DATrunkFileInfo *trunk;
 
     if (count <= 0) {
         return 0;
     }
 
-    allocator = g_allocator_mgr->allocator_ptr_array.allocators[path_index];
-    target.id_info.id = records[0]->storage.trunk_id;
-    PTHREAD_MUTEX_LOCK(&allocator->freelist.lcp.lock);
-    if ((trunk_info=(DATrunkFileInfo *)uniq_skiplist_find(allocator->
-                    trunks.by_id.skiplist, &target)) == NULL)
-    {
-        logError("file: "__FILE__", line: %d, "
-                "store path index: %d, trunk id: %u not exist",
-                __LINE__, allocator->path_info->store.index,
-                records[0]->storage.trunk_id);
-        result = ENOENT;
-    } else {
-        end = records + count;
-        for (record=records; record<end; record++) {
-            if ((*record)->op_type == da_binlog_op_type_consume_space) {
-                trunk_info->used.bytes += (*record)->storage.size;
-                trunk_info->used.count++;
-            } else {
-                __sync_fetch_and_sub(&trunk_info->used.bytes,
-                        (*record)->storage.size);
-                trunk_info->used.count--;
-
-                push_trunk_util_change_event(allocator, trunk_info,
-                        DA_TRUNK_UTIL_EVENT_UPDATE);
-            }
-        }
-
-        result = 0;
+    if ((trunk=trunk_hashtable_get(records[0]->storage.trunk_id)) == NULL) {
+        return ENOENT;
     }
-    PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
 
-    return result;
+    PTHREAD_MUTEX_LOCK(&trunk->allocator->freelist.lcp.lock);
+    end = records + count;
+    for (record=records; record<end; record++) {
+        if ((*record)->op_type == da_binlog_op_type_consume_space) {
+            trunk->used.bytes += (*record)->storage.size;
+            trunk->used.count++;
+        } else {
+            __sync_fetch_and_sub(&trunk->used.bytes,
+                    (*record)->storage.size);
+            trunk->used.count--;
+
+            push_trunk_util_change_event(trunk->allocator, trunk,
+                    DA_TRUNK_UTIL_EVENT_UPDATE);
+        }
+    }
+    PTHREAD_MUTEX_UNLOCK(&trunk->allocator->freelist.lcp.lock);
+
+    return 0;
 }
 
 DATrunkFreelistType trunk_allocator_add_to_freelist(

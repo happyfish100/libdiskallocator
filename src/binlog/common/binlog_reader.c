@@ -22,13 +22,16 @@ static int load(const DABinlogIdTypePair *bkey,
         void *args, const string_t *context)
 {
     int result;
+    int line_count;
     string_t line;
     char *line_start;
     char *buff_end;
     char *line_end;
     char error_info[256];
 
+    line_count = 0;
     result = 0;
+    *error_info = '\0';
     line_start = context->str;
     buff_end = context->str + context->len;
     while (line_start < buff_end) {
@@ -37,6 +40,7 @@ static int load(const DABinlogIdTypePair *bkey,
             break;
         }
 
+        ++line_count;
         ++line_end;
         line.str = line_start;
         line.len = line_end - line_start;
@@ -47,8 +51,9 @@ static int load(const DABinlogIdTypePair *bkey,
             da_write_fd_cache_filename(bkey, filename, sizeof(filename));
             logError("file: "__FILE__", line: %d, "
                     "parse record fail, binlog id: %"PRId64", "
-                    "binlog file: %s%s%s", __LINE__, bkey->id, filename,
-                    (*error_info != '\0' ? ", error info: " : ""), error_info);
+                    "binlog file: %s, line no: %d%s%s", __LINE__,
+                    bkey->id, filename, line_count, (*error_info != '\0' ?
+                        ", error info: " : ""), error_info);
             break;
         }
 

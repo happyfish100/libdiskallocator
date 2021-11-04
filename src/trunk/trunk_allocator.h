@@ -197,8 +197,8 @@ extern "C" {
         }
     }
 
-    int trunk_allocator_deal_space_changes(const int path_index,
-            DATrunkSpaceLogRecord **records, const int64_t count);
+    int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
+            const int count);
 
 #ifdef __cplusplus
 }

@@ -267,9 +267,14 @@ static int write_to_log_file(DATrunkSpaceLogRecord **start,
             da_trunk_space_log_pack(*current, &g_trunk_space_log_ctx.buffer);
         }
 
-        result = do_write_to_file((*start)->storage.trunk_id,
-                fd, g_trunk_space_log_ctx.buffer.data,
-                g_trunk_space_log_ctx.buffer.length, true);
+        if ((result=do_write_to_file((*start)->storage.trunk_id,
+                        fd, g_trunk_space_log_ctx.buffer.data,
+                        g_trunk_space_log_ctx.buffer.length, true)) != 0)
+        {
+            break;
+        }
+
+        result = trunk_allocator_deal_space_changes(start, end - start);
     } while (0);
 
     if (result != 0) {
