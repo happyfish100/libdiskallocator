@@ -24,6 +24,7 @@
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
 #include "../dio/trunk_write_thread.h"
+#include "../binlog/trunk/trunk_space_log.h"
 #include "../storage_allocator.h"
 #include "trunk_reclaim.h"
 #include "trunk_maker.h"
@@ -299,6 +300,8 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
             (double)trunk->size, result, time_prompt);
 
     if (result == 0) {
+        da_trunk_space_log_unlink(trunk->id_info.id);
+
         PTHREAD_MUTEX_LOCK(&task->allocator->freelist.lcp.lock);
         trunk->free_start = 0;
         PTHREAD_MUTEX_UNLOCK(&task->allocator->freelist.lcp.lock);

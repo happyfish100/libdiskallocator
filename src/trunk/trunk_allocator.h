@@ -198,7 +198,7 @@ extern "C" {
     }
 
     int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
-            const int count);
+            const int count, uint32_t *used_bytes);
 
 #ifdef __cplusplus
 }

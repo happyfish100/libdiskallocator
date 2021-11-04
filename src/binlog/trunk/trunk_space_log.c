@@ -241,12 +241,14 @@ static int write_to_log_file(DATrunkSpaceLogRecord **start,
 {
     int result;
     int fd;
+    uint32_t used_bytes;
     DATrunkSpaceLogRecord **current;
 
     if ((result=get_write_fd((*start)->storage.trunk_id, &fd)) != 0) {
         return result;
     }
 
+    used_bytes = 0;
     g_trunk_space_log_ctx.buffer.length = 0;
     do {
         for (current=start; current<end; current++) {
@@ -274,13 +276,23 @@ static int write_to_log_file(DATrunkSpaceLogRecord **start,
             break;
         }
 
-        result = trunk_allocator_deal_space_changes(start, end - start);
+        result = trunk_allocator_deal_space_changes(
+                start, end - start, &used_bytes);
     } while (0);
 
-    if (result != 0) {
+    if (result != 0 || used_bytes == 0) {
         trunk_fd_cache_delete(&FD_CACHE_CTX, (*start)->storage.trunk_id);
     }
     return result;
+}
+
+int da_trunk_space_log_unlink(const uint32_t trunk_id)
+{
+    char space_log_filename[PATH_MAX];
+
+    dio_get_space_log_filename(trunk_id, space_log_filename,
+            sizeof(space_log_filename));
+    return fc_delete_file_ex(space_log_filename, "trunk space log");
 }
 
 static int array_to_log_file(DATrunkSpaceLogRecordArray *array)

@@ -182,7 +182,7 @@ int trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
 }
 
 int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
-        const int count)
+        const int count, uint32_t *used_bytes)
 {
     DATrunkSpaceLogRecord **record;
     DATrunkSpaceLogRecord **end;
@@ -202,8 +202,9 @@ int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
         if ((*record)->op_type == da_binlog_op_type_consume_space) {
             trunk->used.bytes += (*record)->storage.size;
             trunk->used.count++;
+            *used_bytes = trunk->used.bytes;
         } else {
-            __sync_fetch_and_sub(&trunk->used.bytes,
+            *used_bytes = __sync_fetch_and_sub(&trunk->used.bytes,
                     (*record)->storage.size);
             trunk->used.count--;
 

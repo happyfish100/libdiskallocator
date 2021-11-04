@@ -103,6 +103,8 @@ extern "C" {
 
     int da_trunk_space_log_redo(const char *space_log_filename);
 
+    int da_trunk_space_log_unlink(const uint32_t trunk_id);
+
     static inline void da_trunk_space_log_pack(const DATrunkSpaceLogRecord
             *record, FastBuffer *buffer)
     {
