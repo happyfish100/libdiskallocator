@@ -36,7 +36,6 @@ typedef struct da_trunk_space_log_context {
     DATrunkSpaceLogRecordArray record_array;
     TrunkFDCacheContext fd_cache_ctx;
     FastBuffer buffer;
-    time_t next_dump_time;
 } DATrunkSpaceLogContext;
 
 #define DA_SPACE_LOG_RECORD_ALLOCATOR g_trunk_space_log_ctx.reader.record_allocator

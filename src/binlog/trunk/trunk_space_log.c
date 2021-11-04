@@ -30,7 +30,6 @@ DATrunkSpaceLogContext g_trunk_space_log_ctx;
 
 #define RECORD_PTR_ARRAY  g_trunk_space_log_ctx.record_array
 #define FD_CACHE_CTX      g_trunk_space_log_ctx.fd_cache_ctx
-#define NEXT_DUMP_TIME    g_trunk_space_log_ctx.next_dump_time
 
 #define SPACE_LOG_FIELD_COUNT             9
 
@@ -593,19 +592,22 @@ static void *trunk_space_log_func(void *arg)
             break;
         }
 
-        if (g_current_time > NEXT_DUMP_TIME) {
-            if (dump_trunk_indexes() != 0) {
-                logCrit("file: "__FILE__", line: %d, "
-                        "dump trunk index fail, program exit!",
-                        __LINE__);
-                sf_terminate_myself();
-                break;
-            }
-            NEXT_DUMP_TIME += DA_TRUNK_INDEX_DUMP_INTERVAL;
-        }
     }
 
     return NULL;
+}
+
+
+static int binlog_index_dump(void *args)
+{
+    if (dump_trunk_indexes() != 0) {
+        logCrit("file: "__FILE__", line: %d, "
+                "dump trunk index fail, program exit!",
+                __LINE__);
+        sf_terminate_myself();
+    }
+
+    return 0;
 }
 
 int da_trunk_space_log_init()
@@ -647,7 +649,8 @@ int da_trunk_space_log_init()
 
 int da_trunk_space_log_start()
 {
-    struct tm tm_current;
+    ScheduleArray scheduleArray;
+    ScheduleEntry scheduleEntries[1];
     pthread_t tid;
     int result;
 
@@ -655,10 +658,14 @@ int da_trunk_space_log_start()
         return result;
     }
 
-    g_current_time = time(NULL);
-    localtime_r((time_t *)&g_current_time, &tm_current);
-    NEXT_DUMP_TIME = sched_make_first_call_time(&tm_current,
-            &DA_TRUNK_INDEX_DUMP_BASE_TIME, DA_TRUNK_INDEX_DUMP_INTERVAL);
+    INIT_SCHEDULE_ENTRY_EX(scheduleEntries[0], sched_generate_next_id(),
+            DA_TRUNK_INDEX_DUMP_BASE_TIME, DA_TRUNK_INDEX_DUMP_INTERVAL,
+            binlog_index_dump, NULL);
+    scheduleArray.entries = scheduleEntries;
+    scheduleArray.count = 1;
+    if ((result=sched_add_entries(&scheduleArray)) != 0) {
+        return result;
+    }
 
     return fc_create_thread(&tid, trunk_space_log_func,
             NULL, SF_G_THREAD_STACK_SIZE);
