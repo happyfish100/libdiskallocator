@@ -296,6 +296,7 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
 
         field.oid = record->oid;
         field.fid = record->fid;
+        field.source = DA_FIELD_UPDATE_SOURCE_RECLAIM;
         field.op_type = da_binlog_op_type_update;
         field.storage = new_record->storage;
         if ((result=DA_REDO_QUEUE_PUSH_FUNC(&field, &space_chain,

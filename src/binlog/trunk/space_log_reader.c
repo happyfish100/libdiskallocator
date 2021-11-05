@@ -265,6 +265,10 @@ int da_space_log_reader_load_to_chain(DASpaceLogReader *reader,
     chain->head = chain->tail = NULL;
     if ((fd=open(space_log_filename, O_RDONLY)) < 0) {
         result = errno != 0 ? errno : EACCES;
+        if (result == ENOENT) {
+            return 0;
+        }
+
         logError("file: "__FILE__", line: %d, "
                 "open file \"%s\" fail, errno: %d, error info: %s",
                 __LINE__, space_log_filename, result, STRERROR(result));

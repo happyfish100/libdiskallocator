@@ -38,6 +38,9 @@
 #define DA_MAX_SPLIT_COUNT_PER_SPACE_ALLOC   2
 #define DA_SLICE_SN_PARRAY_INIT_ALLOC_COUNT  4
 
+#define DA_FIELD_UPDATE_SOURCE_NORMAL   'N'
+#define DA_FIELD_UPDATE_SOURCE_RECLAIM  'R'
+
 struct da_slice_op_context;
 struct da_trunk_allocator;
 struct da_piece_field_info;
@@ -121,9 +124,15 @@ typedef struct da_piece_field_storage {
 typedef struct da_piece_field_info {
     uint64_t oid;
     unsigned char fid;  //filed ID (key)
+    unsigned char source;
     DABinlogOpType op_type;
     DAPieceFieldStorage storage;
 } DAPieceFieldInfo;
+
+typedef struct da_piece_field_array {
+    DAPieceFieldInfo *records;
+    int count;
+} DAPieceFieldArray;
 
 typedef struct da_trunk_space_log_record {
     int64_t oid;        //object ID
