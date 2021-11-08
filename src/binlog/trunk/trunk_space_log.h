@@ -120,7 +120,7 @@ extern "C" {
 
     static inline void da_trunk_space_log_inc_waiting_count(const int count)
     {
-        FC_ATOMIC_INC_EX(g_trunk_space_log_ctx.notify.waiting_count, count);
+        sf_synchronize_counter_add(&g_trunk_space_log_ctx.notify, count);
     }
 
     static inline void da_trunk_space_log_wait()

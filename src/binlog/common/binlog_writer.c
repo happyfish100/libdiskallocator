@@ -143,13 +143,6 @@ static int log(DABinlogRecord *record, DABinlogWriterCache *cache)
     return 0;
 }
 
-#define dec_writer_waiting_count(start, end)  \
-    if (FC_ATOMIC_DEC_EX((*start)->writer->notify. \
-                waiting_count, end - start) == 0)  \
-    {  \
-        pthread_cond_signal(&(*start)->writer->notify.lcp.cond); \
-    }
-
 static int deal_sorted_record(DABinlogRecord **records, const int count)
 {
     DABinlogRecord **record;
@@ -203,13 +196,15 @@ static void dec_waiting_count(DABinlogRecord **records, const int count)
         } else if (!DA_BINLOG_ID_TYPE_EQUALS((*record)->key,
                     (*start)->key))
         {
-            dec_writer_waiting_count(start, record);
+            sf_synchronize_counter_notify(&(*start)->
+                    writer->notify, record - start);
             start = record;
         }
     }
 
     if (start != NULL) {
-        dec_writer_waiting_count(start, end);
+        sf_synchronize_counter_notify(&(*start)->
+                writer->notify, end - start);
     }
 }
 

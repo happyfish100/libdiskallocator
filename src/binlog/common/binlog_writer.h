@@ -66,13 +66,18 @@ void da_binlog_writer_finish();
 static inline void da_binlog_writer_inc_waiting_count(
         DABinlogWriter *writer, const int count)
 {
-    FC_ATOMIC_INC_EX(writer->notify.waiting_count, count);
+    sf_synchronize_counter_add(&writer->notify, count);
 }
 
 static inline int da_binlog_writer_get_waiting_count(
         DABinlogWriter *writer)
 {
-    return FC_ATOMIC_GET(writer->notify.waiting_count);
+    int waiting_count;
+
+    PTHREAD_MUTEX_LOCK(&writer->notify.lcp.lock);
+    waiting_count = writer->notify.waiting_count;
+    PTHREAD_MUTEX_UNLOCK(&writer->notify.lcp.lock);
+    return waiting_count;
 }
 
 static inline void da_binlog_writer_wait(DABinlogWriter *writer)

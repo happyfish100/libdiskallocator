@@ -143,11 +143,9 @@ static int chain_to_array(DATrunkSpaceLogRecord *head)
         records[RECORD_PTR_ARRAY.count - 1]->storage.version;
 
     if (RECORD_PTR_ARRAY.count > 1) {
-        qsort(RECORD_PTR_ARRAY.records,
-                RECORD_PTR_ARRAY.count,
+        qsort(RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count,
                 sizeof(DATrunkSpaceLogRecord *),
-                (int (*)(const void *, const void *))
-                record_ptr_compare);
+                (int (*)(const void *, const void *))record_ptr_compare);
     }
 
     return 0;
@@ -326,11 +324,8 @@ static int deal_records(DATrunkSpaceLogRecord *head)
 
     result = array_to_log_file(&RECORD_PTR_ARRAY);
 
-    if (FC_ATOMIC_DEC_EX(g_trunk_space_log_ctx.notify.waiting_count,
-                RECORD_PTR_ARRAY.count) == 0)
-    {
-        pthread_cond_signal(&g_trunk_space_log_ctx.notify.lcp.cond);
-    }
+    sf_synchronize_counter_notify(&g_trunk_space_log_ctx.notify,
+            RECORD_PTR_ARRAY.count);
 
     fast_mblock_free_objects(&DA_SPACE_LOG_RECORD_ALLOCATOR,
             (void **)RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count);
