@@ -29,7 +29,7 @@ extern "C" {
 #endif
 
     int da_space_log_reader_init(DASpaceLogReader *reader,
-            const int alloc_skiplist_once, const bool allocator_use_lock);
+            const int alloc_skiplist_once, const bool use_lock);
 
     void da_space_log_reader_destroy(DASpaceLogReader *reader);
 

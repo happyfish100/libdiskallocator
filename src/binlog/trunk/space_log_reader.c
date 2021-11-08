@@ -46,7 +46,7 @@ static void space_log_record_free_func(void *ptr, const int delay_seconds)
 }
 
 int da_space_log_reader_init(DASpaceLogReader *reader,
-        const int alloc_skiplist_once, const bool allocator_use_lock)
+        const int alloc_skiplist_once, const bool use_lock)
 {
     const int min_alloc_elements_once = 4;
     const int delay_free_seconds = 0;
@@ -56,7 +56,7 @@ int da_space_log_reader_init(DASpaceLogReader *reader,
     if ((result=fast_mblock_init_ex1(&reader->record_allocator,
                     "space-log-record", sizeof(DATrunkSpaceLogRecord),
                     8 * 1024, 0, space_log_record_alloc_init,
-                    &reader->record_allocator, false)) != 0)
+                    &reader->record_allocator, use_lock)) != 0)
     {
         return result;
     }
@@ -65,8 +65,7 @@ int da_space_log_reader_init(DASpaceLogReader *reader,
                     DA_SPACE_SKPLIST_MAX_LEVEL_COUNT, (skiplist_compare_func)
                     compare_by_trunk_offset, space_log_record_free_func,
                     alloc_skiplist_once, min_alloc_elements_once,
-                    delay_free_seconds, bidirection,
-                    allocator_use_lock)) != 0)
+                    delay_free_seconds, bidirection, use_lock)) != 0)
     {
         return result;
     }
