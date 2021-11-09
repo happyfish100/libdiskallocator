@@ -116,7 +116,7 @@ int da_binlog_writer_cache_write(DABinlogWriterCache *cache, const bool flush)
     return 0;
 }
 
-static int log(DABinlogRecord *record, DABinlogWriterCache *cache)
+static int do_log(DABinlogRecord *record, DABinlogWriterCache *cache)
 {
     int result;
 
@@ -154,7 +154,7 @@ static int deal_sorted_record(DABinlogRecord **records, const int count)
     result = 0;
     end = records + count;
     for (record=records; record<end; record++) {
-        if ((result=log(*record, &cache)) != 0) {
+        if ((result=do_log(*record, &cache)) != 0) {
             return result;
         }
     }

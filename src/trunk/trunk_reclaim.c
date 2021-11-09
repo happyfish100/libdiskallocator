@@ -202,7 +202,7 @@ static int slice_write(TrunkReclaimContext *rctx,
     }
 
 #ifdef OS_LINUX
-    buff = op_ctx->aligned_buffer->buff + op_ctx->aligned_buffer->offset;
+    buff = rctx->op_ctx.aio_buffer->buff + rctx->op_ctx.aio_buffer->offset;
 #else
     buff = rctx->op_ctx.buff;
 #endif
@@ -236,7 +236,7 @@ static int migrate_one_slice(TrunkReclaimContext *rctx,
     record->storage.size = space.size;
 
 #ifdef OS_LINUX
-    da_release_aio_buffers(&rctx->op_ctx);
+    read_buffer_pool_free(rctx->op_ctx.aio_buffer);
 #endif
 
     return 0;

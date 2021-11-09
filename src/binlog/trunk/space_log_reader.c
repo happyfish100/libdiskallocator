@@ -56,7 +56,7 @@ int da_space_log_reader_init(DASpaceLogReader *reader,
     if ((result=fast_mblock_init_ex1(&reader->record_allocator,
                     "space-log-record", sizeof(DATrunkSpaceLogRecord),
                     8 * 1024, 0, space_log_record_alloc_init,
-                    &reader->record_allocator, use_lock)) != 0)
+                    &reader->record_allocator, true)) != 0)
     {
         return result;
     }

@@ -535,7 +535,7 @@ static int process_aio(TrunkReadThreadContext *ctx)
             dio_get_trunk_filename(&iob->space, trunk_filename,
                     sizeof(trunk_filename));
             logError("file: "__FILE__", line: %d, "
-                    "read trunk file: %s fail, offset: %"PRId64", "
+                    "read trunk file: %s fail, offset: %u, "
                     "expect length: %d, read return: %d, errno: %d, "
                     "error info: %s", __LINE__, trunk_filename,
                     iob->space.offset - (*(iob->aligned_buffer))->offset,
@@ -697,7 +697,7 @@ int da_slice_read(DASliceOpContext *op_ctx, SFSynchronizeContext *sctx)
 
 #ifdef OS_LINUX
     result = trunk_read_thread_push(&space, op_ctx->storage->length,
-            &op_ctx->aligned_buffer, slice_read_done, sctx);
+            &op_ctx->aio_buffer, slice_read_done, sctx);
 #else
     result = trunk_read_thread_push(&space, op_ctx->storage->length,
             op_ctx->buff, slice_read_done, sctx);

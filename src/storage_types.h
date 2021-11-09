@@ -23,6 +23,10 @@
 #include "sf/sf_types.h"
 #include "binlog/common/binlog_types.h"
 
+#ifdef OS_LINUX
+#include "dio/read_buffer_pool.h"
+#endif
+
 #define DA_SPACE_ALIGN_SIZE  8
 #define DA_TRUNK_BINLOG_MAX_RECORD_SIZE    128
 #define DA_TRUNK_BINLOG_SUBDIR_NAME      "trunk"
@@ -157,7 +161,7 @@ typedef struct da_slice_op_context {
     DAPieceFieldStorage *storage;
 
 #ifdef OS_LINUX
-    FSIOBufferType buffer_type;
+    DAIOBufferType buffer_type;
 #endif
     char *buff;  //read or write buffer
 

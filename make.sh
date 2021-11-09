@@ -37,6 +37,7 @@ fi
 LIBS=''
 uname=$(uname)
 if [ "$uname" = "Linux" ]; then
+  LIBS="$LIBS -laio"
   CFLAGS="$CFLAGS"
 elif [ "$uname" = "FreeBSD" ] || [ "$uname" = "Darwin" ]; then
   CFLAGS="$CFLAGS"
