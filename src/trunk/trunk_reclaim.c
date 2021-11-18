@@ -38,17 +38,9 @@ int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
     const bool allocator_use_lock = false;
     int result;
 
-#ifdef OS_LINUX
-    rctx->op_ctx.buffer_type = da_buffer_type_array;
-    rctx->buffer_size = 0;
-    rctx->op_ctx.buff = NULL;
-#else
-    rctx->buffer_size = 256 * 1024;
-    rctx->op_ctx.buff = (char *)fc_malloc(rctx->buffer_size);
-    if (rctx->op_ctx.buff == NULL) {
-        return ENOMEM;
+    if ((result=da_init_op_ctx(&rctx->op_ctx)) != 0) {
+        return result;
     }
-#endif
 
     if ((result=da_space_log_reader_init(&rctx->reader,
                     alloc_skiplist_once, allocator_use_lock)) != 0)
@@ -139,35 +131,6 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
     return 0;
 }
 
-static int migrate_prepare(TrunkReclaimContext *rctx,
-        DATrunkSpaceLogRecord *record)
-{
-    rctx->op_ctx.storage = &record->storage;
-
-#ifdef OS_LINUX
-#else
-    if (rctx->buffer_size < record->storage.size) {
-        char *buff;
-        int buffer_size;
-
-        buffer_size = rctx->buffer_size * 2;
-        while (buffer_size < record->storage.size) {
-            buffer_size *= 2;
-        }
-        buff = (char *)fc_malloc(buffer_size);
-        if (buff == NULL) {
-            return ENOMEM;
-        }
-
-        free(rctx->op_ctx.buff);
-        rctx->op_ctx.buff = buff;
-        rctx->buffer_size = buffer_size;
-    }
-#endif
-
-    return 0;
-}
-
 static inline void log_rw_error(DASliceOpContext *op_ctx,
         const int result, const int ignore_errno, const char *caption)
 {
@@ -187,7 +150,6 @@ static int slice_write(TrunkReclaimContext *rctx,
 {
     int count;
     int result;
-    char *buff;
 
     count = 1;
     if ((result=storage_allocator_reclaim_alloc(oid, rctx->op_ctx.
@@ -201,14 +163,8 @@ static int slice_write(TrunkReclaimContext *rctx,
         return result;
     }
 
-#ifdef OS_LINUX
-    buff = rctx->op_ctx.aio_buffer->buff + rctx->op_ctx.aio_buffer->offset;
-#else
-    buff = rctx->op_ctx.buff;
-#endif
-
-    return trunk_write_thread_by_buff_synchronize(
-            space, buff, &rctx->notifies.rw);
+    return trunk_write_thread_by_buff_synchronize(space,
+            DA_GET_OP_CTX_BUFFER(rctx->op_ctx), &rctx->notifies.rw);
 }
 
 static int migrate_one_slice(TrunkReclaimContext *rctx,
@@ -217,10 +173,7 @@ static int migrate_one_slice(TrunkReclaimContext *rctx,
     int result;
     DATrunkSpaceInfo space;
 
-    if ((result=migrate_prepare(rctx, record)) != 0) {
-        return result;
-    }
-
+    rctx->op_ctx.storage = &record->storage;
     if ((result=da_slice_read(&rctx->op_ctx, &rctx->notifies.rw)) != 0) {
         log_rw_error(&rctx->op_ctx, result, ENOENT, "read");
         return result == ENOENT ? 0 : result;

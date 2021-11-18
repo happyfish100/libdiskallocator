@@ -156,19 +156,22 @@ typedef struct da_trunk_index_record {
 } DATrunkIndexRecord;
 
 typedef struct da_slice_op_context {
-    int done_bytes;
-
     DAPieceFieldStorage *storage;
 
 #ifdef OS_LINUX
-    DAIOBufferType buffer_type;
-#endif
-    char *buff;  //read or write buffer
-
-#ifdef OS_LINUX
-    AlignedReadBuffer *aio_buffer;
+    AlignedReadBuffer *aio_buffer;   //NULL for alloc from pool
+#else
+    BufferInfo buffer;
 #endif
 
 } DASliceOpContext;
+
+#ifdef OS_LINUX
+#define DA_GET_OP_CTX_BUFFER(op_ctx) ((op_ctx).aio_buffer->buff + \
+        (op_ctx).aio_buffer->offset)
+#else
+#define DA_GET_OP_CTX_BUFFER(op_ctx) (op_ctx).buffer.buff
+#endif
+
 
 #endif

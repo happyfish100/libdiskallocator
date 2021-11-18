@@ -375,6 +375,7 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
     int read_bytes;
     int result;
     int fd;
+    bool new_alloced;
 
     new_offset = MEM_ALIGN_FLOOR(iob->space.offset, ctx->block_size);
     read_bytes = MEM_ALIGN_CEIL(iob->read_bytes, ctx->block_size);
@@ -387,11 +388,31 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
         }
     }
 
-    *(iob->aligned_buffer) = aligned_buffer_new(ctx->indexes.path,
-            offset, iob->read_bytes, read_bytes);
-    if (*(iob->aligned_buffer) == NULL) {
-        return ENOMEM;
+    if (*(iob->aligned_buffer) != NULL && (*(iob->aligned_buffer))->
+            size < read_bytes)
+    {
+        logInfo("file: "__FILE__", line: %d, "
+                "buffer size %d is too small, required size: %d",
+                __LINE__, (*(iob->aligned_buffer))->size, read_bytes);
+
+        read_buffer_pool_free(*(iob->aligned_buffer));
+        *(iob->aligned_buffer) = NULL;
     }
+
+    if (*(iob->aligned_buffer) == NULL) {
+        *(iob->aligned_buffer) = read_buffer_pool_alloc(
+                ctx->indexes.path, read_bytes);
+        if (*(iob->aligned_buffer) == NULL) {
+            return ENOMEM;
+        }
+        new_alloced = true;
+    } else {
+        new_alloced = false;
+    }
+
+    (*(iob->aligned_buffer))->offset = offset;
+    (*(iob->aligned_buffer))->length = iob->read_bytes;
+    (*(iob->aligned_buffer))->read_bytes = read_bytes;
 
     /*
     logInfo("space.offset: %"PRId64", new_offset: %"PRId64", "
@@ -400,8 +421,10 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
             */
 
     if ((result=get_read_fd(ctx, &iob->space, &fd)) != 0) {
-        read_buffer_pool_free(*(iob->aligned_buffer));
-        *(iob->aligned_buffer) = NULL;
+        if (new_alloced) {
+            read_buffer_pool_free(*(iob->aligned_buffer));
+            *(iob->aligned_buffer) = NULL;
+        }
         return result;
     }
 
@@ -679,6 +702,50 @@ static void slice_read_done(struct trunk_read_io_buffer
     PTHREAD_MUTEX_UNLOCK(&sctx->lcp.lock);
 }
 
+static int check_alloc_buffer(DASliceOpContext *op_ctx,
+        const DAStoragePathInfo *path_info)
+{
+#ifdef OS_LINUX
+    int aligned_size;
+
+    aligned_size = op_ctx->storage->size + path_info->block_size * 2;
+    if (op_ctx->aio_buffer != NULL && op_ctx->
+            aio_buffer->size < aligned_size)
+    {
+        AlignedReadBuffer *new_buffer;
+
+        new_buffer = read_buffer_pool_alloc(path_info->
+                store.index, aligned_size);
+        if (new_buffer == NULL) {
+            return ENOMEM;
+        }
+
+        read_buffer_pool_free(op_ctx->aio_buffer);
+        op_ctx->aio_buffer = new_buffer;
+    }
+#else
+    if (op_ctx->buffer.alloc_size < op_ctx->storage->size) {
+        char *buff;
+        int buffer_size;
+
+        buffer_size = op_ctx->buffer.alloc_size * 2;
+        while (buffer_size < op_ctx->storage->size) {
+            buffer_size *= 2;
+        }
+        buff = (char *)fc_malloc(buffer_size);
+        if (buff == NULL) {
+            return ENOMEM;
+        }
+
+        free(op_ctx->buffer.buff);
+        op_ctx->buffer.buff = buff;
+        op_ctx->buffer.alloc_size = buffer_size;
+    }
+#endif
+
+    return 0;
+}
+
 int da_slice_read(DASliceOpContext *op_ctx, SFSynchronizeContext *sctx)
 {
     int result;
@@ -687,6 +754,12 @@ int da_slice_read(DASliceOpContext *op_ctx, SFSynchronizeContext *sctx)
 
     if ((trunk=trunk_hashtable_get(op_ctx->storage->trunk_id)) == NULL) {
         return ENOENT;
+    }
+
+    if ((result=check_alloc_buffer(op_ctx, trunk->
+                    allocator->path_info)) != 0)
+    {
+        return result;
     }
 
     sctx->result = INT16_MIN;
@@ -700,7 +773,7 @@ int da_slice_read(DASliceOpContext *op_ctx, SFSynchronizeContext *sctx)
             &op_ctx->aio_buffer, slice_read_done, sctx);
 #else
     result = trunk_read_thread_push(&space, op_ctx->storage->length,
-            op_ctx->buff, slice_read_done, sctx);
+            op_ctx->buffer.buff, slice_read_done, sctx);
 #endif
 
     if (result != 0) {

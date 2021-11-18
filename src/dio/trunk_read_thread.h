@@ -51,6 +51,11 @@ typedef struct trunk_read_io_buffer {
     struct trunk_read_io_buffer *next;
 } TrunkReadIOBuffer;
 
+typedef struct da_synchronized_read_context {
+    SFSynchronizeContext sctx;
+    DASliceOpContext op_ctx;
+} DASynchronizedReadContext;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -59,27 +64,26 @@ extern "C" {
     void trunk_read_thread_terminate();
 
 #ifdef OS_LINUX
+
+    static inline int da_init_op_ctx(DASliceOpContext *op_ctx)
+    {
+        op_ctx->storage = NULL;
+        op_ctx->aio_buffer = NULL;
+        return 0;
+    }
+
     int trunk_read_thread_push(const DATrunkSpaceInfo *space,
             const int read_bytes, AlignedReadBuffer **aligned_buffer,
             trunk_read_io_notify_func notify_func, void *notify_arg);
 
-    static inline AlignedReadBuffer *aligned_buffer_new(const short pindex,
-            const int offset, const int length, const int read_bytes)
-    {
-        AlignedReadBuffer *aligned_buffer;
-
-        aligned_buffer = read_buffer_pool_alloc(pindex, read_bytes);
-        if (aligned_buffer == NULL) {
-            return NULL;
-        }
-
-        aligned_buffer->offset = offset;
-        aligned_buffer->length = length;
-        aligned_buffer->read_bytes = read_bytes;
-        return aligned_buffer;
-    }
-
 #else
+
+    static inline int da_init_op_ctx(DASliceOpContext *op_ctx)
+    {
+        const int alloc_size = 64 * 1024;
+        op_ctx->storage = NULL;
+        return fc_init_buffer(&op_ctx->buffer, alloc_size);
+    }
 
     int trunk_read_thread_push(const DATrunkSpaceInfo *space,
             const int read_bytes, char *buff, trunk_read_io_notify_func
@@ -88,6 +92,11 @@ extern "C" {
 #endif
 
     int da_slice_read(DASliceOpContext *op_ctx, SFSynchronizeContext *sctx);
+
+    static inline int da_slice_read1(DASynchronizedReadContext *context)
+    {
+        return da_slice_read(&context->op_ctx, &context->sctx);
+    }
 
 #ifdef __cplusplus
 }

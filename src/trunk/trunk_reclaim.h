@@ -39,7 +39,6 @@ typedef struct trunk_reclaim_context {
     TrunkReclaimBlockArray barray;
     DASliceOpContext op_ctx;
     int slice_count;
-    int buffer_size;
     struct {
         SFSynchronizeContext rw;   //for read and write
         SFSynchronizeContext log;  //for binlog
