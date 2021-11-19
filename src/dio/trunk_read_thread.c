@@ -92,6 +92,21 @@ static TrunkReadContext trunk_io_ctx = {{0, NULL}};
 
 static void *trunk_read_thread_func(void *arg);
 
+int da_init_read_context(DASynchronizedReadContext *ctx)
+{
+    int result;
+
+    if ((result=da_init_op_ctx(&ctx->op_ctx)) != 0) {
+        return result;
+    }
+
+    if ((result=sf_synchronize_ctx_init(&ctx->sctx)) != 0) {
+        return result;
+    }
+
+    return 0;
+}
+
 static int alloc_path_contexts()
 {
     int bytes;
@@ -304,8 +319,9 @@ int trunk_read_thread_push(const DATrunkSpaceInfo *space,
         trunk_read_io_notify_func notify_func, void *notify_arg)
 #else
 int trunk_read_thread_push(const DATrunkSpaceInfo *space,
-        const int read_bytes, char *buff, trunk_read_io_notify_func
-        notify_func, void *notify_arg)
+        const int read_bytes, BufferInfo *buffer,
+        trunk_read_io_notify_func notify_func,
+        void *notify_arg)
 #endif
 {
     TrunkReadPathContext *path_ctx;
@@ -326,7 +342,7 @@ int trunk_read_thread_push(const DATrunkSpaceInfo *space,
 #ifdef OS_LINUX
     iob->aligned_buffer = aligned_buffer;
 #else
-    iob->data = buff;
+    iob->buffer = buffer;
 #endif
     iob->notify.func = notify_func;
     iob->notify.arg = notify_arg;
@@ -391,7 +407,7 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
     if (*(iob->aligned_buffer) != NULL && (*(iob->aligned_buffer))->
             size < read_bytes)
     {
-        logInfo("file: "__FILE__", line: %d, "
+        logWarning("file: "__FILE__", line: %d, "
                 "buffer size %d is too small, required size: %d",
                 __LINE__, (*(iob->aligned_buffer))->size, read_bytes);
 
@@ -596,18 +612,17 @@ static int do_read_slice(TrunkReadThreadContext *ctx, TrunkReadIOBuffer *iob)
     int fd;
     int remain;
     int bytes;
-    int data_len;
     int result;
 
     if ((result=get_read_fd(ctx, &iob->space, &fd)) != 0) {
         return result;
     }
 
-    data_len = 0;
+    iob->buffer->length = 0;
     remain = iob->read_bytes;
     while (remain > 0) {
-        if ((bytes=pread(fd, iob->data + data_len, remain,
-                        iob->space.offset + data_len)) <= 0)
+        if ((bytes=pread(fd, iob->buffer->buff + iob->buffer->length, remain,
+                        iob->space.offset + iob->buffer->length)) <= 0)
         {
             char trunk_filename[PATH_MAX];
 
@@ -624,12 +639,12 @@ static int do_read_slice(TrunkReadThreadContext *ctx, TrunkReadIOBuffer *iob)
             logError("file: "__FILE__", line: %d, "
                     "read trunk file: %s fail, offset: %u, "
                     "errno: %d, error info: %s", __LINE__, trunk_filename,
-                    iob->space.offset + data_len,
+                    iob->space.offset + iob->buffer->length,
                     result, STRERROR(result));
             return result;
         }
 
-        data_len += bytes;
+        iob->buffer->length += bytes;
         remain -= bytes;
     }
 
@@ -746,47 +761,47 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
     return 0;
 }
 
-int da_slice_read(DASliceOpContext *op_ctx, SFSynchronizeContext *sctx)
+int da_slice_read(DASynchronizedReadContext *ctx)
 {
     int result;
     DATrunkSpaceInfo space;
     DATrunkFileInfo *trunk;
 
-    if ((trunk=trunk_hashtable_get(op_ctx->storage->trunk_id)) == NULL) {
+    if ((trunk=trunk_hashtable_get(ctx->op_ctx.storage->trunk_id)) == NULL) {
         return ENOENT;
     }
 
-    if ((result=check_alloc_buffer(op_ctx, trunk->
+    if ((result=check_alloc_buffer(&ctx->op_ctx, trunk->
                     allocator->path_info)) != 0)
     {
         return result;
     }
 
-    sctx->result = INT16_MIN;
+    ctx->sctx.result = INT16_MIN;
     space.store = &trunk->allocator->path_info->store;
     space.id_info = trunk->id_info;
-    space.offset = op_ctx->storage->offset;
-    space.size = op_ctx->storage->size;
+    space.offset = ctx->op_ctx.storage->offset;
+    space.size = ctx->op_ctx.storage->size;
 
 #ifdef OS_LINUX
-    result = trunk_read_thread_push(&space, op_ctx->storage->length,
-            &op_ctx->aio_buffer, slice_read_done, sctx);
+    result = trunk_read_thread_push(&space, ctx->op_ctx.storage->length,
+            &ctx->op_ctx.aio_buffer, slice_read_done, &ctx->sctx);
 #else
-    result = trunk_read_thread_push(&space, op_ctx->storage->length,
-            op_ctx->buffer.buff, slice_read_done, sctx);
+    result = trunk_read_thread_push(&space, ctx->op_ctx.storage->length,
+            &ctx->op_ctx.buffer, slice_read_done, &ctx->sctx);
 #endif
 
     if (result != 0) {
         return result;
     }
 
-    PTHREAD_MUTEX_LOCK(&sctx->lcp.lock);
-    while (sctx->result == INT16_MIN && SF_G_CONTINUE_FLAG) {
-        pthread_cond_wait(&sctx->lcp.cond,
-                &sctx->lcp.lock);
+    PTHREAD_MUTEX_LOCK(&ctx->sctx.lcp.lock);
+    while (ctx->sctx.result == INT16_MIN && SF_G_CONTINUE_FLAG) {
+        pthread_cond_wait(&ctx->sctx.lcp.cond,
+                &ctx->sctx.lcp.lock);
     }
-    result = sctx->result == INT16_MIN ? EINTR : sctx->result;
-    PTHREAD_MUTEX_UNLOCK(&sctx->lcp.lock);
+    result = ctx->sctx.result == INT16_MIN ? EINTR : ctx->sctx.result;
+    PTHREAD_MUTEX_UNLOCK(&ctx->sctx.lcp.lock);
 
     return result;
 }

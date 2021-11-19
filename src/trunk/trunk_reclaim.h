@@ -20,6 +20,7 @@
 #include "fastcommon/uniq_skiplist.h"
 #include "../storage_config.h"
 #include "../binlog/trunk/space_log_reader.h"
+#include "../dio/trunk_read_thread.h"
 #include "trunk_allocator.h"
 
 typedef struct trunk_reclaim_block_info {
@@ -37,12 +38,9 @@ typedef struct trunk_reclaim_context {
     DASpaceLogReader reader;
     UniqSkiplist *skiplist;
     TrunkReclaimBlockArray barray;
-    DASliceOpContext op_ctx;
+    DASynchronizedReadContext read_ctx;
     int slice_count;
-    struct {
-        SFSynchronizeContext rw;   //for read and write
-        SFSynchronizeContext log;  //for binlog
-    } notifies;
+    SFSynchronizeContext log_notify;  //for binlog
 } TrunkReclaimContext;
 
 

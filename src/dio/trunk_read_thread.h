@@ -36,11 +36,12 @@ typedef void (*trunk_read_io_notify_func)(struct trunk_read_io_buffer
 typedef struct trunk_read_io_buffer {
     DATrunkSpaceInfo space;
     int read_bytes;
-    char *data;
 
 #ifdef OS_LINUX
     AlignedReadBuffer **aligned_buffer;
     struct iocb iocb;
+#else
+    BufferInfo *buffer;
 #endif
 
     struct {
@@ -86,17 +87,15 @@ extern "C" {
     }
 
     int trunk_read_thread_push(const DATrunkSpaceInfo *space,
-            const int read_bytes, char *buff, trunk_read_io_notify_func
-            notify_func, void *notify_arg);
+            const int read_bytes, BufferInfo *buffer,
+            trunk_read_io_notify_func notify_func,
+            void *notify_arg);
 
 #endif
 
-    int da_slice_read(DASliceOpContext *op_ctx, SFSynchronizeContext *sctx);
+    int da_init_read_context(DASynchronizedReadContext *ctx);
 
-    static inline int da_slice_read1(DASynchronizedReadContext *context)
-    {
-        return da_slice_read(&context->op_ctx, &context->sctx);
-    }
+    int da_slice_read(DASynchronizedReadContext *ctx);
 
 #ifdef __cplusplus
 }

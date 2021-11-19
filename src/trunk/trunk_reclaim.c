@@ -27,7 +27,6 @@
 #include "../global.h"
 #include "../storage_allocator.h"
 #include "../dio/trunk_fd_cache.h"
-#include "../dio/trunk_read_thread.h"
 #include "../dio/trunk_write_thread.h"
 #include "../binlog/trunk/trunk_space_log.h"
 #include "trunk_reclaim.h"
@@ -38,25 +37,19 @@ int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
     const bool allocator_use_lock = false;
     int result;
 
-    if ((result=da_init_op_ctx(&rctx->op_ctx)) != 0) {
-        return result;
-    }
-
     if ((result=da_space_log_reader_init(&rctx->reader,
                     alloc_skiplist_once, allocator_use_lock)) != 0)
     {
         return result;
     }
 
-    if ((result=init_pthread_lock_cond_pair(&rctx->notifies.rw.lcp)) != 0) {
+    if ((result=da_init_read_context(&rctx->read_ctx)) != 0) {
         return result;
     }
-    rctx->notifies.rw.result = 0;
 
-    if ((result=init_pthread_lock_cond_pair(&rctx->notifies.log.lcp)) != 0) {
+    if ((result=sf_synchronize_ctx_init(&rctx->log_notify)) != 0) {
         return result;
     }
-    rctx->notifies.log.waiting_count = 0;
 
     return 0;
 }
@@ -152,19 +145,20 @@ static int slice_write(TrunkReclaimContext *rctx,
     int result;
 
     count = 1;
-    if ((result=storage_allocator_reclaim_alloc(oid, rctx->op_ctx.
-                    storage->length, space, &count)) != 0)
+    if ((result=storage_allocator_reclaim_alloc(oid, rctx->read_ctx.
+                    op_ctx.storage->length, space, &count)) != 0)
     {
         logError("file: "__FILE__", line: %d, "
                 "alloc disk space %d bytes fail, "
                 "errno: %d, error info: %s", __LINE__,
-                rctx->op_ctx.storage->length,
+                rctx->read_ctx.op_ctx.storage->length,
                 result, STRERROR(result));
         return result;
     }
 
     return trunk_write_thread_by_buff_synchronize(space,
-            DA_GET_OP_CTX_BUFFER(rctx->op_ctx), &rctx->notifies.rw);
+            DA_OP_CTX_BUFFER_PTR(rctx->read_ctx.op_ctx),
+            &rctx->read_ctx.sctx);
 }
 
 static int migrate_one_slice(TrunkReclaimContext *rctx,
@@ -173,24 +167,20 @@ static int migrate_one_slice(TrunkReclaimContext *rctx,
     int result;
     DATrunkSpaceInfo space;
 
-    rctx->op_ctx.storage = &record->storage;
-    if ((result=da_slice_read(&rctx->op_ctx, &rctx->notifies.rw)) != 0) {
-        log_rw_error(&rctx->op_ctx, result, ENOENT, "read");
+    rctx->read_ctx.op_ctx.storage = &record->storage;
+    if ((result=da_slice_read(&rctx->read_ctx)) != 0) {
+        log_rw_error(&rctx->read_ctx.op_ctx, result, ENOENT, "read");
         return result == ENOENT ? 0 : result;
     }
 
     if ((result=slice_write(rctx, record->oid, &space)) != 0) {
-        log_rw_error(&rctx->op_ctx, result, 0, "write");
+        log_rw_error(&rctx->read_ctx.op_ctx, result, 0, "write");
         return result;
     }
 
     record->storage.trunk_id = space.id_info.id;
     record->storage.offset = space.offset;
     record->storage.size = space.size;
-
-#ifdef OS_LINUX
-    read_buffer_pool_free(rctx->op_ctx.aio_buffer);
-#endif
 
     return 0;
 }
@@ -253,7 +243,7 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
         field.op_type = da_binlog_op_type_update;
         field.storage = new_record->storage;
         if ((result=DA_REDO_QUEUE_PUSH_FUNC(&field, &space_chain,
-                        &rctx->notifies.log)) != 0)
+                        &rctx->log_notify)) != 0)
         {
             return result;
         }
@@ -271,7 +261,7 @@ static int migrate_blocks(TrunkReclaimContext *rctx)
     TrunkReclaimBlockInfo *bend;
     int result;
 
-    __sync_add_and_fetch(&rctx->notifies.log.
+    __sync_add_and_fetch(&rctx->log_notify.
             waiting_count, rctx->slice_count);
 
     bend = rctx->barray.blocks + rctx->barray.count;
@@ -281,7 +271,7 @@ static int migrate_blocks(TrunkReclaimContext *rctx)
         }
     }
 
-    sf_synchronize_counter_wait(&rctx->notifies.log);
+    sf_synchronize_counter_wait(&rctx->log_notify);
     return 0;
 }
 

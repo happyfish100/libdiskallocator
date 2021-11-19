@@ -167,10 +167,12 @@ typedef struct da_slice_op_context {
 } DASliceOpContext;
 
 #ifdef OS_LINUX
-#define DA_GET_OP_CTX_BUFFER(op_ctx) ((op_ctx).aio_buffer->buff + \
+#define DA_OP_CTX_BUFFER_PTR(op_ctx) ((op_ctx).aio_buffer->buff + \
         (op_ctx).aio_buffer->offset)
+#define DA_OP_CTX_BUFFER_LEN(op_ctx) (op_ctx).aio_buffer->length
 #else
-#define DA_GET_OP_CTX_BUFFER(op_ctx) (op_ctx).buffer.buff
+#define DA_OP_CTX_BUFFER_PTR(op_ctx) (op_ctx).buffer.buff
+#define DA_OP_CTX_BUFFER_LEN(op_ctx) (op_ctx).buffer.length
 #endif
 
 
