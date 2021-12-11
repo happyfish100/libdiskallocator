@@ -132,7 +132,7 @@ static int do_log(DABinlogRecord *record, DABinlogWriterCache *cache)
         }
     }
 
-    if (cache->buff_end - cache->current < DA_BINLOG_RECORD_MAX_SIZE) {
+    if (cache->buff_end - cache->current < record->buffer.length) {
         if ((result=da_binlog_writer_cache_write(cache, false)) != 0) {
             return result;
         }
@@ -419,6 +419,13 @@ int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
         const BufferInfo *buffer)
 {
     DABinlogRecord *record;
+
+    if (buffer->length > writer->max_record_size) {
+        logError("file: "__FILE__", line: %d, "
+                "input buffer size %d is too large, exceeds %d",
+                __LINE__, buffer->length, writer->max_record_size);
+        return EOVERFLOW;
+    }
 
     if ((record=(DABinlogRecord *)fast_mblock_alloc_object(
                     &writer->record_allocator)) == NULL)

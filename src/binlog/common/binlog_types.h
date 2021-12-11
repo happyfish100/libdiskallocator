@@ -20,8 +20,6 @@
 #include "fastcommon/fc_list.h"
 #include "sf/sf_types.h"
 
-#define DA_BINLOG_RECORD_MAX_SIZE  128
-
 typedef struct da_binlog_id_type_pair {
     uint64_t id;
     int type;
