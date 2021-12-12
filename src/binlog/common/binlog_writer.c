@@ -229,7 +229,7 @@ static int deal_binlog_records(DABinlogRecord *head)
                 pair < WRITER_CHAIN_ARRAY.end;
                 pair++)
         {
-            if (pair->writer->type == record->key.type) {
+            if (pair->writer == record->writer) {
                 break;
             }
         }
@@ -371,6 +371,8 @@ int da_binlog_writer_start()
 static int binlog_record_alloc_init(DABinlogRecord *record,
         DABinlogWriter *writer)
 {
+    record->writer = writer;
+    record->key.type = writer->type;
     record->buffer.buff = (char *)(record + 1);
     record->buffer.alloc_size = writer->max_record_size;
     return 0;
@@ -433,9 +435,7 @@ int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
         return ENOMEM;
     }
 
-    record->writer = writer;
     record->key.id = binlog_id;
-    record->key.type = writer->type;
     record->version = __sync_add_and_fetch(&binlog_writer_ctx.
             current_version, 1);
     memcpy(record->buffer.buff, buffer->buff, buffer->length);
