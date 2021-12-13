@@ -67,6 +67,7 @@ typedef struct {
         struct fc_queue shrink; //array shrink
     } queues;
     BinlogWriterChainArray writer_chain_array;
+    DABinlogRecordPtrArray record_ptr_array;
     time_t last_shrink_time;
     volatile int64_t current_version;
     volatile bool running;
@@ -77,6 +78,7 @@ static BinlogWriterContext binlog_writer_ctx;
 #define WRITER_NORMAL_QUEUE   binlog_writer_ctx.queues.normal
 #define WRITER_SHRINK_QUEUE   binlog_writer_ctx.queues.shrink
 #define WRITER_CHAIN_ARRAY    binlog_writer_ctx.writer_chain_array
+#define RECORD_PTR_ARRAY      binlog_writer_ctx.record_ptr_array
 
 int da_binlog_writer_cache_write(DABinlogWriterCache *cache, const bool flush)
 {
@@ -123,7 +125,9 @@ static int do_log(DABinlogRecord *record, DABinlogWriterCache *cache)
     if (!DA_BINLOG_ID_TYPE_EQUALS(record->key,
                 cache->key) || cache->fd < 0)
     {
-        if ((result=da_binlog_writer_cache_write(cache, true)) != 0) {
+        if (cache->fd >= 0 && (result=da_binlog_writer_cache_write(
+                        cache, true)) != 0)
+        {
             return result;
         }
         cache->key = record->key;
@@ -143,7 +147,7 @@ static int do_log(DABinlogRecord *record, DABinlogWriterCache *cache)
     return 0;
 }
 
-static int deal_sorted_record(DABinlogRecord **records, const int count)
+static int deal_sorted_record(DABinlogRecordPtrArray *array)
 {
     DABinlogRecord **record;
     DABinlogRecord **end;
@@ -152,8 +156,8 @@ static int deal_sorted_record(DABinlogRecord **records, const int count)
 
     da_binlog_writer_cache_init(&cache);
     result = 0;
-    end = records + count;
-    for (record=records; record<end; record++) {
+    end = array->records + array->count;
+    for (record=array->records; record<end; record++) {
         if ((result=do_log(*record, &cache)) != 0) {
             return result;
         }
@@ -182,20 +186,18 @@ static int record_compare(const DABinlogRecord **record1,
     }
 }
 
-static void dec_waiting_count(DABinlogRecord **records, const int count)
+static void dec_waiting_count(DABinlogRecordPtrArray *array)
 {
     DABinlogRecord **record;
     DABinlogRecord **end;
     DABinlogRecord **start;
 
     start = NULL;
-    end = records + count;
-    for (record=records; record<end; record++) {
+    end = array->records + array->count;
+    for (record=array->records; record<end; record++) {
         if (start == NULL) {
             start = record;
-        } else if (!DA_BINLOG_ID_TYPE_EQUALS((*record)->key,
-                    (*start)->key))
-        {
+        } else if ((*record)->writer != (*start)->writer) {
             sf_synchronize_counter_notify(&(*start)->
                     writer->notify, record - start);
             start = record;
@@ -208,23 +210,45 @@ static void dec_waiting_count(DABinlogRecord **records, const int count)
     }
 }
 
+static int realloc_record_ptr_array(DABinlogRecordPtrArray *array)
+{
+    DABinlogRecord **records;
+    int alloc;
+
+    alloc = array->alloc * 2;
+    records = (DABinlogRecord **)fc_malloc(sizeof(DABinlogRecord *) * alloc);
+    if (records == NULL) {
+        return ENOMEM;
+    }
+
+    memcpy(records, array->records, sizeof(DABinlogRecord *) * array->count);
+    free(array->records);
+
+    array->records = records;
+    array->alloc = alloc;
+    return 0;
+}
+
 static int deal_binlog_records(DABinlogRecord *head)
 {
     int result;
-    int count;
-    DABinlogRecord *records[BINLOG_RECORD_MAX_WRITERS *
-        BINLOG_RECORD_BATCH_SIZE];
     DABinlogRecord **pp;
     DABinlogRecord *record;
     struct fast_mblock_node *node;
     BinlogWriterChainPair *pair = NULL;
 
-    BINLOG_RECORD_INIT_NODE_CHAINS(WRITER_CHAIN_ARRAY.pairs);
-    pp = records;
+    pp = RECORD_PTR_ARRAY.records;
     record = head;
     do {
-        *pp++ = record;
+        if (pp - RECORD_PTR_ARRAY.records == RECORD_PTR_ARRAY.alloc) {
+            RECORD_PTR_ARRAY.count = pp - RECORD_PTR_ARRAY.records;
+            if ((result=realloc_record_ptr_array(&RECORD_PTR_ARRAY)) != 0) {
+                return result;
+            }
+            pp = RECORD_PTR_ARRAY.records + RECORD_PTR_ARRAY.count;
+        }
 
+        *pp++ = record;
         for (pair = WRITER_CHAIN_ARRAY.pairs;
                 pair < WRITER_CHAIN_ARRAY.end;
                 pair++)
@@ -245,20 +269,22 @@ static int deal_binlog_records(DABinlogRecord *head)
         record = record->next;
     } while (record != NULL);
 
-    count = pp - records;
-    if (count > 1) {
-        qsort(records, count, sizeof(DABinlogRecord *),
-                (int (*)(const void *, const void *))record_compare);
+    RECORD_PTR_ARRAY.count = pp - RECORD_PTR_ARRAY.records;
+    if (RECORD_PTR_ARRAY.count > 1) {
+        qsort(RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count,
+                sizeof(DABinlogRecord *), (int (*)(const void *,
+                        const void *))record_compare);
     }
 
-    result = deal_sorted_record(records, count);
-    dec_waiting_count(records, count);
+    result = deal_sorted_record(&RECORD_PTR_ARRAY);
+    dec_waiting_count(&RECORD_PTR_ARRAY);
 
     for (pair=WRITER_CHAIN_ARRAY.pairs; pair<WRITER_CHAIN_ARRAY.end; pair++) {
         if (!FC_IS_CHAIN_EMPTY(pair->chain)) {
             pair->chain.tail->next = NULL;
             fast_mblock_batch_free(&pair->writer->
                     record_allocator, &pair->chain);
+            pair->chain.head = pair->chain.tail = NULL;
         }
     }
 
@@ -357,6 +383,15 @@ int da_binlog_writer_global_init()
         return result;
     }
 
+    RECORD_PTR_ARRAY.alloc = BINLOG_RECORD_MAX_WRITERS *
+        BINLOG_RECORD_BATCH_SIZE;
+    RECORD_PTR_ARRAY.records = (DABinlogRecord **)fc_malloc(
+            sizeof(DABinlogRecord *) * RECORD_PTR_ARRAY.alloc);
+    if (RECORD_PTR_ARRAY.records == NULL) {
+        return ENOMEM;
+    }
+
+    BINLOG_RECORD_INIT_NODE_CHAINS(WRITER_CHAIN_ARRAY.pairs);
     return 0;
 }
 

@@ -49,6 +49,12 @@ typedef struct da_binlog_record {
     struct da_binlog_record *next;  //for queue
 } DABinlogRecord;
 
+typedef struct da_binlog_record_ptr_array {
+    DABinlogRecord **records;
+    int alloc;
+    int count;
+} DABinlogRecordPtrArray;
+
 typedef int (*da_binlog_unpack_record_func)(const string_t *line,
         void *args, char *error_info);
 
