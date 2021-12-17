@@ -108,9 +108,9 @@ extern "C" {
             *record, FastBuffer *buffer)
     {
         buffer->length += sprintf(buffer->data + buffer->length,
-                "%u %"PRId64" %"PRId64" %c %u %u %u %u %u\n",
+                "%u %"PRId64" %"PRId64" %u %c %u %u %u %u\n",
                 (uint32_t)g_current_time, record->storage.version,
-                record->oid, record->op_type, record->fid,
+                record->oid, record->fid, record->op_type,
                 record->storage.trunk_id, record->storage.length,
                 record->storage.offset, record->storage.size);
     }
