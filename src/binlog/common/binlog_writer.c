@@ -54,6 +54,7 @@ typedef struct binlog_writer_chain_array {
 
 typedef struct binlog_writer_shrink_task {
     DABinlogWriter *writer;
+    int64_t id;
     void *args;
     struct binlog_writer_shrink_task *next;
 } BinlogWriterShrinkTask;
@@ -294,6 +295,7 @@ static int deal_binlog_records(DABinlogRecord *head)
 static void deal_shrink_queue()
 {
     BinlogWriterShrinkTask *stask;
+    DABinlogIdTypePair key;
     int result;
 
     while (g_current_time - binlog_writer_ctx.last_shrink_time == 0) {
@@ -314,6 +316,10 @@ static void deal_shrink_queue()
     if (!SF_G_CONTINUE_FLAG) {
         return;
     }
+
+    key.id = stask->id;
+    key.type = stask->writer->type;
+    da_write_fd_cache_remove(&key);
 
     binlog_writer_ctx.last_shrink_time = g_current_time;
     result = g_da_write_cache_ctx.type_subdir_array.pairs[
@@ -479,7 +485,8 @@ int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
     return 0;
 }
 
-int da_binlog_writer_shrink(DABinlogWriter *writer, void *args)
+int da_binlog_writer_shrink(DABinlogWriter *writer,
+        const int64_t id, void *args)
 {
     BinlogWriterShrinkTask *stask;
 
@@ -490,6 +497,7 @@ int da_binlog_writer_shrink(DABinlogWriter *writer, void *args)
     }
 
     stask->writer = writer;
+    stask->id = id;
     stask->args = args;
     fc_queue_push(&WRITER_SHRINK_QUEUE, stask);
     return 0;
