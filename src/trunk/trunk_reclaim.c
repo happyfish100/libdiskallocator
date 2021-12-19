@@ -89,7 +89,7 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
     DATrunkSpaceLogRecord *tail;
     TrunkReclaimBlockInfo *block;
 
-    rctx->slice_count = 0;
+    rctx->slice_counts.total = 0;
     uniq_skiplist_iterator(rctx->skiplist, &it);
     block = barray->blocks;
     record = uniq_skiplist_next(&it);
@@ -101,7 +101,7 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
             }
             block = barray->blocks + barray->count;
         }
-        rctx->slice_count++;
+        rctx->slice_counts.total++;
 
         block->total_size = record->storage.size;
         block->head = tail = record;
@@ -113,7 +113,7 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
             block->total_size += record->storage.size;
             tail->next = record;
             tail = record;
-            rctx->slice_count++;
+            rctx->slice_counts.total++;
         }
 
         tail->next = NULL;  //end of record chain
@@ -193,6 +193,7 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
     DATrunkSpaceLogRecord *old_record;
     DATrunkSpaceLogRecord *new_record;
     int result;
+    int flags;
     uint32_t offset;
     DAPieceFieldInfo field;
     struct fc_queue_info space_chain;
@@ -243,9 +244,15 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
         field.op_type = da_binlog_op_type_update;
         field.storage = new_record->storage;
         if ((result=DA_REDO_QUEUE_PUSH_FUNC(&field, &space_chain,
-                        &rctx->log_notify)) != 0)
+                        &rctx->log_notify, &flags)) != 0)
         {
             return result;
+        }
+
+        if (flags == DA_REDO_QUEUE_PUSH_FLAGS_SKIP) {
+            rctx->slice_counts.skip++;
+        } else if (flags == DA_REDO_QUEUE_PUSH_FLAGS_IGNORE) {
+            rctx->slice_counts.ignore++;
         }
 
         offset += record->storage.size;
@@ -261,8 +268,8 @@ static int migrate_blocks(TrunkReclaimContext *rctx)
     TrunkReclaimBlockInfo *bend;
     int result;
 
-    __sync_add_and_fetch(&rctx->log_notify.
-            waiting_count, rctx->slice_count);
+    __sync_add_and_fetch(&rctx->log_notify.waiting_count,
+            rctx->slice_counts.total);
 
     bend = rctx->barray.blocks + rctx->barray.count;
     for (block=rctx->barray.blocks; block<bend; block++) {
@@ -280,6 +287,7 @@ int trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
 {
     int result;
 
+    rctx->slice_counts.skip = rctx->slice_counts.ignore = 0;
     if ((result=da_space_log_reader_load(&rctx->reader,
                     trunk->id_info.id, &rctx->skiplist)) != 0)
     {

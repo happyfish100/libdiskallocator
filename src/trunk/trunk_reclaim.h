@@ -39,7 +39,11 @@ typedef struct trunk_reclaim_context {
     UniqSkiplist *skiplist;
     TrunkReclaimBlockArray barray;
     DASynchronizedReadContext read_ctx;
-    int slice_count;
+    struct {
+        int total;
+        int skip;   //do NOT need migrate
+        int ignore; //object/inode not exist
+    } slice_counts;
     SFSynchronizeContext log_notify;  //for binlog
 } TrunkReclaimContext;
 

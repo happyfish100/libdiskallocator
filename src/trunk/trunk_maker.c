@@ -239,6 +239,7 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     DATrunkFileInfo *trunk;
     int64_t used_bytes;
     int64_t time_used;
+    char bytes_buff[64];
     char time_buff[64];
     char time_prompt[64];
     int result;
@@ -289,15 +290,21 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
         result = 0;
     }
 
+    long_to_comma_str(used_bytes, bytes_buff);
     long_to_comma_str(time_used, time_buff);
     sprintf(time_prompt, "time used: %s ms", time_buff);
     logInfo("file: "__FILE__", line: %d, "
-            "path index: %d, reclaiming trunk id: %u, "
-            "last used bytes: %"PRId64", current used bytes: %u, "
-            "last usage ratio: %.2f%%, result: %d, %s", __LINE__, task->
-            allocator->path_info->store.index, trunk->id_info.id,
-            used_bytes, trunk->used.bytes, 100.00 * (double)used_bytes /
-            (double)trunk->size, result, time_prompt);
+            "path index: %d, reclaimed trunk id: %u, "
+            "slice counts {total: %d, skip: %d, ignore: %d}, "
+            "used bytes {last: %s, current: %u}, "
+            "last usage ratio: %.2f%%, result: %d, %s", __LINE__,
+            task->allocator->path_info->store.index, trunk->id_info.id,
+            thread->reclaim_ctx.slice_counts.total,
+            thread->reclaim_ctx.slice_counts.skip,
+            thread->reclaim_ctx.slice_counts.ignore,
+            bytes_buff, trunk->used.bytes,
+            100.00 * (double)used_bytes / (double)trunk->size,
+            result, time_prompt);
 
     if (result == 0) {
         da_trunk_space_log_unlink(trunk->id_info.id);

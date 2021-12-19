@@ -45,6 +45,9 @@
 #define DA_FIELD_UPDATE_SOURCE_NORMAL   'N'
 #define DA_FIELD_UPDATE_SOURCE_RECLAIM  'R'
 
+#define DA_REDO_QUEUE_PUSH_FLAGS_SKIP    1 //do NOT need migrate
+#define DA_REDO_QUEUE_PUSH_FLAGS_IGNORE  2 //object/inode not exist
+
 struct da_slice_op_context;
 struct da_trunk_allocator;
 struct da_piece_field_info;
@@ -52,8 +55,9 @@ struct da_piece_field_info;
 typedef void (*da_rw_done_callback_func)(
         struct da_slice_op_context *op_ctx, void *arg);
 
-typedef int (*da_redo_queue_push_func)(const struct da_piece_field_info *field,
-        struct fc_queue_info *space_chain, SFSynchronizeContext *sctx);
+typedef int (*da_redo_queue_push_func)(const struct da_piece_field_info
+        *field, struct fc_queue_info *space_chain,
+        SFSynchronizeContext *sctx, int *flags);
 
 typedef struct {
     int index;   //the inner index is important!
