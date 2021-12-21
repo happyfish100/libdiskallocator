@@ -55,6 +55,7 @@ typedef struct binlog_writer_chain_array {
 typedef struct binlog_writer_shrink_task {
     DABinlogWriter *writer;
     int64_t id;
+    time_t last_shrink_time;
     void *args;
     struct binlog_writer_shrink_task *next;
 } BinlogWriterShrinkTask;
@@ -69,7 +70,6 @@ typedef struct {
     } queues;
     BinlogWriterChainArray writer_chain_array;
     DABinlogRecordPtrArray record_ptr_array;
-    time_t last_shrink_time;
     volatile int64_t current_version;
     volatile bool running;
 } BinlogWriterContext;
@@ -294,41 +294,65 @@ static int deal_binlog_records(DABinlogRecord *head)
 
 static void deal_shrink_queue()
 {
+    BinlogWriterShrinkTask *head;
     BinlogWriterShrinkTask *stask;
+    struct fc_queue_info qinfo;
     DABinlogIdTypePair key;
+    int count;
     int result;
 
-    while (g_current_time - binlog_writer_ctx.last_shrink_time == 0) {
-        if (fc_queue_timedpeek_ms(&WRITER_NORMAL_QUEUE, 100) != NULL) {
-            break;
+    if (fc_queue_empty(&WRITER_SHRINK_QUEUE)) {
+        if (fc_queue_timedpeek_ms(&WRITER_NORMAL_QUEUE, 10) == NULL) {
+            return;
         }
     }
 
-    if (g_current_time - binlog_writer_ctx.last_shrink_time == 0) {
-        return;
+    count = 0;
+    qinfo.head = qinfo.tail = NULL;
+    head = fc_queue_pop_all_ex(&WRITER_SHRINK_QUEUE, false);
+    while (head != NULL && SF_G_CONTINUE_FLAG) {
+        stask = head;
+        head = head->next;
+
+        if (g_current_time - stask->last_shrink_time > 0) {
+            ++count;
+            key.id = stask->id;
+            key.type = stask->writer->type;
+            da_write_fd_cache_remove(&key);
+
+            result = g_da_write_cache_ctx.type_subdir_array.pairs[
+                stask->writer->type].shrink(stask->writer, stask->args);
+            fast_mblock_free_object(&binlog_writer_ctx.
+                    allocators.stask, stask);
+
+            if (result != 0) {
+                logCrit("file: "__FILE__", line: %d, "
+                        "deal_shrink_queue fail, "
+                        "program exit!", __LINE__);
+                sf_terminate_myself();
+                break;
+            }
+        } else {
+            if (qinfo.head == NULL) {
+                qinfo.head = stask;
+            } else {
+                ((BinlogWriterShrinkTask *)qinfo.tail)->next = stask;
+            }
+            qinfo.tail = stask;
+        }
     }
 
-    if ((stask=(BinlogWriterShrinkTask *)fc_queue_try_pop(
-                    &WRITER_SHRINK_QUEUE)) == NULL)
-    {
-        return;
-    }
     if (!SF_G_CONTINUE_FLAG) {
         return;
     }
 
-    key.id = stask->id;
-    key.type = stask->writer->type;
-    da_write_fd_cache_remove(&key);
+    if (qinfo.head != NULL) {
+        ((BinlogWriterShrinkTask *)qinfo.tail)->next = NULL;
+        fc_queue_push_queue_to_tail_silence(&WRITER_SHRINK_QUEUE, &qinfo);
 
-    binlog_writer_ctx.last_shrink_time = g_current_time;
-    result = g_da_write_cache_ctx.type_subdir_array.pairs[
-        stask->writer->type].shrink(stask->writer, stask->args);
-    if (result != 0) {
-        logCrit("file: "__FILE__", line: %d, "
-                "deal_shrink_queue fail, "
-                "program exit!", __LINE__);
-        sf_terminate_myself();
+        if (count == 0) {
+            fc_sleep_ms(10);
+        }
     }
 }
 
@@ -485,8 +509,8 @@ int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
     return 0;
 }
 
-int da_binlog_writer_shrink(DABinlogWriter *writer,
-        const int64_t id, void *args)
+int da_binlog_writer_shrink(DABinlogWriter *writer, const int64_t id,
+        const time_t last_shrink_time, void *args)
 {
     BinlogWriterShrinkTask *stask;
 
@@ -498,6 +522,7 @@ int da_binlog_writer_shrink(DABinlogWriter *writer,
 
     stask->writer = writer;
     stask->id = id;
+    stask->last_shrink_time = last_shrink_time;
     stask->args = args;
     fc_queue_push(&WRITER_SHRINK_QUEUE, stask);
     return 0;

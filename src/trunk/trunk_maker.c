@@ -295,10 +295,12 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     sprintf(time_prompt, "time used: %s ms", time_buff);
     logInfo("file: "__FILE__", line: %d, "
             "path index: %d, reclaimed trunk id: %u, "
+            "migrate block count: %d, "
             "slice counts {total: %d, skip: %d, ignore: %d}, "
             "used bytes {last: %s, current: %u}, "
             "last usage ratio: %.2f%%, result: %d, %s", __LINE__,
             task->allocator->path_info->store.index, trunk->id_info.id,
+            thread->reclaim_ctx.barray.count,
             thread->reclaim_ctx.slice_counts.total,
             thread->reclaim_ctx.slice_counts.skip,
             thread->reclaim_ctx.slice_counts.ignore,
