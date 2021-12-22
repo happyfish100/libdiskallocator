@@ -314,7 +314,7 @@ static void deal_shrink_queue()
         stask = head;
         head = head->next;
 
-        if (g_current_time - stask->last_shrink_time > 0) {
+        if (g_current_time - stask->last_shrink_time > 3) {
             ++count;
             key.id = stask->id;
             key.type = stask->writer->type;
