@@ -11,7 +11,7 @@ Group: Arch/Tech
 URL:  http://github.com/happyfish100/libdiskallocator/
 Source: http://github.com/happyfish100/libdiskallocator/%{name}-%{version}.tar.gz
 
-BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n) 
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires: libfastcommon-devel >= 1.0.54
 BuildRequires: libserverframe-devel >= 1.1.11
@@ -20,10 +20,7 @@ Requires: libserverframe >= 1.1.11
 Requires: %__cp %__mv %__chmod %__grep %__mkdir %__install %__id
 
 %description
-c common functions library extracted from my open source projects FastDFS.
-this library is very simple and stable. functions including: string, logger,
-chain, hash, socket, ini file reader, base64 encode / decode,
-url encode / decode, fasttimer etc. 
+rapid disk allocator
 commit version: %{CommitVersion}
 
 %package devel
