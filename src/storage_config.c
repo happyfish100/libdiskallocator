@@ -30,6 +30,8 @@ static int load_one_path(DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx, string_t *path)
 {
     int result;
+    char tmp_filename[PATH_MAX];
+    char full_path[PATH_MAX];
     char *path_str;
 
     path_str = iniGetStrValue(ini_ctx->section_name,
@@ -41,6 +43,14 @@ static int load_one_path(DAStorageConfig *storage_cfg,
                 "config file: %s, section: %s, item: path is empty",
                 __LINE__, ini_ctx->filename, ini_ctx->section_name);
         return ENOENT;
+    } else {
+        if (*path_str != '/') {
+            snprintf(tmp_filename, sizeof(tmp_filename),
+                    "%s/dummy.tmp", DA_DATA_PATH_STR);
+            resolve_path(tmp_filename, path_str,
+                    full_path, sizeof(full_path));
+            path_str = full_path;
+        }
     }
 
     if (access(path_str, F_OK) == 0) {

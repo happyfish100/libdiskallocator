@@ -427,9 +427,6 @@ static int redo_by_array(DATrunkSpaceLogRecordArray *array)
         return result;
     }
 
-    logInfo("file: "__FILE__", line: %d, "
-            "space record count: %d, redo count: %d",
-            __LINE__, array->count, redo_count);
     return 0;
 }
 
@@ -542,24 +539,30 @@ static int load_trunk_indexes()
         }
         trunk->status = DA_TRUNK_STATUS_LOADED;
 
-        logInfo("trunk id: %u, version: %"PRId64", calculate: %d, "
-                "used_count: %u, used_bytes: %u, free_start: %u",
-                trunk->id_info.id, version, index->version != version,
-                trunk->used.count, trunk->used.bytes, trunk->free_start);
+        /*
+        logInfo("trunk id: %u, path index: %d, version: %"PRId64", "
+                "calc: %d, used count: %u, used bytes: %u, "
+                "free start: %u", trunk->id_info.id, trunk->
+                allocator->path_info->store.index, version,
+                index->version != version, trunk->used.count,
+                trunk->used.bytes, trunk->free_start);
+                */
     }
 
     trunk_hashtable_iterator(&it, false);
     while ((trunk=trunk_hashtable_next(&it)) != NULL) {
-        logInfo("trunk id: %u, status: %d", trunk->id_info.id, trunk->status);
         if (trunk->status == DA_TRUNK_STATUS_NONE) {
             if ((result=set_trunk_by_space_log(trunk)) != 0) {
                 return result;
             }
             trunk->status = DA_TRUNK_STATUS_LOADED;
 
-            logInfo("trunk id: %u, used_count: %u, used_bytes: %u, "
-                    "free_start: %u", trunk->id_info.id, trunk->used.count,
-                    trunk->used.bytes, trunk->free_start);
+            /*
+            logInfo("trunk id: %u, path index: %d, used_count: %u, "
+                    "used_bytes: %u, free_start: %u", trunk->id_info.id,
+                    trunk->allocator->path_info->store.index, trunk->
+                    used.count, trunk->used.bytes, trunk->free_start);
+                    */
         }
     }
 
