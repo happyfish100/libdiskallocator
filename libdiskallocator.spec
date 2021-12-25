@@ -62,5 +62,5 @@ rm -rf %{buildroot}
 /usr/include/diskallocator/*
 
 %changelog
-* Wed Dec 22 2021 YuQing
+* Wed Dec 22 2021 YuQing <384681@qq.com>
 - first RPM release (1.0)

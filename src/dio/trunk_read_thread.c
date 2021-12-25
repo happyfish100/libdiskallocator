@@ -20,14 +20,6 @@
 #include <sys/param.h>
 #include <sys/mount.h>
 #include "fastcommon/common_define.h"
-
-#ifdef OS_LINUX
-#include <sys/eventfd.h>
-#include <sys/epoll.h>
-
-#define DIO_MAX_EVENT_COUNT  2
-#endif
-
 #include "fastcommon/shared_func.h"
 #include "fastcommon/logger.h"
 #include "fastcommon/fast_mblock.h"
@@ -142,14 +134,14 @@ static int init_thread_context(TrunkReadThreadContext *ctx,
     pthread_t tid;
 
     if ((result=fast_mblock_init_ex1(&ctx->mblock, "trunk_read_buffer",
-                    sizeof(TrunkReadIOBuffer), 1024, 0, NULL,
+                    sizeof(DATrunkReadIOBuffer), 1024, 0, NULL,
                     NULL, true)) != 0)
     {
         return result;
     }
 
     if ((result=fc_queue_init(&ctx->queue, (long)
-                    (&((TrunkReadIOBuffer *)NULL)->next))) != 0)
+                    (&((DATrunkReadIOBuffer *)NULL)->next))) != 0)
     {
         return result;
     }
@@ -162,31 +154,32 @@ static int init_thread_context(TrunkReadThreadContext *ctx,
     }
 
 #ifdef OS_LINUX
-    ctx->block_size = path_info->block_size;
+    if (DA_READ_BY_DIRECT_IO) {
+        ctx->block_size = path_info->block_size;
+        ctx->iocbs.alloc = path_info->read_io_depth;
+        ctx->iocbs.pp = (struct iocb **)fc_malloc(sizeof(
+                    struct iocb *) * ctx->iocbs.alloc);
+        if (ctx->iocbs.pp == NULL) {
+            return ENOMEM;
+        }
 
-    ctx->iocbs.alloc = path_info->read_io_depth;
-    ctx->iocbs.pp = (struct iocb **)fc_malloc(sizeof(
-                struct iocb *) * ctx->iocbs.alloc);
-    if (ctx->iocbs.pp == NULL) {
-        return ENOMEM;
-    }
+        ctx->aio.max_event = path_info->read_io_depth;
+        ctx->aio.events = (struct io_event *)fc_malloc(sizeof(
+                    struct io_event) * ctx->aio.max_event);
+        if (ctx->aio.events == NULL) {
+            return ENOMEM;
+        }
 
-    ctx->aio.max_event = path_info->read_io_depth;
-    ctx->aio.events = (struct io_event *)fc_malloc(sizeof(
-                struct io_event) * ctx->aio.max_event);
-    if (ctx->aio.events == NULL) {
-        return ENOMEM;
+        ctx->aio.ctx = 0;
+        if (io_setup(ctx->aio.max_event, &ctx->aio.ctx) != 0) {
+            result = errno != 0 ? errno : ENOMEM;
+            logError("file: "__FILE__", line: %d, "
+                    "io_setup fail, errno: %d, error info: %s",
+                    __LINE__, result, STRERROR(result));
+            return result;
+        }
+        ctx->aio.doing_count = 0;
     }
-
-    ctx->aio.ctx = 0;
-    if (io_setup(ctx->aio.max_event, &ctx->aio.ctx) != 0) {
-        result = errno != 0 ? errno : ENOMEM;
-        logError("file: "__FILE__", line: %d, "
-                "io_setup fail, errno: %d, error info: %s",
-                __LINE__, result, STRERROR(result));
-        return result;
-    }
-    ctx->aio.doing_count = 0;
 
 #endif
 
@@ -286,8 +279,10 @@ int trunk_read_thread_init()
     int result;
 
 #ifdef OS_LINUX
-    if ((result=rbpool_init_start()) != 0) {
-        return result;
+    if (DA_READ_BY_DIRECT_IO) {
+        if ((result=rbpool_init_start()) != 0) {
+            return result;
+        }
     }
 #endif
 
@@ -313,37 +308,26 @@ void trunk_read_thread_terminate()
 {
 }
 
-#ifdef OS_LINUX
 int trunk_read_thread_push(const DATrunkSpaceInfo *space,
-        const int read_bytes, AlignedReadBuffer **aligned_buffer,
+        const int read_bytes, DATrunkReadBuffer *rb,
         trunk_read_io_notify_func notify_func, void *notify_arg)
-#else
-int trunk_read_thread_push(const DATrunkSpaceInfo *space,
-        const int read_bytes, BufferInfo *buffer,
-        trunk_read_io_notify_func notify_func,
-        void *notify_arg)
-#endif
 {
     TrunkReadPathContext *path_ctx;
     TrunkReadThreadContext *thread_ctx;
-    TrunkReadIOBuffer *iob;
+    DATrunkReadIOBuffer *iob;
 
     path_ctx = trunk_io_ctx.path_ctx_array.paths +
         space->store->index;
     thread_ctx = path_ctx->reads.contexts + space->
         id_info.id % path_ctx->reads.count;
-    iob = (TrunkReadIOBuffer *)fast_mblock_alloc_object(&thread_ctx->mblock);
+    iob = (DATrunkReadIOBuffer *)fast_mblock_alloc_object(&thread_ctx->mblock);
     if (iob == NULL) {
         return ENOMEM;
     }
 
     iob->space = *space;
     iob->read_bytes = read_bytes;
-#ifdef OS_LINUX
-    iob->aligned_buffer = aligned_buffer;
-#else
-    iob->buffer = buffer;
-#endif
+    iob->rb = rb;
     iob->notify.func = notify_func;
     iob->notify.arg = notify_arg;
 
@@ -365,7 +349,11 @@ static int get_read_fd(TrunkReadThreadContext *ctx,
 
     dio_get_trunk_filename(space, trunk_filename, sizeof(trunk_filename));
 #ifdef OS_LINUX
-    *fd = open(trunk_filename, O_RDONLY | O_DIRECT);
+    if (DA_READ_BY_DIRECT_IO) {
+        *fd = open(trunk_filename, O_RDONLY | O_DIRECT);
+    } else {
+        *fd = open(trunk_filename, O_RDONLY);
+    }
 #else
     *fd = open(trunk_filename, O_RDONLY);
 #endif
@@ -384,7 +372,7 @@ static int get_read_fd(TrunkReadThreadContext *ctx,
 #ifdef OS_LINUX
 
 static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
-        TrunkReadIOBuffer *iob)
+        DATrunkReadIOBuffer *iob)
 {
     int64_t new_offset;
     int offset;
@@ -404,21 +392,21 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
         }
     }
 
-    if (*(iob->aligned_buffer) != NULL && (*(iob->aligned_buffer))->
+    if (iob->rb->aio_buffer != NULL && iob->rb->aio_buffer->
             size < read_bytes)
     {
         logWarning("file: "__FILE__", line: %d, "
                 "buffer size %d is too small, required size: %d",
-                __LINE__, (*(iob->aligned_buffer))->size, read_bytes);
+                __LINE__, iob->rb->aio_buffer->size, read_bytes);
 
-        read_buffer_pool_free(*(iob->aligned_buffer));
-        *(iob->aligned_buffer) = NULL;
+        read_buffer_pool_free(iob->rb->aio_buffer);
+        iob->rb->aio_buffer = NULL;
     }
 
-    if (*(iob->aligned_buffer) == NULL) {
-        *(iob->aligned_buffer) = read_buffer_pool_alloc(
+    if (iob->rb->aio_buffer == NULL) {
+        iob->rb->aio_buffer = read_buffer_pool_alloc(
                 ctx->indexes.path, read_bytes);
-        if (*(iob->aligned_buffer) == NULL) {
+        if (iob->rb->aio_buffer == NULL) {
             return ENOMEM;
         }
         new_alloced = true;
@@ -426,26 +414,26 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
         new_alloced = false;
     }
 
-    (*(iob->aligned_buffer))->offset = offset;
-    (*(iob->aligned_buffer))->length = iob->read_bytes;
-    (*(iob->aligned_buffer))->read_bytes = read_bytes;
+    iob->rb->aio_buffer->offset = offset;
+    iob->rb->aio_buffer->length = iob->read_bytes;
+    iob->rb->aio_buffer->read_bytes = read_bytes;
 
     /*
     logInfo("space.offset: %"PRId64", new_offset: %"PRId64", "
             "offset: %d, read_bytes: %d, size: %d", iob->space.offset,
-            new_offset, offset, read_bytes, *(iob->aligned_buffer)->size);
+            new_offset, offset, read_bytes, iob->rb->aio_buffer->size);
             */
 
     if ((result=get_read_fd(ctx, &iob->space, &fd)) != 0) {
         if (new_alloced) {
-            read_buffer_pool_free(*(iob->aligned_buffer));
-            *(iob->aligned_buffer) = NULL;
+            read_buffer_pool_free(iob->rb->aio_buffer);
+            iob->rb->aio_buffer = NULL;
         }
         return result;
     }
 
-    io_prep_pread(&iob->iocb, fd, (*(iob->aligned_buffer))->buff,
-            (*(iob->aligned_buffer))->read_bytes, new_offset);
+    io_prep_pread(&iob->iocb, fd, iob->rb->aio_buffer->buff,
+            iob->rb->aio_buffer->read_bytes, new_offset);
     iob->iocb.data = iob;
     ctx->iocbs.pp[ctx->iocbs.count++] = &iob->iocb;
     return 0;
@@ -454,7 +442,7 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
 static int consume_queue(TrunkReadThreadContext *ctx)
 {
     struct fc_queue_info qinfo;
-    TrunkReadIOBuffer *iob;
+    DATrunkReadIOBuffer *iob;
     int target_count;
     int count;
     int remain;
@@ -468,7 +456,7 @@ static int consume_queue(TrunkReadThreadContext *ctx)
 
     target_count = ctx->aio.max_event - ctx->aio.doing_count;
     ctx->iocbs.count = 0;
-    iob = (TrunkReadIOBuffer *)qinfo.head;
+    iob = (DATrunkReadIOBuffer *)qinfo.head;
     do {
         if ((result=prepare_read_slice(ctx, iob)) != 0) {
             return result;
@@ -509,7 +497,7 @@ static int consume_queue(TrunkReadThreadContext *ctx)
 static int process_aio(TrunkReadThreadContext *ctx)
 {
     struct timespec tms;
-    TrunkReadIOBuffer *iob;
+    DATrunkReadIOBuffer *iob;
     struct io_event *event;
     struct io_event *end;
     char trunk_filename[PATH_MAX];
@@ -559,8 +547,8 @@ static int process_aio(TrunkReadThreadContext *ctx)
 
     end = ctx->aio.events + count;
     for (event=ctx->aio.events; event<end; event++) {
-        iob = (TrunkReadIOBuffer *)event->data;
-        if (event->res == (*(iob->aligned_buffer))->read_bytes) {
+        iob = (DATrunkReadIOBuffer *)event->data;
+        if (event->res == iob->rb->aio_buffer->read_bytes) {
             result = 0;
         } else {
             trunk_fd_cache_delete(&ctx->fd_cache,
@@ -577,9 +565,9 @@ static int process_aio(TrunkReadThreadContext *ctx)
                     "read trunk file: %s fail, offset: %u, "
                     "expect length: %d, read return: %d, errno: %d, "
                     "error info: %s", __LINE__, trunk_filename,
-                    iob->space.offset - (*(iob->aligned_buffer))->offset,
-                    (*(iob->aligned_buffer))->read_bytes, (int)event->res, result,
-                    STRERROR(result));
+                    iob->space.offset - iob->rb->aio_buffer->offset,
+                    iob->rb->aio_buffer->read_bytes, (int)event->res,
+                    result, STRERROR(result));
         }
 
         iob->notify.func(iob, result);
@@ -605,9 +593,9 @@ static inline int process(TrunkReadThreadContext *ctx)
     return process_aio(ctx);
 }
 
-#else
+#endif
 
-static int do_read_slice(TrunkReadThreadContext *ctx, TrunkReadIOBuffer *iob)
+static int do_read_slice(TrunkReadThreadContext *ctx, DATrunkReadIOBuffer *iob)
 {
     int fd;
     int remain;
@@ -618,12 +606,12 @@ static int do_read_slice(TrunkReadThreadContext *ctx, TrunkReadIOBuffer *iob)
         return result;
     }
 
-    iob->buffer->length = 0;
+    iob->rb->buffer.length = 0;
     remain = iob->read_bytes;
     while (remain > 0) {
-        if ((bytes=pread(fd, iob->buffer->buff + iob->buffer->length, remain,
-                        iob->space.offset + iob->buffer->length)) <= 0)
-        {
+        bytes = pread(fd, iob->rb->buffer.buff + iob->rb->buffer.length,
+                remain, iob->space.offset + iob->rb->buffer.length);
+        if (bytes <= 0) {
             char trunk_filename[PATH_MAX];
 
             result = errno != 0 ? errno : EIO;
@@ -639,53 +627,25 @@ static int do_read_slice(TrunkReadThreadContext *ctx, TrunkReadIOBuffer *iob)
             logError("file: "__FILE__", line: %d, "
                     "read trunk file: %s fail, offset: %u, "
                     "errno: %d, error info: %s", __LINE__, trunk_filename,
-                    iob->space.offset + iob->buffer->length,
+                    iob->space.offset + iob->rb->buffer.length,
                     result, STRERROR(result));
             return result;
         }
 
-        iob->buffer->length += bytes;
+        iob->rb->buffer.length += bytes;
         remain -= bytes;
     }
 
     return 0;
 }
 
-#endif
-
-static void *trunk_read_thread_func(void *arg)
+static void normal_read_loop(TrunkReadThreadContext *ctx)
 {
-    TrunkReadThreadContext *ctx;
-#ifdef OS_LINUX
-    int len;
-    char thread_name[16];
-#else
     int result;
-    TrunkReadIOBuffer *iob;
-#endif
-
-    ctx = (TrunkReadThreadContext *)arg;
-
-#ifdef OS_LINUX
-    len = snprintf(thread_name, sizeof(thread_name),
-            "dio-p%02d-r", ctx->indexes.path);
-    if (ctx->indexes.thread >= 0) {
-        snprintf(thread_name + len, sizeof(thread_name) - len,
-                "[%d]", ctx->indexes.thread);
-    }
-    prctl(PR_SET_NAME, thread_name);
+    DATrunkReadIOBuffer *iob;
 
     while (SF_G_CONTINUE_FLAG) {
-        if (process(ctx) != 0) {
-            sf_terminate_myself();
-            break;
-        }
-    }
-
-#else
-
-    while (SF_G_CONTINUE_FLAG) {
-        if ((iob=(TrunkReadIOBuffer *)fc_queue_pop(&ctx->queue)) == NULL) {
+        if ((iob=(DATrunkReadIOBuffer *)fc_queue_pop(&ctx->queue)) == NULL) {
             continue;
         }
 
@@ -700,12 +660,45 @@ static void *trunk_read_thread_func(void *arg)
         }
         fast_mblock_free_object(&ctx->mblock, iob);
     }
+}
+
+static void *trunk_read_thread_func(void *arg)
+{
+    TrunkReadThreadContext *ctx;
+#ifdef OS_LINUX
+    int len;
+    char thread_name[16];
+#endif
+
+    ctx = (TrunkReadThreadContext *)arg;
+
+#ifdef OS_LINUX
+    len = snprintf(thread_name, sizeof(thread_name),
+            "dio-p%02d-r", ctx->indexes.path);
+    if (ctx->indexes.thread >= 0) {
+        snprintf(thread_name + len, sizeof(thread_name) - len,
+                "[%d]", ctx->indexes.thread);
+    }
+    prctl(PR_SET_NAME, thread_name);
+
+    if (DA_READ_BY_DIRECT_IO) {
+        while (SF_G_CONTINUE_FLAG) {
+            if (process(ctx) != 0) {
+                sf_terminate_myself();
+                break;
+            }
+        }
+    } else {
+        normal_read_loop(ctx);
+    }
+#else
+    normal_read_loop(ctx);
 #endif
 
     return NULL;
 }
 
-static void slice_read_done(struct trunk_read_io_buffer
+static void slice_read_done(struct da_trunk_read_io_buffer
         *record, const int result)
 {
     SFSynchronizeContext *sctx;
@@ -723,27 +716,32 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
 #ifdef OS_LINUX
     int aligned_size;
 
-    aligned_size = op_ctx->storage->size + path_info->block_size * 2;
-    if (op_ctx->aio_buffer != NULL && op_ctx->
-            aio_buffer->size < aligned_size)
-    {
-        AlignedReadBuffer *new_buffer;
+    if (DA_READ_BY_DIRECT_IO) {
+        aligned_size = op_ctx->storage->size + path_info->block_size * 2;
+        if (op_ctx->rb.aio_buffer != NULL && op_ctx->
+                aio_buffer->size < aligned_size)
+        {
+            AlignedReadBuffer *new_buffer;
 
-        new_buffer = read_buffer_pool_alloc(path_info->
-                store.index, aligned_size);
-        if (new_buffer == NULL) {
-            return ENOMEM;
+            new_buffer = read_buffer_pool_alloc(path_info->
+                    store.index, aligned_size);
+            if (new_buffer == NULL) {
+                return ENOMEM;
+            }
+
+            read_buffer_pool_free(op_ctx->rb.aio_buffer);
+            op_ctx->rb.aio_buffer = new_buffer;
         }
 
-        read_buffer_pool_free(op_ctx->aio_buffer);
-        op_ctx->aio_buffer = new_buffer;
+        return 0;
     }
-#else
-    if (op_ctx->buffer.alloc_size < op_ctx->storage->size) {
+#endif
+
+    if (op_ctx->rb.buffer.alloc_size < op_ctx->storage->size) {
         char *buff;
         int buffer_size;
 
-        buffer_size = op_ctx->buffer.alloc_size * 2;
+        buffer_size = op_ctx->rb.buffer.alloc_size * 2;
         while (buffer_size < op_ctx->storage->size) {
             buffer_size *= 2;
         }
@@ -752,11 +750,10 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
             return ENOMEM;
         }
 
-        free(op_ctx->buffer.buff);
-        op_ctx->buffer.buff = buff;
-        op_ctx->buffer.alloc_size = buffer_size;
+        free(op_ctx->rb.buffer.buff);
+        op_ctx->rb.buffer.buff = buff;
+        op_ctx->rb.buffer.alloc_size = buffer_size;
     }
-#endif
 
     return 0;
 }
@@ -782,16 +779,9 @@ int da_slice_read(DASynchronizedReadContext *ctx)
     space.id_info = trunk->id_info;
     space.offset = ctx->op_ctx.storage->offset;
     space.size = ctx->op_ctx.storage->size;
-
-#ifdef OS_LINUX
-    result = trunk_read_thread_push(&space, ctx->op_ctx.storage->length,
-            &ctx->op_ctx.aio_buffer, slice_read_done, &ctx->sctx);
-#else
-    result = trunk_read_thread_push(&space, ctx->op_ctx.storage->length,
-            &ctx->op_ctx.buffer, slice_read_done, &ctx->sctx);
-#endif
-
-    if (result != 0) {
+    if ((result=trunk_read_thread_push(&space, ctx->op_ctx.storage->length,
+                    &ctx->op_ctx.rb, slice_read_done, &ctx->sctx)) != 0)
+    {
         return result;
     }
 

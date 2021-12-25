@@ -28,6 +28,7 @@ typedef struct {
     int binlog_subdirs;
     int trunk_index_dump_interval;
     TimeInfo trunk_index_dump_base_time;
+    bool read_by_direct_io;  //if read by direct IO in Linux
 } DADataGlobalConfig;
 
 typedef struct {
@@ -53,8 +54,10 @@ typedef struct {
 #define DA_TRUNK_INDEX_DUMP_INTERVAL  g_disk_allocator_vars. \
     data.trunk_index_dump_interval
 
-#define DA_TRUNK_INDEX_DUMP_BASE_TIME g_disk_allocator_vars.data. \
-    trunk_index_dump_base_time
+#define DA_TRUNK_INDEX_DUMP_BASE_TIME g_disk_allocator_vars. \
+    data.trunk_index_dump_base_time
+
+#define DA_READ_BY_DIRECT_IO  g_disk_allocator_vars.data.read_by_direct_io
 
 #define DA_MY_SERVER_ID        g_disk_allocator_vars.my_server_id
 #define DA_STORE_CFG           g_disk_allocator_vars.storage.cfg

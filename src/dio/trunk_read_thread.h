@@ -27,21 +27,19 @@
 #include "read_buffer_pool.h"
 #endif
 
-struct trunk_read_io_buffer;
+struct da_trunk_read_io_buffer;
 
 //Note: the record can NOT be persisted
-typedef void (*trunk_read_io_notify_func)(struct trunk_read_io_buffer
+typedef void (*trunk_read_io_notify_func)(struct da_trunk_read_io_buffer
         *record, const int result);
 
-typedef struct trunk_read_io_buffer {
+typedef struct da_trunk_read_io_buffer {
     DATrunkSpaceInfo space;
     int read_bytes;
 
+    DATrunkReadBuffer *rb;
 #ifdef OS_LINUX
-    AlignedReadBuffer **aligned_buffer;
     struct iocb iocb;
-#else
-    BufferInfo *buffer;
 #endif
 
     struct {
@@ -49,8 +47,8 @@ typedef struct trunk_read_io_buffer {
         void *arg;
     } notify;
 
-    struct trunk_read_io_buffer *next;
-} TrunkReadIOBuffer;
+    struct da_trunk_read_io_buffer *next;
+} DATrunkReadIOBuffer;
 
 typedef struct da_synchronized_read_context {
     SFSynchronizeContext sctx;
@@ -64,34 +62,25 @@ extern "C" {
     int trunk_read_thread_init();
     void trunk_read_thread_terminate();
 
-#ifdef OS_LINUX
-
-    static inline int da_init_op_ctx(DASliceOpContext *op_ctx)
-    {
-        op_ctx->storage = NULL;
-        op_ctx->aio_buffer = NULL;
-        return 0;
-    }
-
-    int trunk_read_thread_push(const DATrunkSpaceInfo *space,
-            const int read_bytes, AlignedReadBuffer **aligned_buffer,
-            trunk_read_io_notify_func notify_func, void *notify_arg);
-
-#else
-
     static inline int da_init_op_ctx(DASliceOpContext *op_ctx)
     {
         const int alloc_size = 64 * 1024;
+
         op_ctx->storage = NULL;
-        return fc_init_buffer(&op_ctx->buffer, alloc_size);
+
+#ifdef OS_LINUX
+        if (DA_READ_BY_DIRECT_IO) {
+            op_ctx->rb.aio_buffer = NULL;
+            return 0;
+        }
+#endif
+
+        return fc_init_buffer(&op_ctx->rb.buffer, alloc_size);
     }
 
     int trunk_read_thread_push(const DATrunkSpaceInfo *space,
-            const int read_bytes, BufferInfo *buffer,
-            trunk_read_io_notify_func notify_func,
-            void *notify_arg);
-
-#endif
+            const int read_bytes, DATrunkReadBuffer *rb,
+            trunk_read_io_notify_func notify_func, void *notify_arg);
 
     int da_init_read_context(DASynchronizedReadContext *ctx);
 

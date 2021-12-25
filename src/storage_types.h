@@ -159,24 +159,31 @@ typedef struct da_trunk_index_record {
     uint32_t free_start;
 } DATrunkIndexRecord;
 
-typedef struct da_slice_op_context {
-    DAPieceFieldStorage *storage;
-
+typedef struct da_trunk_read_buffer {
 #ifdef OS_LINUX
-    AlignedReadBuffer *aio_buffer;   //NULL for alloc from pool
+    union {
+        AlignedReadBuffer *aio_buffer;   //NULL for alloc from pool
+        BufferInfo buffer;
+    };
 #else
     BufferInfo buffer;
 #endif
+} DATrunkReadBuffer;
 
+typedef struct da_slice_op_context {
+    DAPieceFieldStorage *storage;
+    DATrunkReadBuffer rb;
 } DASliceOpContext;
 
 #ifdef OS_LINUX
-#define DA_OP_CTX_BUFFER_PTR(op_ctx) ((op_ctx).aio_buffer->buff + \
-        (op_ctx).aio_buffer->offset)
-#define DA_OP_CTX_BUFFER_LEN(op_ctx) (op_ctx).aio_buffer->length
+#define DA_OP_CTX_BUFFER_PTR(op_ctx) (DA_READ_BY_DIRECT_IO ?      \
+        (op_ctx).rb.aio_buffer->buff + (op_ctx).rb.aio_buffer->offset : \
+        (op_ctx).rb.buffer.buff)
+#define DA_OP_CTX_BUFFER_LEN(op_ctx) (DA_READ_BY_DIRECT_IO ?  \
+        (op_ctx).rb.aio_buffer->length : (op_ctx).rb.buffer.length)
 #else
-#define DA_OP_CTX_BUFFER_PTR(op_ctx) (op_ctx).buffer.buff
-#define DA_OP_CTX_BUFFER_LEN(op_ctx) (op_ctx).buffer.length
+#define DA_OP_CTX_BUFFER_PTR(op_ctx) (op_ctx).rb.buffer.buff
+#define DA_OP_CTX_BUFFER_LEN(op_ctx) (op_ctx).rb.buffer.length
 #endif
 
 
