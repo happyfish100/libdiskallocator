@@ -718,7 +718,7 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
 
     if (DA_READ_BY_DIRECT_IO) {
         aligned_size = op_ctx->storage->size + path_info->block_size * 2;
-        if (op_ctx->rb.aio_buffer != NULL && op_ctx->
+        if (op_ctx->rb.aio_buffer != NULL && op_ctx->rb.
                 aio_buffer->size < aligned_size)
         {
             AlignedReadBuffer *new_buffer;
