@@ -1,0 +1,5 @@
+libdiskallocator (1.0.0-1) unstable; urgency=low
+
+  * first RPM release (1.0)
+
+ --  YuQing <384681@qq.com>  Sun, 26 Dec 2021 19:41:05 +0800

@@ -1,0 +1,28 @@
+Source: libdiskallocator
+Section: tech
+Priority: optional
+Maintainer: YuQing <384681@qq.com>
+Build-Depends: debhelper (>=11~),
+ libfastcommon-dev (>= 1.0.54),
+ libserverframe-dev (>= 1.1.11)
+Standards-Version: 4.1.4
+Homepage: https://github.com/happyfish100/libdiskallocator
+
+Package: libdiskallocator-dev
+Section: libs
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}, libdiskallocator (= ${binary:Version})
+Description: rapid disk allocator
+ This package contains header files.
+
+Package: libdiskallocator
+Section: libs
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends},
+ libfastcommon (>= 1.0.54), libserverframe (>= 1.1.11)
+Description: rapid disk allocator
+ rapid disk allocator
