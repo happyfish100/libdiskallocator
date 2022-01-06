@@ -401,7 +401,7 @@ static int load_global_items(DAStorageConfig *storage_cfg,
         storage_cfg->max_trunk_files_per_subdir = 100;
     }
 
-    storage_cfg->trunk_file_size = iniGetInt64CorrectValue(ini_ctx,
+    storage_cfg->trunk_file_size = iniGetByteCorrectValue(ini_ctx,
             "trunk_file_size", DA_DEFAULT_TRUNK_FILE_SIZE,
             DA_TRUNK_FILE_MIN_SIZE, DA_TRUNK_FILE_MAX_SIZE);
     if (storage_cfg->trunk_file_size <= DA_FILE_BLOCK_SIZE) {
