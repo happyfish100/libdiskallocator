@@ -3,8 +3,8 @@ Section: tech
 Priority: optional
 Maintainer: YuQing <384681@qq.com>
 Build-Depends: debhelper (>=11~),
- libfastcommon-dev (>= 1.0.54),
- libserverframe-dev (>= 1.1.11)
+ libfastcommon-dev (>= 1.0.55),
+ libserverframe-dev (>= 1.1.12)
 Standards-Version: 4.1.4
 Homepage: https://github.com/happyfish100/libdiskallocator
 
@@ -23,6 +23,6 @@ Architecture: any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends},
- libfastcommon (>= 1.0.54), libserverframe (>= 1.1.11)
+ libfastcommon (>= 1.0.55), libserverframe (>= 1.1.12)
 Description: rapid disk allocator
  rapid disk allocator
