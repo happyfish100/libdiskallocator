@@ -1,4 +1,12 @@
-libdiskallocator (1.0.1-1) UNRELEASED; urgency=medium
+libdiskallocator (1.0.2-1) unstable; urgency=medium
+
+  * use fc_hash_get_prime_capacity from libfastcommon 1.56
+  * upgrade version to 1.0.2
+  * make.sh: change DEBUG_FLAG to 0
+
+ -- YuQing <384681@qq.com>  Sun, 13 Mar 2022 16:51:23 +0800
+
+libdiskallocator (1.0.1-1) unstable; urgency=medium
 
   * upgrade version to 1.0.1
 
