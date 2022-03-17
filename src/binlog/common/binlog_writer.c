@@ -457,7 +457,7 @@ int da_binlog_writer_init(DABinlogWriter *writer, const int type,
     element_size = sizeof(DABinlogRecord) + max_record_size;
     if ((result=fast_mblock_init_ex1(&writer->record_allocator,
                     name, element_size, BINLOG_RECORD_BATCH_SIZE,
-                    BINLOG_RECORD_BATCH_SIZE, (fast_mblock_alloc_init_func)
+                    BINLOG_RECORD_BATCH_SIZE, (fast_mblock_object_init_func)
                     binlog_record_alloc_init, writer, true)) != 0)
     {
         return result;
