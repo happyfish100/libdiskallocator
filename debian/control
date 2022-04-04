@@ -13,7 +13,7 @@ Section: libs
 Architecture: any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
-Depends: ${misc:Depends}, ${shlibs:Depends}, libdiskallocator (= ${binary:Version})
+Depends: ${misc:Depends}, libdiskallocator (= ${binary:Version})
 Description: rapid disk allocator
  This package contains header files.
 
@@ -23,6 +23,6 @@ Architecture: any
 Multi-Arch: same
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${misc:Depends}, ${shlibs:Depends},
- libfastcommon (>= 1.0.56), libserverframe (>= 1.1.13)
+ libfastcommon (>= ${libfastcommon:Version}), libserverframe (>= ${libserverframe:Version})
 Description: rapid disk allocator
  rapid disk allocator

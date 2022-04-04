@@ -1,57 +1,8 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: libdiskallocator
 Source: http://github.com/happyfish100/libdiskallocator
-#
-# Please double check copyright with the licensecheck(1) command.
 
-Files:     src/binlog/common/binlog_fd_cache.c
-           src/binlog/common/binlog_fd_cache.h
-           src/binlog/common/binlog_reader.c
-           src/binlog/common/binlog_reader.h
-           src/binlog/common/binlog_types.h
-           src/binlog/common/binlog_writer.c
-           src/binlog/common/binlog_writer.h
-           src/binlog/common/write_fd_cache.c
-           src/binlog/common/write_fd_cache.h
-           src/binlog/trunk/space_log_reader.c
-           src/binlog/trunk/space_log_reader.h
-           src/binlog/trunk/trunk_binlog.c
-           src/binlog/trunk/trunk_binlog.h
-           src/binlog/trunk/trunk_index.c
-           src/binlog/trunk/trunk_index.h
-           src/binlog/trunk/trunk_space_log.c
-           src/binlog/trunk/trunk_space_log.h
-           src/dio/read_buffer_pool.c
-           src/dio/read_buffer_pool.h
-           src/dio/trunk_fd_cache.c
-           src/dio/trunk_fd_cache.h
-           src/dio/trunk_read_thread.c
-           src/dio/trunk_read_thread.h
-           src/dio/trunk_write_thread.c
-           src/dio/trunk_write_thread.h
-           src/global.c
-           src/global.h
-           src/storage_allocator.c
-           src/storage_allocator.h
-           src/storage_config.c
-           src/storage_config.h
-           src/storage_types.h
-           src/store_path_index.c
-           src/store_path_index.h
-           src/trunk/trunk_allocator.c
-           src/trunk/trunk_allocator.h
-           src/trunk/trunk_freelist.c
-           src/trunk/trunk_freelist.h
-           src/trunk/trunk_hashtable.c
-           src/trunk/trunk_hashtable.h
-           src/trunk/trunk_id_info.c
-           src/trunk/trunk_id_info.h
-           src/trunk/trunk_maker.c
-           src/trunk/trunk_maker.h
-           src/trunk/trunk_prealloc.c
-           src/trunk/trunk_prealloc.h
-           src/trunk/trunk_reclaim.c
-           src/trunk/trunk_reclaim.h
+Files:     *
 Copyright: 2020 YuQing <384681@qq.com>
 License:   AGPL-3.0+
  This program is free software: you can use, redistribute, and/or modify
@@ -65,19 +16,6 @@ License:   AGPL-3.0+
  You should have received a copy of the GNU Affero General Public License
  along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-Files:     .gitignore
-           README.md
-           libdiskallocator.spec
-           make.sh
-           src/Makefile.in
-Copyright: __NO_COPYRIGHT_NOR_LICENSE__
-License:   __NO_COPYRIGHT_NOR_LICENSE__
-
-#----------------------------------------------------------------------------
-# Files marked as NO_LICENSE_TEXT_FOUND may be covered by the following
-# license/copyright files.
-
-#----------------------------------------------------------------------------
 # License file: LICENSE
                      GNU AFFERO GENERAL PUBLIC LICENSE
                         Version 3, 19 November 2007
