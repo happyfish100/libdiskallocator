@@ -350,12 +350,12 @@ static int get_read_fd(TrunkReadThreadContext *ctx,
     dio_get_trunk_filename(space, trunk_filename, sizeof(trunk_filename));
 #ifdef OS_LINUX
     if (DA_READ_BY_DIRECT_IO) {
-        *fd = open(trunk_filename, O_RDONLY | O_DIRECT);
+        *fd = open(trunk_filename, O_RDONLY | O_DIRECT | O_CLOEXEC);
     } else {
-        *fd = open(trunk_filename, O_RDONLY);
+        *fd = open(trunk_filename, O_RDONLY | O_CLOEXEC);
     }
 #else
-    *fd = open(trunk_filename, O_RDONLY);
+    *fd = open(trunk_filename, O_RDONLY | O_CLOEXEC);
 #endif
     if (*fd < 0) {
         result = errno != 0 ? errno : EACCES;

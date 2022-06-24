@@ -319,7 +319,7 @@ static int get_write_fd(TrunkWriteThreadContext *ctx,
     }
 
     dio_get_trunk_filename(space, trunk_filename, sizeof(trunk_filename));
-    *fd = open(trunk_filename, O_WRONLY, 0644);
+    *fd = open(trunk_filename, O_WRONLY | O_CLOEXEC, 0644);
     if (*fd < 0) {
         result = errno != 0 ? errno : EACCES;
         logError("file: "__FILE__", line: %d, "
@@ -338,14 +338,15 @@ static int get_write_fd(TrunkWriteThreadContext *ctx,
     return 0;
 }
 
-static int do_create_trunk(TrunkWriteThreadContext *ctx, TrunkWriteIOBuffer *iob)
+static int do_create_trunk(TrunkWriteThreadContext *ctx,
+        TrunkWriteIOBuffer *iob)
 {
     char trunk_filename[PATH_MAX];
     int fd;
     int result;
 
     dio_get_trunk_filename(&iob->space, trunk_filename, sizeof(trunk_filename));
-    fd = open(trunk_filename, O_WRONLY | O_CREAT, 0644);
+    fd = open(trunk_filename, O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
     if (fd < 0) {
         if (errno == ENOENT) {
             char filepath[PATH_MAX];
@@ -363,7 +364,7 @@ static int do_create_trunk(TrunkWriteThreadContext *ctx, TrunkWriteIOBuffer *iob
                         __LINE__, filepath, result, STRERROR(result));
                 return result;
             }
-            fd = open(trunk_filename, O_WRONLY | O_CREAT, 0644);
+            fd = open(trunk_filename, O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
         }
     }
 

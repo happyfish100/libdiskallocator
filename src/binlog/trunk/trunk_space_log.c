@@ -178,7 +178,7 @@ int da_trunk_space_log_calc_version(const uint32_t trunk_id, int64_t *version)
 
 static int get_write_fd(const uint32_t trunk_id, int *fd)
 {
-    const int flags = O_WRONLY | O_CREAT | O_APPEND;
+    const int flags = O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC;
     int result;
     char space_log_filename[PATH_MAX];
 
