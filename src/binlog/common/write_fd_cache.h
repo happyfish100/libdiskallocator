@@ -28,7 +28,7 @@ extern "C" {
             const DABinlogTypeSubdirArray *type_subdir_array,
             const int max_idle_time, const int capacity)
     {
-        const int open_flags =  O_WRONLY | O_CREAT | O_APPEND;
+        const int open_flags =  O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC;
         return da_binlog_fd_cache_init(&g_da_write_cache_ctx,
                 type_subdir_array, open_flags,
                 max_idle_time, capacity);

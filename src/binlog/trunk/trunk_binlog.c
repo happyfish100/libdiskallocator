@@ -148,7 +148,7 @@ static int load_one_binlog(const int binlog_index)
             DA_TRUNK_BINLOG_SUBDIR_NAME, binlog_index,
             full_filename, sizeof(full_filename));
 
-    if ((fd=open(full_filename, O_RDONLY)) < 0) {
+    if ((fd=open(full_filename, O_RDONLY | O_CLOEXEC)) < 0) {
         result = errno != 0 ? errno : EACCES;
         logError("file: "__FILE__", line: %d, "
                 "open file \"%s\" fail, errno: %d, error info: %s",

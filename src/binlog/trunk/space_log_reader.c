@@ -159,7 +159,7 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
 
     dio_get_space_log_filename(trunk_id, space_log_filename,
             sizeof(space_log_filename));
-    if ((fd=open(space_log_filename, O_RDONLY)) < 0) {
+    if ((fd=open(space_log_filename, O_RDONLY | O_CLOEXEC)) < 0) {
         result = errno != 0 ? errno : EACCES;
         if (result == ENOENT && ignore_enoent) {
             return 0;
@@ -262,7 +262,7 @@ int da_space_log_reader_load_to_chain(DASpaceLogReader *reader,
     char error_info[256];
 
     chain->head = chain->tail = NULL;
-    if ((fd=open(space_log_filename, O_RDONLY)) < 0) {
+    if ((fd=open(space_log_filename, O_RDONLY | O_CLOEXEC)) < 0) {
         result = errno != 0 ? errno : EACCES;
         if (result == ENOENT) {
             return 0;
