@@ -45,6 +45,11 @@ extern "C" {
         return da_binlog_fd_cache_remove(&g_da_write_cache_ctx, key);
     }
 
+    static inline void da_write_fd_cache_clear()
+    {
+        return da_binlog_fd_cache_clear(&g_da_write_cache_ctx);
+    }
+
     static inline int da_write_fd_cache_filename(const DABinlogIdTypePair *key,
             char *full_filename, const int size)
     {

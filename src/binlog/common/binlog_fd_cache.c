@@ -200,6 +200,17 @@ static int fd_cache_get(DABinlogFDCacheContext *cache_ctx,
     }
 }
 
+static inline void fd_cache_remove(DABinlogFDCacheContext *cache_ctx,
+        DABinlogFDCacheEntry *entry)
+{
+    close(entry->pair.fd);
+    entry->pair.fd = -1;
+
+    fc_list_del_init(&entry->dlink);
+    fast_mblock_free_object(&cache_ctx->allocator, entry);
+    cache_ctx->lru.count--;
+}
+
 int da_binlog_fd_cache_remove(DABinlogFDCacheContext *cache_ctx,
         const DABinlogIdTypePair *key)
 {
@@ -233,13 +244,37 @@ int da_binlog_fd_cache_remove(DABinlogFDCacheContext *cache_ctx,
         previous->next = entry->next;
     }
 
-    close(entry->pair.fd);
-    entry->pair.fd = -1;
-
-    fc_list_del_init(&entry->dlink);
-    fast_mblock_free_object(&cache_ctx->allocator, entry);
-    cache_ctx->lru.count--;
+    fd_cache_remove(cache_ctx, entry);
     return 0;
+}
+
+void da_binlog_fd_cache_clear(DABinlogFDCacheContext *cache_ctx)
+{
+    DABinlogFDCacheEntry **bucket;
+    DABinlogFDCacheEntry **end;
+    DABinlogFDCacheEntry *entry;
+    DABinlogFDCacheEntry *deleted;
+    int count = 0;
+
+    end = cache_ctx->htable.buckets + cache_ctx->htable.size;
+    for (bucket=cache_ctx->htable.buckets; bucket<end; bucket++) {
+        if (*bucket == NULL) {
+            continue;
+        }
+
+        entry = *bucket;
+        do {
+            deleted = entry;
+            entry = entry->next;
+            fd_cache_remove(cache_ctx, deleted);
+            ++count;
+        } while (entry != NULL);
+
+        *bucket = NULL;
+    }
+
+    logInfo("====== file: "__FILE__", line: %d, "
+            "clear %d entries", __LINE__, count);
 }
 
 static int fd_cache_add(DABinlogFDCacheContext *cache_ctx,

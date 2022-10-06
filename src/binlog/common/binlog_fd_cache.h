@@ -92,6 +92,8 @@ extern "C" {
     int da_binlog_fd_cache_remove(DABinlogFDCacheContext *cache_ctx,
             const DABinlogIdTypePair *key);
 
+    void da_binlog_fd_cache_clear(DABinlogFDCacheContext *cache_ctx);
+
     static inline int da_binlog_fd_cache_filename(DABinlogFDCacheContext
             *cache_ctx, const DABinlogIdTypePair *key,
             char *full_filename, const int size)
