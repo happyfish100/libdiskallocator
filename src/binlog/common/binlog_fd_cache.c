@@ -272,9 +272,6 @@ void da_binlog_fd_cache_clear(DABinlogFDCacheContext *cache_ctx)
 
         *bucket = NULL;
     }
-
-    logInfo("====== file: "__FILE__", line: %d, "
-            "clear %d entries", __LINE__, count);
 }
 
 static int fd_cache_add(DABinlogFDCacheContext *cache_ctx,
