@@ -206,6 +206,7 @@ static int load_paths(DAStorageConfig *storage_cfg, IniFullContext *ini_ctx,
     int count;
     int bytes;
     int i;
+    const char *old_section_name;
     char section_name[64];
 
     count = iniGetIntValue(NULL, item_name, ini_ctx->context, 0);
@@ -229,6 +230,7 @@ static int load_paths(DAStorageConfig *storage_cfg, IniFullContext *ini_ctx,
     }
     memset(parray->paths, 0, bytes);
 
+    old_section_name = ini_ctx->section_name;
     ini_ctx->section_name = section_name;
     for (i=0; i<count; i++) {
         sprintf(section_name, "%s-%d", section_name_prefix, i + 1);
@@ -280,6 +282,7 @@ static int load_paths(DAStorageConfig *storage_cfg, IniFullContext *ini_ctx,
         }
     }
 
+    ini_ctx->section_name = old_section_name;
     parray->count = count;
     return 0;
 }
