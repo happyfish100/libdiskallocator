@@ -70,7 +70,7 @@ install:
 	cp -f $(DIO_HEADER) $(TARGET_PREFIX)/include/diskallocator/dio/
 
 	@BUILDROOT=$$(echo "$(TARGET_PREFIX)" | grep BUILDROOT); \
-	if [ -z "$$BUILDROOT" ] && [ ! -e $(TARGET_PREFIX)/lib/libdiskallocator.so ]; then ln -s $(TARGET_LIB)/libdiskallocator.so $(TARGET_PREFIX)/lib/libdiskallocator.so; fi
+	if [ -z "$$BUILDROOT" ] && [ "$(TARGET_LIB)" != "$(TARGET_PREFIX)/lib" ]; then ln -sf $(TARGET_LIB)/libdiskallocator.so $(TARGET_PREFIX)/lib/libdiskallocator.so; fi
 clean:
 	rm -f $(ALL_OBJS) $(ALL_LIBS)
 
