@@ -523,8 +523,8 @@ static int load_path_indexes(DAStoragePathArray *parray, const char *caption,
         }
 
 #ifdef OS_LINUX
-        if ((result=get_path_block_size(p->store.path.str,
-                        &p->block_size)) != 0)
+        if (DA_READ_BY_DIRECT_IO && (result=get_path_block_size(
+                        p->store.path.str, &p->block_size)) != 0)
         {
             return result;
         }
