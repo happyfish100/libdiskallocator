@@ -20,11 +20,6 @@
 #include "fastcommon/fc_list.h"
 #include "sf/sf_types.h"
 
-typedef struct da_binlog_id_type_pair {
-    uint64_t id;
-    int type;
-} DABinlogIdTypePair;
-
 #define da_binlog_op_type_consume_space  da_binlog_op_type_create
 #define da_binlog_op_type_reclaim_space  da_binlog_op_type_remove
 
@@ -35,14 +30,13 @@ typedef enum da_binlog_op_type {
 } DABinlogOpType;
 
 typedef struct da_binlog_writer {
-    int type;
     int max_record_size;
     SFSynchronizeContext notify;
     struct fast_mblock_man record_allocator;
 } DABinlogWriter;
 
 typedef struct da_binlog_record {
-    DABinlogIdTypePair key;
+    uint64_t id;
     int64_t version;  //for stable sort
     BufferInfo buffer;
     DABinlogWriter *writer;
@@ -59,14 +53,5 @@ typedef int (*da_binlog_unpack_record_func)(const string_t *line,
         void *args, char *error_info);
 
 typedef int (*da_binlog_shrink_func)(DABinlogWriter *writer, void *args);
-
-#define DA_DECLARE_BINLOG_ID_TYPE_VAR(var, bid, tp) \
-    DABinlogIdTypePair var = {bid, tp}
-
-#define DA_SET_BINLOG_ID_TYPE(key, bid, tp) \
-    (key).id = bid; (key).type = tp
-
-#define DA_BINLOG_ID_TYPE_EQUALS(key1, key2) \
-    ((key1).id == (key2).id && (key1).type == (key2).type)
 
 #endif

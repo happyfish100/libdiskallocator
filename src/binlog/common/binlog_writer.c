@@ -98,7 +98,7 @@ int da_binlog_writer_cache_write(DABinlogWriterCache *cache, const bool flush)
     cache->current = cache->buff;
     if (fc_safe_write(cache->fd, cache->buff, len) != len) {
         result = errno != 0 ? errno : EIO;
-        da_write_fd_cache_filename(&cache->key,
+        da_write_fd_cache_filename(cache->id,
                 full_filename, sizeof(full_filename));
         logError("file: "__FILE__", line: %d, "
                 "write to log file \"%s\" fail, "
@@ -110,7 +110,7 @@ int da_binlog_writer_cache_write(DABinlogWriterCache *cache, const bool flush)
 
     if (flush && fsync(cache->fd) != 0) {
         result = errno != 0 ? errno : EIO;
-        da_write_fd_cache_filename(&cache->key,
+        da_write_fd_cache_filename(cache->id,
                 full_filename, sizeof(full_filename));
         logError("file: "__FILE__", line: %d, "
                 "fsync to log file \"%s\" fail, "
@@ -127,16 +127,14 @@ static int do_log(DABinlogRecord *record, DABinlogWriterCache *cache)
 {
     int result;
 
-    if (!DA_BINLOG_ID_TYPE_EQUALS(record->key,
-                cache->key) || cache->fd < 0)
-    {
+    if (record->id != cache->id || cache->fd < 0) {
         if (cache->fd >= 0 && (result=da_binlog_writer_cache_write(
                         cache, true)) != 0)
         {
             return result;
         }
-        cache->key = record->key;
-        if ((cache->fd=da_write_fd_cache_get(&cache->key)) < 0) {
+        cache->id = record->id;
+        if ((cache->fd=da_write_fd_cache_get(cache->id)) < 0) {
             return -1 * cache->fd;
         }
     }
@@ -176,14 +174,7 @@ static int record_compare(const DABinlogRecord **record1,
 {
     int sub;
 
-    sub = fc_compare_int64((*record1)->key.id,
-            (*record2)->key.id);
-    if (sub != 0) {
-        return sub;
-    }
-
-    sub = (int)(*record1)->key.type -
-        (int)(*record2)->key.type;
+    sub = fc_compare_int64((*record1)->id, (*record2)->id);
     if (sub == 0) {
         return fc_compare_int64((*record1)->version, (*record2)->version);
     } else {
@@ -301,7 +292,6 @@ static void deal_shrink_queue()
     BinlogWriterShrinkTask *head;
     BinlogWriterShrinkTask *stask;
     struct fc_queue_info qinfo;
-    DABinlogIdTypePair key;
     int count;
     int result;
 
@@ -325,12 +315,10 @@ static void deal_shrink_queue()
         } else {
             if (g_current_time - stask->last_shrink_time > 3) {
                 ++count;
-                key.id = stask->id;
-                key.type = stask->writer->type;
-                da_write_fd_cache_remove(&key);
+                da_write_fd_cache_remove(stask->id);
 
-                result = g_da_write_cache_ctx.type_subdir_array.pairs[
-                    stask->writer->type].shrink(stask->writer, stask->args);
+                result = g_disk_allocator_vars.shrink(
+                        stask->writer, stask->args);
                 fast_mblock_free_object(&binlog_writer_ctx.
                         allocators.stask, stask);
 
@@ -447,20 +435,17 @@ static int binlog_record_alloc_init(DABinlogRecord *record,
         DABinlogWriter *writer)
 {
     record->writer = writer;
-    record->key.type = writer->type;
     record->buffer.buff = (char *)(record + 1);
     record->buffer.alloc_size = writer->max_record_size;
     return 0;
 }
 
-int da_binlog_writer_init(DABinlogWriter *writer, const int type,
-        const int max_record_size)
+int da_binlog_writer_init(DABinlogWriter *writer, const int max_record_size)
 {
     int result;
     int element_size;
     char name[32];
 
-    writer->type = type;
     writer->max_record_size = max_record_size;
     snprintf(name, sizeof(name), "binlog-record[%d]",
             WRITER_CHAIN_ARRAY.count);
@@ -510,7 +495,7 @@ int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
         return ENOMEM;
     }
 
-    record->key.id = binlog_id;
+    record->id = binlog_id;
     record->version = __sync_add_and_fetch(&binlog_writer_ctx.
             current_version, 1);
     memcpy(record->buffer.buff, buffer->buff, buffer->length);

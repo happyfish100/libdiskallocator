@@ -22,20 +22,8 @@
 #include "../../global.h"
 #include "binlog_types.h"
 
-typedef struct da_binlog_type_subdir_pair {
-    int type;
-    char subdir_name[64];
-    da_binlog_unpack_record_func unpack_record;
-    da_binlog_shrink_func shrink;
-} DABinlogTypeSubdirPair;
-
-typedef struct da_binlog_type_subdir_array {
-    DABinlogTypeSubdirPair *pairs;
-    int count;
-} DABinlogTypeSubdirArray;
-
 typedef struct da_binlog_id_fd_pair {
-    DABinlogIdTypePair key;
+    uint64_t id;
     int fd;
 } DABinlogIdFDPair;
 
@@ -51,8 +39,8 @@ typedef struct {
 } DABinlogFDCacheHashtable;
 
 typedef struct {
+    char subdir_name[64];
     DABinlogFDCacheHashtable htable;
-    DABinlogTypeSubdirArray type_subdir_array;
     int open_flags;
     int max_idle_time;
     struct {
@@ -64,46 +52,33 @@ typedef struct {
 } DABinlogFDCacheContext;
 
 
-#define DA_BINLOG_SET_TYPE_SUBDIR_PAIR(pair, _type, \
-        _subdir_name, _unpack_record, _shrink) \
-        do {  \
-            (pair).type = _type;  \
-            snprintf((pair).subdir_name, \
-                    sizeof((pair).subdir_name), \
-                    "%s", _subdir_name);  \
-            (pair).unpack_record = _unpack_record; \
-            (pair).shrink = _shrink;  \
-        } while (0)
-
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
     int da_binlog_fd_cache_init(DABinlogFDCacheContext *cache_ctx,
-            const DABinlogTypeSubdirArray *type_subdir_array,
-            const int open_flags, const int max_idle_time,
-            const int capacity);
+            const char *subdir_name, const int open_flags,
+            const int max_idle_time, const int capacity);
 
     //return fd, < 0 for error
     int da_binlog_fd_cache_get(DABinlogFDCacheContext *cache_ctx,
-            const DABinlogIdTypePair *key);
+            const uint64_t id);
 
     int da_binlog_fd_cache_remove(DABinlogFDCacheContext *cache_ctx,
-            const DABinlogIdTypePair *key);
+            const uint64_t id);
 
     void da_binlog_fd_cache_clear(DABinlogFDCacheContext *cache_ctx);
 
-    static inline int da_binlog_fd_cache_filename(DABinlogFDCacheContext
-            *cache_ctx, const DABinlogIdTypePair *key,
+    static inline int da_binlog_fd_cache_filename(
+            DABinlogFDCacheContext *cache_ctx, const uint64_t id,
             char *full_filename, const int size)
     {
         int path_index;
 
-        path_index = key->id % DA_BINLOG_SUBDIRS;
+        path_index = id % DA_BINLOG_SUBDIRS;
         snprintf(full_filename, size, "%s/%s/%02X/%02X/binlog.%08"PRIX64,
-                DA_DATA_PATH_STR, cache_ctx->type_subdir_array.pairs
-                [key->type].subdir_name, path_index, path_index, key->id);
+                DA_DATA_PATH_STR, cache_ctx->subdir_name, path_index,
+                path_index, id);
         return 0;
     }
 

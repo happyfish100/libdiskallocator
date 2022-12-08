@@ -42,6 +42,8 @@ typedef struct {
     int my_server_id;
 
     da_redo_queue_push_func redo_queue_push_func;
+    da_binlog_unpack_record_func unpack_record;
+    da_binlog_shrink_func shrink;
 } DiskAllocatorGlobalVars;
 
 #define DA_DATA_PATH           g_disk_allocator_vars.data.path

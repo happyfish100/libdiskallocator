@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-int da_binlog_reader_load(const DABinlogIdTypePair *bkey, void *args);
+int da_binlog_reader_load(const uint64_t id, void *args);
 
 #ifdef __cplusplus
 }
