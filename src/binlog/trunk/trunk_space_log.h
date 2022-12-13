@@ -61,7 +61,7 @@ extern "C" {
     }
 
     static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_fill_record(
-            const int64_t version, const int64_t oid, const unsigned char fid,
+            const int64_t version, const int64_t oid, const int64_t fid,
             const char op_type, const DAPieceFieldStorage *storage)
     {
         DATrunkSpaceLogRecord *record;
@@ -108,7 +108,7 @@ extern "C" {
             *record, FastBuffer *buffer)
     {
         buffer->length += sprintf(buffer->data + buffer->length,
-                "%u %"PRId64" %"PRId64" %u %c %u %u %u %u\n",
+                "%u %"PRId64" %"PRId64" %"PRId64" %c %u %u %u %u\n",
                 (uint32_t)g_current_time, record->storage.version,
                 record->oid, record->fid, record->op_type,
                 record->storage.trunk_id, record->storage.length,

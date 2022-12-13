@@ -53,7 +53,7 @@ int da_binlog_writer_init(DABinlogWriter *writer,
 
 int da_binlog_writer_start();
 
-int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
+int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t id,
         const BufferInfo *buffer);
 
 int da_binlog_writer_synchronize(DABinlogWriter *writer);

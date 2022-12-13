@@ -477,7 +477,7 @@ int da_binlog_writer_init(DABinlogWriter *writer, const int max_record_size)
     return 0;
 }
 
-int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
+int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t id,
         const BufferInfo *buffer)
 {
     DABinlogRecord *record;
@@ -495,7 +495,7 @@ int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
         return ENOMEM;
     }
 
-    record->id = binlog_id;
+    record->id = id;
     record->version = __sync_add_and_fetch(&binlog_writer_ctx.
             current_version, 1);
     memcpy(record->buffer.buff, buffer->buff, buffer->length);
