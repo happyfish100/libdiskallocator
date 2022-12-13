@@ -24,12 +24,23 @@ extern "C" {
 
     extern DABinlogFDCacheContext g_da_write_cache_ctx;
 
+    static inline int da_write_fd_cache_init_ex(const char *subdir_name,
+            const int max_idle_time, const int capacity,
+            da_binlog_fd_cache_filename_func filename_func,
+            const int subdirs)
+    {
+        const int open_flags =  O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC;
+        return da_binlog_fd_cache_init_ex(&g_da_write_cache_ctx,
+                subdir_name, open_flags, max_idle_time, capacity,
+                filename_func, subdirs);
+    }
+
     static inline int da_write_fd_cache_init(const char *subdir_name,
             const int max_idle_time, const int capacity)
     {
-        const int open_flags =  O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC;
-        return da_binlog_fd_cache_init(&g_da_write_cache_ctx,
-                subdir_name, open_flags, max_idle_time, capacity);
+        return da_write_fd_cache_init_ex(subdir_name, max_idle_time,
+                capacity, da_binlog_fd_cache_binlog_filename,
+                DA_BINLOG_SUBDIRS);
     }
 
     //return fd, < 0 for error
@@ -48,10 +59,10 @@ extern "C" {
         return da_binlog_fd_cache_clear(&g_da_write_cache_ctx);
     }
 
-    static inline int da_write_fd_cache_filename(const uint64_t id,
-            char *full_filename, const int size)
+    static inline const char *da_write_fd_cache_filename(
+            const uint64_t id, char *full_filename, const int size)
     {
-        return da_binlog_fd_cache_filename(&g_da_write_cache_ctx,
+        return g_da_write_cache_ctx.filename_func(&g_da_write_cache_ctx,
                 id, full_filename, size);
     }
 
