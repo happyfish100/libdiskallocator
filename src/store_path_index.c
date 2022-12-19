@@ -27,7 +27,7 @@
 typedef struct {
     int alloc;
     int count;
-    StorePathEntry *entries;
+    DAStorePathEntry *entries;
 } StorePathArray;
 
 typedef struct
@@ -114,7 +114,7 @@ static int store_path_get_mark(const char *filename,
     return result;
 }
 
-int store_path_check_mark(StorePathEntry *pentry, bool *regenerated)
+int store_path_check_mark(DAStorePathEntry *pentry, bool *regenerated)
 {
     StorePathMarkInfo mark_info;
     char filename[PATH_MAX];
@@ -186,7 +186,7 @@ int store_path_check_mark(StorePathEntry *pentry, bool *regenerated)
     return EINVAL;
 }
 
-static char *get_store_path_index_filename(char *full_filename, const int size)
+static char *get_da_store_path_index_filename(char *full_filename, const int size)
 {
     snprintf(full_filename, size, "%s/%s",
             DA_DATA_PATH_STR, STORE_PATH_INDEX_FILENAME);
@@ -198,7 +198,7 @@ static int check_alloc_store_paths(const int inc_count)
     int alloc;
     int target_count;
     int bytes;
-    StorePathEntry *entries;
+    DAStorePathEntry *entries;
 
     target_count = store_paths.count + inc_count;
     if (store_paths.alloc >= target_count) {
@@ -215,15 +215,15 @@ static int check_alloc_store_paths(const int inc_count)
         alloc *= 2;
     }
 
-    bytes = sizeof(StorePathEntry) * alloc;
-    entries = (StorePathEntry *)fc_malloc(bytes);
+    bytes = sizeof(DAStorePathEntry) * alloc;
+    entries = (DAStorePathEntry *)fc_malloc(bytes);
     if (entries == NULL) {
         return ENOMEM;
     }
 
     if (store_paths.entries != NULL) {
         memcpy(entries, store_paths.entries,
-                sizeof(StorePathEntry) * store_paths.count);
+                sizeof(DAStorePathEntry) * store_paths.count);
         free(store_paths.entries);
     }
 
@@ -233,7 +233,7 @@ static int check_alloc_store_paths(const int inc_count)
 }
 
 static int load_one_store_path_index(IniContext *ini_context, char *full_filename,
-        IniSectionInfo *section, StorePathEntry *pentry)
+        IniSectionInfo *section, DAStorePathEntry *pentry)
 {
     char *index_str;
     char *path;
@@ -272,7 +272,7 @@ static int load_one_store_path_index(IniContext *ini_context, char *full_filenam
 
 static int compare_store_path_index(const void *p1, const void *p2)
 {
-    return ((StorePathEntry *)p1)->index - ((StorePathEntry *)p2)->index;
+    return ((DAStorePathEntry *)p1)->index - ((DAStorePathEntry *)p2)->index;
 }
 
 static int load_store_path_index(IniContext *ini_context,
@@ -287,7 +287,7 @@ static int load_store_path_index(IniContext *ini_context,
     IniSectionInfo *sections;
     IniSectionInfo *section;
     IniSectionInfo *end;
-    StorePathEntry *pentry;
+    DAStorePathEntry *pentry;
 
     sections = fixed_sections;
     alloc_size = FIXED_SECTION_COUNT;
@@ -330,7 +330,7 @@ static int load_store_path_index(IniContext *ini_context,
 
     if (store_paths.count > 1) {
         qsort(store_paths.entries, store_paths.count,
-                sizeof(StorePathEntry), compare_store_path_index);
+                sizeof(DAStorePathEntry), compare_store_path_index);
     }
 
     if (sections != fixed_sections) {
@@ -339,12 +339,12 @@ static int load_store_path_index(IniContext *ini_context,
     return 0;
 }
 
-int store_path_index_count()
+int da_store_path_index_count()
 {
     return store_paths.count;
 }
 
-int store_path_index_max()
+int da_store_path_index_max()
 {
     if (store_paths.count > 0) {
         return store_paths.entries[store_paths.count - 1].index;
@@ -353,7 +353,7 @@ int store_path_index_max()
     }
 }
 
-int store_path_index_init()
+int da_store_path_index_init()
 {
     int result;
     IniContext ini_context;
@@ -361,7 +361,7 @@ int store_path_index_init()
 
     base64_init_ex(&base64_ctx, 0, '-', '_', '.');
 
-    get_store_path_index_filename(full_filename, sizeof(full_filename));
+    get_da_store_path_index_filename(full_filename, sizeof(full_filename));
     if (access(full_filename, F_OK) != 0) {
         if (errno == ENOENT) {
             return 0;
@@ -386,7 +386,7 @@ int store_path_index_init()
     return result;
 }
 
-void store_path_index_destroy()
+void da_store_path_index_destroy()
 {
     if (store_paths.entries != NULL) {
         free(store_paths.entries);
@@ -395,9 +395,9 @@ void store_path_index_destroy()
     }
 }
 
-StorePathEntry *store_path_index_get(const char *path)
+DAStorePathEntry *da_store_path_index_get(const char *path)
 {
-    StorePathEntry *entry;
+    DAStorePathEntry *entry;
 
     if (store_paths.count == 0) {
         return NULL;
@@ -414,12 +414,12 @@ StorePathEntry *store_path_index_get(const char *path)
     return NULL;
 }
 
-int store_path_index_add(const char *path, int *index)
+int da_store_path_index_add(const char *path, int *index)
 {
     int result;
     char filename[PATH_MAX];
     char mark[64];
-    StorePathEntry *pentry;
+    DAStorePathEntry *pentry;
 
     if ((result=check_alloc_store_paths(1)) != 0) {
         return result;
@@ -457,12 +457,12 @@ int store_path_index_add(const char *path, int *index)
     return 0;
 }
 
-int store_path_index_save()
+int da_store_path_index_save()
 {
     int result;
     FastBuffer buffer;
-    StorePathEntry *pentry;
-    StorePathEntry *end;
+    DAStorePathEntry *pentry;
+    DAStorePathEntry *end;
     char full_filename[PATH_MAX];
 
     if ((result=fast_buffer_init_ex(&buffer, 128 * store_paths.count)) != 0) {
@@ -483,7 +483,7 @@ int store_path_index_save()
         }
     }
 
-    get_store_path_index_filename(full_filename, sizeof(full_filename));
+    get_da_store_path_index_filename(full_filename, sizeof(full_filename));
     result = safeWriteToFile(full_filename, buffer.data, buffer.length);
 
     fast_buffer_destroy(&buffer);

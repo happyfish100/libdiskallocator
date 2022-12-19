@@ -22,7 +22,7 @@
 #include "sf/sf_global.h"
 #include "trunk_fd_cache.h"
 
-int trunk_fd_cache_init(TrunkFDCacheContext *cache_ctx, const int capacity)
+int da_trunk_fd_cache_init(DATrunkFDCacheContext *cache_ctx, const int capacity)
 {
     int result;
     int bytes;
@@ -35,8 +35,8 @@ int trunk_fd_cache_init(TrunkFDCacheContext *cache_ctx, const int capacity)
         cache_ctx->htable.size = capacity;
     }
 
-    bytes = sizeof(TrunkFDCacheEntry *) * cache_ctx->htable.size;
-    cache_ctx->htable.buckets = (TrunkFDCacheEntry **)fc_malloc(bytes);
+    bytes = sizeof(DATrunkFDCacheEntry *) * cache_ctx->htable.size;
+    cache_ctx->htable.buckets = (DATrunkFDCacheEntry **)fc_malloc(bytes);
     if (cache_ctx->htable.buckets == NULL) {
         return ENOMEM;
     }
@@ -54,7 +54,7 @@ int trunk_fd_cache_init(TrunkFDCacheContext *cache_ctx, const int capacity)
         alloc_elements_once = 8 * 1024;
     }
     if ((result=fast_mblock_init_ex1(&cache_ctx->allocator,
-                    "trunk_fd_cache", sizeof(TrunkFDCacheEntry),
+                    "trunk_fd_cache", sizeof(DATrunkFDCacheEntry),
                     alloc_elements_once, 0, NULL, NULL, false)) != 0)
     {
         return result;
@@ -66,11 +66,11 @@ int trunk_fd_cache_init(TrunkFDCacheContext *cache_ctx, const int capacity)
     return 0;
 }
 
-int trunk_fd_cache_get(TrunkFDCacheContext *cache_ctx,
+int da_trunk_fd_cache_get(DATrunkFDCacheContext *cache_ctx,
         const uint32_t trunk_id)
 {
-    TrunkFDCacheEntry **bucket;
-    TrunkFDCacheEntry *entry;
+    DATrunkFDCacheEntry **bucket;
+    DATrunkFDCacheEntry *entry;
 
     bucket = cache_ctx->htable.buckets + trunk_id % cache_ctx->htable.size;
     if (*bucket == NULL) {
@@ -97,19 +97,19 @@ int trunk_fd_cache_get(TrunkFDCacheContext *cache_ctx,
     }
 }
 
-int trunk_fd_cache_add(TrunkFDCacheContext *cache_ctx,
+int da_trunk_fd_cache_add(DATrunkFDCacheContext *cache_ctx,
         const uint32_t trunk_id, const int fd)
 {
-    TrunkFDCacheEntry **bucket;
-    TrunkFDCacheEntry *entry;
+    DATrunkFDCacheEntry **bucket;
+    DATrunkFDCacheEntry *entry;
 
     if (cache_ctx->lru.count >= cache_ctx->lru.capacity) {
         entry = fc_list_entry(cache_ctx->lru.head.next,
-                TrunkFDCacheEntry, dlink);
-        trunk_fd_cache_delete(cache_ctx, entry->pair.trunk_id);
+                DATrunkFDCacheEntry, dlink);
+        da_trunk_fd_cache_delete(cache_ctx, entry->pair.trunk_id);
     }
 
-    entry = (TrunkFDCacheEntry *)fast_mblock_alloc_object(
+    entry = (DATrunkFDCacheEntry *)fast_mblock_alloc_object(
             &cache_ctx->allocator);
     if (entry == NULL) {
         return ENOMEM;
@@ -127,12 +127,12 @@ int trunk_fd_cache_add(TrunkFDCacheContext *cache_ctx,
     return 0;
 }
 
-int trunk_fd_cache_delete(TrunkFDCacheContext *cache_ctx,
+int da_trunk_fd_cache_delete(DATrunkFDCacheContext *cache_ctx,
         const uint32_t trunk_id)
 {
-    TrunkFDCacheEntry **bucket;
-    TrunkFDCacheEntry *previous;
-    TrunkFDCacheEntry *entry;
+    DATrunkFDCacheEntry **bucket;
+    DATrunkFDCacheEntry *previous;
+    DATrunkFDCacheEntry *entry;
 
     bucket = cache_ctx->htable.buckets + trunk_id % cache_ctx->htable.size;
     if (*bucket == NULL) {

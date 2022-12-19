@@ -102,7 +102,7 @@ static void prealloc_thread_pool_run(void *arg, void *thread_data)
                 */
 
         thread_arg->is_new_trunk = false;
-        if ((result=trunk_maker_allocate_ex(task->preallocator->allocator,
+        if ((result=da_trunk_maker_allocate_ex(task->preallocator->allocator,
                         false, true, allocate_done_callback, thread_arg)) == 0)
         {
             PTHREAD_MUTEX_LOCK(&thread_arg->lcp.lock);
@@ -150,7 +150,7 @@ static int init_preallocator_array(
     TrunkPreallocatorInfo *preallocator;
 
     bytes = sizeof(TrunkPreallocatorInfo) *
-        g_allocator_mgr->allocator_ptr_array.count;
+        g_da_allocator_mgr->allocator_ptr_array.count;
     preallocator_array->preallocators = (TrunkPreallocatorInfo *)
         fc_malloc(bytes);
     if (preallocator_array->preallocators == NULL) {
@@ -159,9 +159,9 @@ static int init_preallocator_array(
     memset(preallocator_array->preallocators, 0, bytes);
 
     preallocator = preallocator_array->preallocators;
-    end = g_allocator_mgr->allocator_ptr_array.allocators +
-        g_allocator_mgr->allocator_ptr_array.count;
-    for (pp=g_allocator_mgr->allocator_ptr_array.allocators; pp<end; pp++) {
+    end = g_da_allocator_mgr->allocator_ptr_array.allocators +
+        g_da_allocator_mgr->allocator_ptr_array.count;
+    for (pp=g_da_allocator_mgr->allocator_ptr_array.allocators; pp<end; pp++) {
         if (*pp != NULL) {
             preallocator->allocator = *pp;
             preallocator++;
@@ -187,7 +187,7 @@ static TrunkPreallocatorInfo *make_preallocator_chain(
     head = previous = NULL;
     end = preallocator_array->preallocators + preallocator_array->count;
     for (p=preallocator_array->preallocators; p<end; p++) {
-        if (trunk_allocator_get_freelist_count(p->allocator) <
+        if (da_trunk_allocator_get_freelist_count(p->allocator) <
                 p->allocator->path_info->prealloc_space.trunk_count)
         {
             p->stat.total = 0;
@@ -262,7 +262,7 @@ static TrunkPreallocatorInfo *prealloc_trunks(TrunkPreallocatorInfo *head)
     p = head;
     head = previous = NULL;
     while (p != NULL && SF_G_CONTINUE_FLAG) {
-        if (trunk_allocator_get_freelist_count(p->allocator) +
+        if (da_trunk_allocator_get_freelist_count(p->allocator) +
                 __sync_add_and_fetch(&p->stat.dealings, 0) <
                 p->allocator->path_info->prealloc_space.trunk_count)
         {
@@ -403,7 +403,7 @@ static int init_thread_args()
     return 0;
 }
 
-int trunk_prealloc_init()
+int da_trunk_prealloc_init()
 {
     int result;
     int limit;

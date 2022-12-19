@@ -36,7 +36,7 @@ typedef struct write_file_handle {
     int fd;
 } WriteFileHandle;
 
-typedef struct trunk_write_thread_context {
+typedef struct da_trunk_write_thread_context {
     struct {
         short path;
         short thread;
@@ -63,7 +63,7 @@ typedef struct trunk_write_thread_context {
 
 } TrunkWriteThreadContext;
 
-typedef struct trunk_write_thread_context_array {
+typedef struct da_trunk_write_thread_context_array {
     int count;
     TrunkWriteThreadContext *contexts;
 } TrunkWriteThreadContextArray;
@@ -84,7 +84,7 @@ typedef struct trunk_write_context {
 
 static TrunkWriteContext trunk_io_ctx = {{0, NULL}};
 
-static void *trunk_write_thread_func(void *arg);
+static void *da_trunk_write_thread_func(void *arg);
 
 static int alloc_path_contexts()
 {
@@ -175,7 +175,7 @@ static int init_thread_context(TrunkWriteThreadContext *ctx)
     if ((result=init_write_context(ctx)) != 0) {
         return result;
     }
-    return fc_create_thread(&tid, trunk_write_thread_func,
+    return fc_create_thread(&tid, da_trunk_write_thread_func,
             ctx, SF_G_THREAD_STACK_SIZE);
 }
 
@@ -231,7 +231,7 @@ static int init_path_contexts(DAStoragePathArray *parray)
     return 0;
 }
 
-int trunk_write_thread_init()
+int da_trunk_write_thread_init()
 {
     int result;
 
@@ -253,11 +253,11 @@ int trunk_write_thread_init()
     return 0;
 }
 
-void trunk_write_thread_terminate()
+void da_trunk_write_thread_terminate()
 {
 }
 
-int trunk_write_thread_push(const int type, const int64_t version,
+int da_trunk_write_thread_push(const int type, const int64_t version,
         const DATrunkSpaceInfo *space, void *data,
         trunk_write_io_notify_func notify_func, void *notify_arg)
 {
@@ -377,7 +377,7 @@ static int do_create_trunk(TrunkWriteThreadContext *ctx,
     }
 
     if (fc_fallocate(fd, iob->space.size) == 0) {
-        result = trunk_binlog_write(DA_IO_TYPE_CREATE_TRUNK,
+        result = da_trunk_binlog_write(DA_IO_TYPE_CREATE_TRUNK,
                 iob->space.store->index, &iob->space.id_info,
                 iob->space.size);
     } else {
@@ -398,7 +398,7 @@ static int do_delete_trunk(TrunkWriteThreadContext *ctx, TrunkWriteIOBuffer *iob
 
     dio_get_trunk_filename(&iob->space, trunk_filename, sizeof(trunk_filename));
     if (unlink(trunk_filename) == 0) {
-        result = trunk_binlog_write(DA_IO_TYPE_DELETE_TRUNK,
+        result = da_trunk_binlog_write(DA_IO_TYPE_DELETE_TRUNK,
                 iob->space.store->index, &iob->space.id_info,
                 iob->space.size);
     } else {
@@ -745,7 +745,7 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
     }
 }
 
-static void *trunk_write_thread_func(void *arg)
+static void *da_trunk_write_thread_func(void *arg)
 {
     TrunkWriteThreadContext *ctx;
     int count;
@@ -786,7 +786,7 @@ static void *trunk_write_thread_func(void *arg)
     return NULL;
 }
 
-static void write_io_notify_callback(struct trunk_write_io_buffer
+static void write_io_notify_callback(struct da_trunk_write_io_buffer
         *buffer, const int result)
 {
     SFSynchronizeContext *sctx;
@@ -798,13 +798,13 @@ static void write_io_notify_callback(struct trunk_write_io_buffer
     PTHREAD_MUTEX_UNLOCK(&sctx->lcp.lock);
 }
 
-int trunk_write_thread_by_buff_synchronize(DATrunkSpaceInfo *space,
+int da_trunk_write_thread_by_buff_synchronize(DATrunkSpaceInfo *space,
         char *buff, SFSynchronizeContext *sctx)
 {
     int result;
 
     sctx->result = INT16_MIN;
-    if ((result=trunk_write_thread_push_slice_by_buff(space, buff,
+    if ((result=da_trunk_write_thread_push_slice_by_buff(space, buff,
                     write_io_notify_callback, sctx)) != 0)
     {
         return result;

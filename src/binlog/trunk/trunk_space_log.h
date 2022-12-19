@@ -34,18 +34,18 @@ typedef struct da_trunk_space_log_context {
     SFSynchronizeContext notify;
     DASpaceLogReader reader;
     DATrunkSpaceLogRecordArray record_array;
-    TrunkFDCacheContext fd_cache_ctx;
+    DATrunkFDCacheContext fd_cache_ctx;
     FastBuffer buffer;
 } DATrunkSpaceLogContext;
 
-#define DA_SPACE_LOG_RECORD_ALLOCATOR g_trunk_space_log_ctx.reader.record_allocator
-#define DA_SPACE_LOG_SKIPLIST_FACTORY g_trunk_space_log_ctx.reader.factory
+#define DA_SPACE_LOG_RECORD_ALLOCATOR g_da_trunk_space_log_ctx.reader.record_allocator
+#define DA_SPACE_LOG_SKIPLIST_FACTORY g_da_trunk_space_log_ctx.reader.factory
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    extern DATrunkSpaceLogContext g_trunk_space_log_ctx;
+    extern DATrunkSpaceLogContext g_da_trunk_space_log_ctx;
 
     int da_trunk_space_log_init();
     int da_trunk_space_log_start();
@@ -83,21 +83,21 @@ extern "C" {
     static inline int da_trunk_space_log_alloc_chain(const int count,
             struct fc_queue_info *chain)
     {
-        return fc_queue_alloc_chain(&g_trunk_space_log_ctx.queue,
+        return fc_queue_alloc_chain(&g_da_trunk_space_log_ctx.queue,
                 &DA_SPACE_LOG_RECORD_ALLOCATOR, count, chain);
     }
 
     static inline void da_trunk_space_log_free_chain(
             struct fc_queue_info *chain)
     {
-        fc_queue_free_chain(&g_trunk_space_log_ctx.queue,
+        fc_queue_free_chain(&g_da_trunk_space_log_ctx.queue,
                 &DA_SPACE_LOG_RECORD_ALLOCATOR, chain);
     }
 
     static inline void da_trunk_space_log_push_chain(
             struct fc_queue_info *qinfo)
     {
-        fc_queue_push_queue_to_tail(&g_trunk_space_log_ctx.queue, qinfo);
+        fc_queue_push_queue_to_tail(&g_da_trunk_space_log_ctx.queue, qinfo);
     }
 
     int da_trunk_space_log_redo(const char *space_log_filename);
@@ -120,12 +120,12 @@ extern "C" {
 
     static inline void da_trunk_space_log_inc_waiting_count(const int count)
     {
-        sf_synchronize_counter_add(&g_trunk_space_log_ctx.notify, count);
+        sf_synchronize_counter_add(&g_da_trunk_space_log_ctx.notify, count);
     }
 
     static inline void da_trunk_space_log_wait()
     {
-        sf_synchronize_counter_wait(&g_trunk_space_log_ctx.notify);
+        sf_synchronize_counter_wait(&g_da_trunk_space_log_ctx.notify);
     }
 
 #ifdef __cplusplus

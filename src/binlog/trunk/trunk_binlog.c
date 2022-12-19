@@ -80,14 +80,14 @@ static int trunk_parse_line(const string_t *line, char *error_info)
     }
 
     if (op_type == DA_IO_TYPE_CREATE_TRUNK) {
-        if ((result=storage_allocator_add_trunk(path_index,
+        if ((result=da_storage_allocator_add_trunk(path_index,
                        &id_info, trunk_size)) != 0)
         {
             sprintf(error_info, "add trunk fail, errno: %d, "
                     "error info: %s", result, STRERROR(result));
         }
     } else if (op_type == DA_IO_TYPE_DELETE_TRUNK) {
-        if ((result=storage_allocator_delete_trunk(path_index,
+        if ((result=da_storage_allocator_delete_trunk(path_index,
                         &id_info)) != 0)
         {
             sprintf(error_info, "delete trunk fail, errno: %d, "
@@ -183,7 +183,7 @@ static int load_one_binlog(const int binlog_index)
     return result;
 }
 
-static int trunk_binlog_load()
+static int da_trunk_binlog_load()
 {
     int result;
     int binlog_index;
@@ -199,7 +199,7 @@ static int trunk_binlog_load()
     return 0;
 }
 
-int trunk_sf_binlog_get_current_write_index()
+int da_trunk_binlog_get_current_write_index()
 {
     return sf_binlog_get_current_write_index(&binlog_writer.writer);
 }
@@ -211,22 +211,22 @@ static int init_binlog_writer()
             DA_TRUNK_BINLOG_MAX_RECORD_SIZE);
 }
 
-int trunk_binlog_init()
+int da_trunk_binlog_init()
 {
     int result;
     if ((result=init_binlog_writer()) != 0) {
         return result;
     }
 
-    return trunk_binlog_load();
+    return da_trunk_binlog_load();
 }
 
-void trunk_binlog_destroy()
+void da_trunk_binlog_destroy()
 {
     sf_binlog_writer_finish(&binlog_writer.writer);
 }
 
-int trunk_binlog_write(const char op_type, const int path_index,
+int da_trunk_binlog_write(const char op_type, const int path_index,
         const DATrunkIdInfo *id_info, const uint32_t file_size)
 {
     SFBinlogWriterBuffer *wbuffer;

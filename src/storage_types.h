@@ -80,12 +80,12 @@ typedef struct {
 typedef struct aio_buffer_ptr_array {
     int alloc;
     int count;
-    struct aligned_read_buffer **buffers;
+    struct da_aligned_read_buffer **buffers;
 } AIOBufferPtrArray;
 
 typedef enum {
     da_buffer_type_direct,  /* char *buff */
-    da_buffer_type_array    /* aligned_read_buffer **array */
+    da_buffer_type_array    /* da_aligned_read_buffer **array */
 } DAIOBufferType;
 #endif
 
@@ -162,7 +162,7 @@ typedef struct da_trunk_index_record {
 typedef struct da_trunk_read_buffer {
 #ifdef OS_LINUX
     union {
-        AlignedReadBuffer *aio_buffer;   //NULL for alloc from pool
+        DAAlignedReadBuffer *aio_buffer;   //NULL for alloc from pool
         BufferInfo buffer;
     };
 #else

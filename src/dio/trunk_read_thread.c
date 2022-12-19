@@ -34,7 +34,7 @@
 #endif
 #include "trunk_read_thread.h"
 
-typedef struct trunk_read_thread_context {
+typedef struct da_trunk_read_thread_context {
     struct {
         short path;
         short thread;
@@ -42,7 +42,7 @@ typedef struct trunk_read_thread_context {
     int block_size;
     struct fc_queue queue;
     struct fast_mblock_man mblock;
-    TrunkFDCacheContext fd_cache;
+    DATrunkFDCacheContext fd_cache;
 
 #ifdef OS_LINUX
     struct {
@@ -62,7 +62,7 @@ typedef struct trunk_read_thread_context {
 
 } TrunkReadThreadContext;
 
-typedef struct trunk_read_thread_context_array {
+typedef struct da_trunk_read_thread_context_array {
     int count;
     TrunkReadThreadContext *contexts;
 } TrunkReadThreadContextArray;
@@ -82,7 +82,7 @@ typedef struct trunk_io_context {
 
 static TrunkReadContext trunk_io_ctx = {{0, NULL}};
 
-static void *trunk_read_thread_func(void *arg);
+static void *da_trunk_read_thread_func(void *arg);
 
 int da_init_read_context(DASynchronizedReadContext *ctx)
 {
@@ -147,7 +147,7 @@ static int init_thread_context(TrunkReadThreadContext *ctx,
     }
 
 
-    if ((result=trunk_fd_cache_init(&ctx->fd_cache, DA_STORE_CFG.
+    if ((result=da_trunk_fd_cache_init(&ctx->fd_cache, DA_STORE_CFG.
                     fd_cache_capacity_per_read_thread)) != 0)
     {
         return result;
@@ -183,7 +183,7 @@ static int init_thread_context(TrunkReadThreadContext *ctx,
 
 #endif
 
-    return fc_create_thread(&tid, trunk_read_thread_func,
+    return fc_create_thread(&tid, da_trunk_read_thread_func,
             ctx, SF_G_THREAD_STACK_SIZE);
 }
 
@@ -246,12 +246,12 @@ static int rbpool_init_start()
     int path_count;
     int result;
 
-    path_count = storage_config_path_count(&DA_STORE_CFG);
+    path_count = da_storage_config_path_count(&DA_STORE_CFG);
     memory_watermark.low = DA_STORE_CFG.aio_read_buffer.
         memory_watermark_low.value / path_count;
     memory_watermark.high = DA_STORE_CFG.aio_read_buffer.
         memory_watermark_high.value / path_count;
-    if ((result=read_buffer_pool_init(DA_STORE_CFG.paths_by_index.count,
+    if ((result=da_read_buffer_pool_init(DA_STORE_CFG.paths_by_index.count,
                     &memory_watermark)) != 0)
     {
         return result;
@@ -261,7 +261,7 @@ static int rbpool_init_start()
         DA_STORE_CFG.paths_by_index.count;
     for (pp=DA_STORE_CFG.paths_by_index.paths; pp<end; pp++) {
         if (*pp != NULL) {
-            if ((result=read_buffer_pool_create((*pp)->store.index,
+            if ((result=da_read_buffer_pool_create((*pp)->store.index,
                             (*pp)->block_size)) != 0)
             {
                 return result;
@@ -269,12 +269,12 @@ static int rbpool_init_start()
         }
     }
 
-    return read_buffer_pool_start(DA_STORE_CFG.aio_read_buffer.max_idle_time,
+    return da_read_buffer_pool_start(DA_STORE_CFG.aio_read_buffer.max_idle_time,
             DA_STORE_CFG.aio_read_buffer.reclaim_interval);
 }
 #endif
 
-int trunk_read_thread_init()
+int da_trunk_read_thread_init()
 {
     int result;
 
@@ -304,13 +304,13 @@ int trunk_read_thread_init()
     return 0;
 }
 
-void trunk_read_thread_terminate()
+void da_trunk_read_thread_terminate()
 {
 }
 
-int trunk_read_thread_push(const DATrunkSpaceInfo *space,
+int da_trunk_read_thread_push(const DATrunkSpaceInfo *space,
         const int read_bytes, DATrunkReadBuffer *rb,
-        trunk_read_io_notify_func notify_func, void *notify_arg)
+        da_trunk_read_io_notify_func notify_func, void *notify_arg)
 {
     TrunkReadPathContext *path_ctx;
     TrunkReadThreadContext *thread_ctx;
@@ -341,7 +341,7 @@ static int get_read_fd(TrunkReadThreadContext *ctx,
     char trunk_filename[PATH_MAX];
     int result;
 
-    if ((*fd=trunk_fd_cache_get(&ctx->fd_cache,
+    if ((*fd=da_trunk_fd_cache_get(&ctx->fd_cache,
                     space->id_info.id)) >= 0)
     {
         return 0;
@@ -365,7 +365,7 @@ static int get_read_fd(TrunkReadThreadContext *ctx,
         return result;
     }
 
-    trunk_fd_cache_add(&ctx->fd_cache, space->id_info.id, *fd);
+    da_trunk_fd_cache_add(&ctx->fd_cache, space->id_info.id, *fd);
     return 0;
 }
 
@@ -399,12 +399,12 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
                 "buffer size %d is too small, required size: %d",
                 __LINE__, iob->rb->aio_buffer->size, read_bytes);
 
-        read_buffer_pool_free(iob->rb->aio_buffer);
+        da_read_buffer_pool_free(iob->rb->aio_buffer);
         iob->rb->aio_buffer = NULL;
     }
 
     if (iob->rb->aio_buffer == NULL) {
-        iob->rb->aio_buffer = read_buffer_pool_alloc(
+        iob->rb->aio_buffer = da_read_buffer_pool_alloc(
                 ctx->indexes.path, read_bytes);
         if (iob->rb->aio_buffer == NULL) {
             return ENOMEM;
@@ -426,7 +426,7 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
 
     if ((result=get_read_fd(ctx, &iob->space, &fd)) != 0) {
         if (new_alloced) {
-            read_buffer_pool_free(iob->rb->aio_buffer);
+            da_read_buffer_pool_free(iob->rb->aio_buffer);
             iob->rb->aio_buffer = NULL;
         }
         return result;
@@ -551,7 +551,7 @@ static int process_aio(TrunkReadThreadContext *ctx)
         if (event->res == iob->rb->aio_buffer->read_bytes) {
             result = 0;
         } else {
-            trunk_fd_cache_delete(&ctx->fd_cache,
+            da_trunk_fd_cache_delete(&ctx->fd_cache,
                     iob->space.id_info.id);
 
             if ((int)event->res < 0) {
@@ -619,7 +619,7 @@ static int do_read_slice(TrunkReadThreadContext *ctx, DATrunkReadIOBuffer *iob)
                 continue;
             }
 
-            trunk_fd_cache_delete(&ctx->fd_cache,
+            da_trunk_fd_cache_delete(&ctx->fd_cache,
                     iob->space.id_info.id);
 
             dio_get_trunk_filename(&iob->space, trunk_filename,
@@ -662,7 +662,7 @@ static void normal_read_loop(TrunkReadThreadContext *ctx)
     }
 }
 
-static void *trunk_read_thread_func(void *arg)
+static void *da_trunk_read_thread_func(void *arg)
 {
     TrunkReadThreadContext *ctx;
 #ifdef OS_LINUX
@@ -721,15 +721,15 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
         if (op_ctx->rb.aio_buffer != NULL && op_ctx->rb.
                 aio_buffer->size < aligned_size)
         {
-            AlignedReadBuffer *new_buffer;
+            DAAlignedReadBuffer *new_buffer;
 
-            new_buffer = read_buffer_pool_alloc(path_info->
+            new_buffer = da_read_buffer_pool_alloc(path_info->
                     store.index, aligned_size);
             if (new_buffer == NULL) {
                 return ENOMEM;
             }
 
-            read_buffer_pool_free(op_ctx->rb.aio_buffer);
+            da_read_buffer_pool_free(op_ctx->rb.aio_buffer);
             op_ctx->rb.aio_buffer = new_buffer;
         }
 
@@ -764,7 +764,7 @@ int da_slice_read(DASynchronizedReadContext *ctx)
     DATrunkSpaceInfo space;
     DATrunkFileInfo *trunk;
 
-    if ((trunk=trunk_hashtable_get(ctx->op_ctx.storage->trunk_id)) == NULL) {
+    if ((trunk=da_trunk_hashtable_get(ctx->op_ctx.storage->trunk_id)) == NULL) {
         return ENOENT;
     }
 
@@ -779,7 +779,7 @@ int da_slice_read(DASynchronizedReadContext *ctx)
     space.id_info = trunk->id_info;
     space.offset = ctx->op_ctx.storage->offset;
     space.size = ctx->op_ctx.storage->size;
-    if ((result=trunk_read_thread_push(&space, ctx->op_ctx.storage->length,
+    if ((result=da_trunk_read_thread_push(&space, ctx->op_ctx.storage->length,
                     &ctx->op_ctx.rb, slice_read_done, &ctx->sctx)) != 0)
     {
         return result;

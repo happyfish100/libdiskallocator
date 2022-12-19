@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _TRUNK_BINLOG_H
-#define _TRUNK_BINLOG_H
+#ifndef _DA_TRUNK_BINLOG_H
+#define _DA_TRUNK_BINLOG_H
 
 #include "../../storage_config.h"
 
@@ -23,12 +23,12 @@
 extern "C" {
 #endif
 
-    int trunk_binlog_init();
-    void trunk_binlog_destroy();
+    int da_trunk_binlog_init();
+    void da_trunk_binlog_destroy();
 
-    int trunk_sf_binlog_get_current_write_index();
+    int da_trunk_binlog_get_current_write_index();
 
-    int trunk_binlog_write(const char op_type, const int path_index,
+    int da_trunk_binlog_write(const char op_type, const int path_index,
             const DATrunkIdInfo *id_info, const uint32_t file_size);
 
 #ifdef __cplusplus

@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _TRUNK_ALLOCATOR_H
-#define _TRUNK_ALLOCATOR_H
+#ifndef _DA_TRUNK_ALLOCATOR_H
+#define _DA_TRUNK_ALLOCATOR_H
 
 #include "fastcommon/uniq_skiplist.h"
 #include "fastcommon/fc_list.h"
@@ -75,45 +75,42 @@ typedef struct da_trunk_allocator {
 
 typedef struct {
     struct fast_mblock_man trunk_allocator;
-} TrunkAllocatorGlobalVars;
+} DATrunkAllocatorGlobalVars;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define G_TRUNK_ALLOCATOR     g_trunk_allocator_vars.trunk_allocator
+#define G_TRUNK_ALLOCATOR     g_da_da_trunk_allocator_vars.trunk_allocator
 
-#define free_trunk_file_info_ptr(trunk_info) \
-        fast_mblock_free_object(&G_TRUNK_ALLOCATOR, trunk_info)
+    extern DATrunkAllocatorGlobalVars g_da_da_trunk_allocator_vars;
 
-    extern TrunkAllocatorGlobalVars g_trunk_allocator_vars;
+    int da_trunk_allocator_init();
 
-    int trunk_allocator_init();
-
-    int trunk_allocator_init_instance(DATrunkAllocator *allocator,
+    int da_trunk_allocator_init_instance(DATrunkAllocator *allocator,
             DAStoragePathInfo *path_info);
 
-    int trunk_allocator_add(DATrunkAllocator *allocator,
+    int da_trunk_allocator_add(DATrunkAllocator *allocator,
             const DATrunkIdInfo *id_info, const int64_t size,
             DATrunkFileInfo **pp_trunk);
 
-    int trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id);
+    int da_trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id);
 
-    int trunk_allocator_free(DATrunkAllocator *allocator,
+    int da_trunk_allocator_free(DATrunkAllocator *allocator,
             const int id, const int size);
 
-    DATrunkFreelistType trunk_allocator_add_to_freelist(
+    DATrunkFreelistType da_trunk_allocator_add_to_freelist(
             DATrunkAllocator *allocator, DATrunkFileInfo *trunk_info);
 
-    void trunk_allocator_deal_on_ready(DATrunkAllocator *allocator);
+    void da_trunk_allocator_deal_on_ready(DATrunkAllocator *allocator);
 
-    static inline bool trunk_allocator_is_available(DATrunkAllocator *allocator)
+    static inline bool da_trunk_allocator_is_available(DATrunkAllocator *allocator)
     {
         return allocator->freelist.count >=
             allocator->freelist.water_mark_trunks;
     }
 
-    void trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info);
+    void da_trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info);
 
     static inline int da_compare_trunk_by_size_id(const DATrunkFileInfo *t1,
             const int64_t last_used_bytes2, const int64_t id2)
@@ -129,10 +126,7 @@ extern "C" {
         return fc_compare_int64(t1->id_info.id, id2);
     }
 
-    int compare_trunk_by_size_id(const DATrunkFileInfo *t1,
-            const DATrunkFileInfo *t2);
-
-    static inline int trunk_allocator_get_freelist_count(
+    static inline int da_trunk_allocator_get_freelist_count(
             DATrunkAllocator *allocator)
     {
         int count;
@@ -158,7 +152,7 @@ extern "C" {
         }
     }
 
-    static inline void trunk_allocator_before_make_trunk(
+    static inline void da_trunk_allocator_before_make_trunk(
             DATrunkAllocator *allocator, const bool need_lock)
     {
         if (need_lock) {
@@ -170,7 +164,7 @@ extern "C" {
         }
     }
 
-    static inline void trunk_allocator_after_make_trunk(
+    static inline void da_trunk_allocator_after_make_trunk(
             DATrunkAllocator *allocator, const int result)
     {
         PTHREAD_MUTEX_LOCK(&allocator->freelist.lcp.lock);
@@ -182,7 +176,7 @@ extern "C" {
         PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
     }
 
-    static inline double trunk_allocator_calc_reclaim_ratio_thredhold(
+    static inline double da_trunk_allocator_calc_reclaim_ratio_thredhold(
             DATrunkAllocator *allocator)
     {
         double used_ratio;
@@ -197,7 +191,7 @@ extern "C" {
         }
     }
 
-    int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
+    int da_trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
             const int count, uint32_t *used_bytes);
 
 #ifdef __cplusplus

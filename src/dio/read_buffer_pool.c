@@ -27,7 +27,7 @@
 typedef struct {
     int size;
     pthread_mutex_t lock;
-    struct fc_list_head freelist;  //element: AlignedReadBuffer
+    struct fc_list_head freelist;  //element: DAAlignedReadBuffer
 } ReadBufferAllocator;
 
 typedef struct {
@@ -39,7 +39,7 @@ typedef struct {
         volatile int64_t used;
     } memory;
 
-    struct fast_mblock_man mblock;  //element: AlignedReadBuffer
+    struct fast_mblock_man mblock;  //element: DAAlignedReadBuffer
     struct {
         ReadBufferAllocator *allocators;
         ReadBufferAllocator *middle;
@@ -70,7 +70,7 @@ static struct {
     {NULL, 0}, {NULL, NULL, 0}, 0, 0
 };
 
-int read_buffer_pool_init(const int path_count,
+int da_read_buffer_pool_init(const int path_count,
         const SFMemoryWatermark *watermark)
 {
     int bytes;
@@ -92,7 +92,7 @@ int read_buffer_pool_init(const int path_count,
     return 0;
 }
 
-static int aligned_buffer_alloc_init(AlignedReadBuffer *buffer,
+static int aligned_buffer_alloc_init(DAAlignedReadBuffer *buffer,
         ReadBufferPool *pool)
 {
     buffer->indexes.path = pool->path_index;
@@ -147,7 +147,7 @@ static int init_allocators(ReadBufferPool *pool)
     }
 
     if ((result=fast_mblock_init_ex1(&pool->mblock, "aligned-rdbuffer",
-                    sizeof(AlignedReadBuffer), 8192, 0,
+                    sizeof(DAAlignedReadBuffer), 8192, 0,
                     (fast_mblock_object_init_func)aligned_buffer_alloc_init,
                     pool, true)) != 0)
     {
@@ -157,7 +157,7 @@ static int init_allocators(ReadBufferPool *pool)
     return 0;
 }
 
-int read_buffer_pool_create(const short path_index, const int block_size)
+int da_read_buffer_pool_create(const short path_index, const int block_size)
 {
     ReadBufferPool *pool;
     int result;
@@ -208,7 +208,7 @@ static inline ReadBufferAllocator *get_allocator(
 }
 
 static inline void free_aligned_buffer(ReadBufferPool *pool,
-        AlignedReadBuffer *buffer)
+        DAAlignedReadBuffer *buffer)
 {
     free(buffer->buff);
     buffer->buff = NULL;
@@ -223,12 +223,12 @@ static int reclaim_allocator_by_size(ReadBufferPool *pool,
 {
     int result;
     struct fc_list_head *pos;
-    AlignedReadBuffer *buffer;
+    DAAlignedReadBuffer *buffer;
 
     result = EAGAIN;
     PTHREAD_MUTEX_LOCK(&allocator->lock);
     fc_list_for_each_prev(pos, &allocator->freelist) {
-        buffer = fc_list_entry(pos, AlignedReadBuffer, dlink);
+        buffer = fc_list_entry(pos, DAAlignedReadBuffer, dlink);
         *reclaim_bytes += buffer->size;
         free_aligned_buffer(pool, buffer);
         if (*reclaim_bytes >= target_size) {
@@ -270,13 +270,13 @@ static int reclaim(ReadBufferPool *pool, const int target_size,
     return EAGAIN;
 }
 
-static inline AlignedReadBuffer *do_aligned_alloc(ReadBufferPool *pool,
+static inline DAAlignedReadBuffer *do_aligned_alloc(ReadBufferPool *pool,
         ReadBufferAllocator *allocator)
 {
     int result;
-    AlignedReadBuffer *buffer;
+    DAAlignedReadBuffer *buffer;
 
-    if ((buffer=(AlignedReadBuffer *)fast_mblock_alloc_object(
+    if ((buffer=(DAAlignedReadBuffer *)fast_mblock_alloc_object(
                     &pool->mblock)) == NULL)
     {
         return NULL;
@@ -298,12 +298,12 @@ static inline AlignedReadBuffer *do_aligned_alloc(ReadBufferPool *pool,
     return buffer;
 }
 
-AlignedReadBuffer *read_buffer_pool_alloc(
+DAAlignedReadBuffer *da_read_buffer_pool_alloc(
         const short path_index, const int size)
 {
     ReadBufferPool *pool;
     ReadBufferAllocator *allocator;
-    AlignedReadBuffer *buffer;
+    DAAlignedReadBuffer *buffer;
     int64_t total_alloc;
     int reclaim_bytes;
 
@@ -316,7 +316,7 @@ AlignedReadBuffer *read_buffer_pool_alloc(
 
     PTHREAD_MUTEX_LOCK(&allocator->lock);
     if ((buffer=fc_list_first_entry(&allocator->freelist,
-                    AlignedReadBuffer, dlink)) != NULL)
+                    DAAlignedReadBuffer, dlink)) != NULL)
     {
         fc_list_del_init(&buffer->dlink);
     }
@@ -349,7 +349,7 @@ AlignedReadBuffer *read_buffer_pool_alloc(
     return buffer;
 }
 
-void read_buffer_pool_free(AlignedReadBuffer *buffer)
+void da_read_buffer_pool_free(DAAlignedReadBuffer *buffer)
 {
     ReadBufferPool *pool;
     ReadBufferAllocator *allocator;
@@ -368,11 +368,11 @@ static void reclaim_allocator_by_ttl(ReadBufferPool *pool,
         ReadBufferAllocator *allocator)
 {
     struct fc_list_head *pos;
-    AlignedReadBuffer *buffer;
+    DAAlignedReadBuffer *buffer;
 
     PTHREAD_MUTEX_LOCK(&allocator->lock);
     fc_list_for_each_prev(pos, &allocator->freelist) {
-        buffer = fc_list_entry(pos, AlignedReadBuffer, dlink);
+        buffer = fc_list_entry(pos, DAAlignedReadBuffer, dlink);
         if (g_current_time - buffer->last_access_time <=
                 rbpool_ctx.max_idle_time)
         {
@@ -423,7 +423,7 @@ static void *reclaim_thread_entrance(void *arg)
     return NULL;
 }
 
-int read_buffer_pool_start(const int max_idle_time,
+int da_read_buffer_pool_start(const int max_idle_time,
         const int reclaim_interval)
 {
     ReadBufferPool **pool;

@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _TRUNK_READ_THREAD_H
-#define _TRUNK_READ_THREAD_H
+#ifndef _DA_TRUNK_READ_THREAD_H
+#define _DA_TRUNK_READ_THREAD_H
 
 #include "fastcommon/common_define.h"
 #ifdef OS_LINUX
@@ -30,7 +30,7 @@
 struct da_trunk_read_io_buffer;
 
 //Note: the record can NOT be persisted
-typedef void (*trunk_read_io_notify_func)(struct da_trunk_read_io_buffer
+typedef void (*da_trunk_read_io_notify_func)(struct da_trunk_read_io_buffer
         *record, const int result);
 
 typedef struct da_trunk_read_io_buffer {
@@ -43,7 +43,7 @@ typedef struct da_trunk_read_io_buffer {
 #endif
 
     struct {
-        trunk_read_io_notify_func func;
+        da_trunk_read_io_notify_func func;
         void *arg;
     } notify;
 
@@ -59,8 +59,8 @@ typedef struct da_synchronized_read_context {
 extern "C" {
 #endif
 
-    int trunk_read_thread_init();
-    void trunk_read_thread_terminate();
+    int da_trunk_read_thread_init();
+    void da_trunk_read_thread_terminate();
 
     static inline int da_init_op_ctx(DASliceOpContext *op_ctx)
     {
@@ -78,9 +78,9 @@ extern "C" {
         return fc_init_buffer(&op_ctx->rb.buffer, alloc_size);
     }
 
-    int trunk_read_thread_push(const DATrunkSpaceInfo *space,
+    int da_trunk_read_thread_push(const DATrunkSpaceInfo *space,
             const int read_bytes, DATrunkReadBuffer *rb,
-            trunk_read_io_notify_func notify_func, void *notify_arg);
+            da_trunk_read_io_notify_func notify_func, void *notify_arg);
 
     int da_init_read_context(DASynchronizedReadContext *ctx);
 

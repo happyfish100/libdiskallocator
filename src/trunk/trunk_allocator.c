@@ -28,7 +28,7 @@
 #include "trunk_maker.h"
 #include "trunk_allocator.h"
 
-TrunkAllocatorGlobalVars g_trunk_allocator_vars;
+DATrunkAllocatorGlobalVars g_da_da_trunk_allocator_vars;
 
 static int compare_trunk_by_id(const DATrunkFileInfo *t1,
         const DATrunkFileInfo *t2)
@@ -36,7 +36,7 @@ static int compare_trunk_by_id(const DATrunkFileInfo *t1,
     return fc_compare_int64(t1->id_info.id, t2->id_info.id);
 }
 
-int compare_trunk_by_size_id(const DATrunkFileInfo *t1,
+static int compare_trunk_by_size_id(const DATrunkFileInfo *t1,
         const DATrunkFileInfo *t2)
 {
     return da_compare_trunk_by_size_id(t1, t2->util.
@@ -66,7 +66,7 @@ static inline void push_trunk_util_change_event(DATrunkAllocator *allocator,
     }
 }
 
-int trunk_allocator_init()
+int da_trunk_allocator_init()
 {
     int result;
 
@@ -80,7 +80,7 @@ int trunk_allocator_init()
     return 0;
 }
 
-int trunk_allocator_init_instance(DATrunkAllocator *allocator,
+int da_trunk_allocator_init_instance(DATrunkAllocator *allocator,
         DAStoragePathInfo *path_info)
 {
     const int min_alloc_elements_once = 4;
@@ -88,7 +88,7 @@ int trunk_allocator_init_instance(DATrunkAllocator *allocator,
     const bool bidirection = true;
     int result;
 
-    if ((result=trunk_freelist_init(&allocator->freelist)) != 0) {
+    if ((result=da_trunk_freelist_init(&allocator->freelist)) != 0) {
         return result;
     }
 
@@ -121,7 +121,7 @@ int trunk_allocator_init_instance(DATrunkAllocator *allocator,
     return 0;
 }
 
-int trunk_allocator_add(DATrunkAllocator *allocator,
+int da_trunk_allocator_add(DATrunkAllocator *allocator,
         const DATrunkIdInfo *id_info, const int64_t size,
         DATrunkFileInfo **pp_trunk)
 {
@@ -151,7 +151,7 @@ int trunk_allocator_add(DATrunkAllocator *allocator,
     PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
 
     if (result == 0) {
-        result = trunk_hashtable_add(trunk_info);
+        result = da_trunk_hashtable_add(trunk_info);
     } 
 
     if (result != 0) {
@@ -168,7 +168,7 @@ int trunk_allocator_add(DATrunkAllocator *allocator,
     return result;
 }
 
-int trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
+int da_trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
 {
     DATrunkFileInfo target;
     int result;
@@ -181,7 +181,7 @@ int trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
     return result;
 }
 
-int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
+int da_trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
         const int count, uint32_t *used_bytes)
 {
     DATrunkSpaceLogRecord **record;
@@ -192,7 +192,7 @@ int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
         return 0;
     }
 
-    if ((trunk=trunk_hashtable_get(records[0]->storage.trunk_id)) == NULL) {
+    if ((trunk=da_trunk_hashtable_get(records[0]->storage.trunk_id)) == NULL) {
         return ENOENT;
     }
 
@@ -217,22 +217,22 @@ int trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
     return 0;
 }
 
-DATrunkFreelistType trunk_allocator_add_to_freelist(
+DATrunkFreelistType da_trunk_allocator_add_to_freelist(
         DATrunkAllocator *allocator, DATrunkFileInfo *trunk_info)
 {
     DATrunkFreelist *freelist;
 
-    PTHREAD_MUTEX_LOCK(&g_allocator_mgr->reclaim_freelist.lcp.lock);
-    if (g_allocator_mgr->reclaim_freelist.count < g_allocator_mgr->
+    PTHREAD_MUTEX_LOCK(&g_da_allocator_mgr->reclaim_freelist.lcp.lock);
+    if (g_da_allocator_mgr->reclaim_freelist.count < g_da_allocator_mgr->
             reclaim_freelist.water_mark_trunks)
     {
-        freelist = &g_allocator_mgr->reclaim_freelist;
+        freelist = &g_da_allocator_mgr->reclaim_freelist;
     } else {
         freelist = &allocator->freelist;
     }
-    PTHREAD_MUTEX_UNLOCK(&g_allocator_mgr->reclaim_freelist.lcp.lock);
+    PTHREAD_MUTEX_UNLOCK(&g_da_allocator_mgr->reclaim_freelist.lcp.lock);
 
-    trunk_freelist_add(freelist, trunk_info);
+    da_trunk_freelist_add(freelist, trunk_info);
     return (freelist == &allocator->freelist) ? da_freelist_type_normal :
         da_freelist_type_reclaim;
 }
@@ -276,13 +276,13 @@ static bool can_add_to_freelist(DATrunkFileInfo *trunk_info)
         return true;
     }
 
-    ratio_thredhold = trunk_allocator_calc_reclaim_ratio_thredhold(
+    ratio_thredhold = da_trunk_allocator_calc_reclaim_ratio_thredhold(
             trunk_info->allocator);
     return ((double)trunk_info->used.bytes / (double)
             trunk_info->free_start > ratio_thredhold);
 }
 
-void trunk_allocator_deal_on_ready(DATrunkAllocator *allocator)
+void da_trunk_allocator_deal_on_ready(DATrunkAllocator *allocator)
 {
     UniqSkiplistIterator it;
     DATrunkFileInfo *trunk_info;
@@ -294,9 +294,9 @@ void trunk_allocator_deal_on_ready(DATrunkAllocator *allocator)
 
         if (can_add_to_freelist(trunk_info)) {
             if (trunk_info->free_start == 0) { //whole trunk is available
-                trunk_allocator_add_to_freelist(allocator, trunk_info);
+                da_trunk_allocator_add_to_freelist(allocator, trunk_info);
             } else {
-                trunk_freelist_add(&allocator->freelist, trunk_info);
+                da_trunk_freelist_add(&allocator->freelist, trunk_info);
             }
         } else {
             push_trunk_util_change_event(allocator, trunk_info,
@@ -305,7 +305,7 @@ void trunk_allocator_deal_on_ready(DATrunkAllocator *allocator)
     }
 }
 
-void trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info)
+void da_trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info)
 {
     logInfo("trunk id: %u, subdir: %u, status: %d, slice count: %d, "
             "used bytes: %u, trunk size: %u, free start: %u, "

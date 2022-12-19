@@ -34,8 +34,8 @@ int da_load_config(const int my_server_id, const int file_block_size,
     DA_MY_SERVER_ID = my_server_id;
     DA_FILE_BLOCK_SIZE = file_block_size;
     g_disk_allocator_vars.data = *data_cfg;
-    if ((result=storage_config_load(&DA_STORE_CFG, storage_filename)) == 0) {
-        storage_config_to_log(&DA_STORE_CFG);
+    if ((result=da_storage_config_load(&DA_STORE_CFG, storage_filename)) == 0) {
+        da_storage_config_to_log(&DA_STORE_CFG);
     }
 
     return result;
@@ -46,17 +46,17 @@ int da_init_start(da_redo_queue_push_func redo_queue_push_func)
     int result;
 
     DA_REDO_QUEUE_PUSH_FUNC = redo_queue_push_func;
-    trunk_index_init();
+    da_trunk_index_init();
 
-    if ((result=trunk_hashtable_init()) != 0) {
+    if ((result=da_trunk_hashtable_init()) != 0) {
         return result;
     }
 
-    if ((result=trunk_write_thread_init()) != 0) {
+    if ((result=da_trunk_write_thread_init()) != 0) {
         return result;
     }
 
-    if ((result=trunk_read_thread_init()) != 0) {
+    if ((result=da_trunk_read_thread_init()) != 0) {
         return result;
     }
 
@@ -64,11 +64,11 @@ int da_init_start(da_redo_queue_push_func redo_queue_push_func)
         return result;
     }
 
-    if ((result=storage_allocator_init()) != 0) {
+    if ((result=da_storage_allocator_init()) != 0) {
         return result;
     }
 
-    if ((result=trunk_binlog_init()) != 0) {
+    if ((result=da_trunk_binlog_init()) != 0) {
         return result;
     }
 
@@ -76,15 +76,15 @@ int da_init_start(da_redo_queue_push_func redo_queue_push_func)
         return result;
     }
 
-    if ((result=trunk_maker_init()) != 0) {
+    if ((result=da_trunk_maker_init()) != 0) {
         return result;
     }
 
-    if ((result=storage_allocator_prealloc_trunk_freelists()) != 0) {
+    if ((result=da_storage_allocator_prealloc_trunk_freelists()) != 0) {
         return result;
     }
 
-    if ((result=trunk_prealloc_init()) != 0) {
+    if ((result=da_trunk_prealloc_init()) != 0) {
         return result;
     }
 

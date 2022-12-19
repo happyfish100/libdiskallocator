@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _STORAGE_CONFIG_H
-#define _STORAGE_CONFIG_H
+#ifndef _DA_STORAGE_CONFIG_H
+#define _DA_STORAGE_CONFIG_H
 
 #include "fastcommon/common_define.h"
 #include "storage_types.h"
@@ -121,16 +121,16 @@ typedef struct {
 extern "C" {
 #endif
 
-    int storage_config_load(DAStorageConfig *storage_cfg,
+    int da_storage_config_load(DAStorageConfig *storage_cfg,
             const char *storage_filename);
 
-    int storage_config_calc_path_avail_space(DAStoragePathInfo *path_info);
+    int da_storage_config_calc_path_avail_space(DAStoragePathInfo *path_info);
 
-    void storage_config_stat_path_spaces(SFSpaceStat *ss);
+    void da_storage_config_stat_path_spaces(SFSpaceStat *ss);
 
-    void storage_config_to_log(DAStorageConfig *storage_cfg);
+    void da_storage_config_to_log(DAStorageConfig *storage_cfg);
 
-    static inline int storage_config_path_count(DAStorageConfig *storage_cfg)
+    static inline int da_storage_config_path_count(DAStorageConfig *storage_cfg)
     {
         return storage_cfg->store_path.count + storage_cfg->write_cache.count;
     }

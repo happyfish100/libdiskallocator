@@ -26,10 +26,10 @@
 #include "trunk_index.h"
 #include "trunk_space_log.h"
 
-DATrunkSpaceLogContext g_trunk_space_log_ctx;
+DATrunkSpaceLogContext g_da_trunk_space_log_ctx;
 
-#define RECORD_PTR_ARRAY  g_trunk_space_log_ctx.record_array
-#define FD_CACHE_CTX      g_trunk_space_log_ctx.fd_cache_ctx
+#define RECORD_PTR_ARRAY  g_da_trunk_space_log_ctx.record_array
+#define FD_CACHE_CTX      g_da_trunk_space_log_ctx.fd_cache_ctx
 
 #define SPACE_LOG_FIELD_COUNT             9
 
@@ -139,7 +139,7 @@ static int chain_to_array(DATrunkSpaceLogRecord *head)
         RECORD_PTR_ARRAY.records[RECORD_PTR_ARRAY.count++] = record;
     } while ((record=record->next) != NULL);
 
-    g_trunk_index_ctx.last_version = RECORD_PTR_ARRAY.
+    g_da_trunk_index_ctx.last_version = RECORD_PTR_ARRAY.
         records[RECORD_PTR_ARRAY.count - 1]->storage.version;
 
     if (RECORD_PTR_ARRAY.count > 1) {
@@ -182,7 +182,7 @@ static int get_write_fd(const uint32_t trunk_id, int *fd)
     int result;
     char space_log_filename[PATH_MAX];
 
-    if ((*fd=trunk_fd_cache_get(&FD_CACHE_CTX, trunk_id)) >= 0) {
+    if ((*fd=da_trunk_fd_cache_get(&FD_CACHE_CTX, trunk_id)) >= 0) {
         return 0;
     }
 
@@ -196,7 +196,7 @@ static int get_write_fd(const uint32_t trunk_id, int *fd)
         return result;
     }
 
-    trunk_fd_cache_add(&FD_CACHE_CTX, trunk_id, *fd);
+    da_trunk_fd_cache_add(&FD_CACHE_CTX, trunk_id, *fd);
     return 0;
 }
 
@@ -246,39 +246,39 @@ static int write_to_log_file(DATrunkSpaceLogRecord **start,
     }
 
     used_bytes = 0;
-    g_trunk_space_log_ctx.buffer.length = 0;
+    g_da_trunk_space_log_ctx.buffer.length = 0;
     do {
         for (current=start; current<end; current++) {
-            if (g_trunk_space_log_ctx.buffer.alloc_size -
-                    g_trunk_space_log_ctx.buffer.length < 128)
+            if (g_da_trunk_space_log_ctx.buffer.alloc_size -
+                    g_da_trunk_space_log_ctx.buffer.length < 128)
             {
                 if ((result=do_write_to_file((*start)->storage.trunk_id,
-                                fd, g_trunk_space_log_ctx.buffer.data,
-                                g_trunk_space_log_ctx.buffer.length,
+                                fd, g_da_trunk_space_log_ctx.buffer.data,
+                                g_da_trunk_space_log_ctx.buffer.length,
                                 false)) != 0)
                 {
                     break;
                 }
 
-                g_trunk_space_log_ctx.buffer.length = 0;
+                g_da_trunk_space_log_ctx.buffer.length = 0;
             }
 
-            da_trunk_space_log_pack(*current, &g_trunk_space_log_ctx.buffer);
+            da_trunk_space_log_pack(*current, &g_da_trunk_space_log_ctx.buffer);
         }
 
         if ((result=do_write_to_file((*start)->storage.trunk_id,
-                        fd, g_trunk_space_log_ctx.buffer.data,
-                        g_trunk_space_log_ctx.buffer.length, true)) != 0)
+                        fd, g_da_trunk_space_log_ctx.buffer.data,
+                        g_da_trunk_space_log_ctx.buffer.length, true)) != 0)
         {
             break;
         }
 
-        result = trunk_allocator_deal_space_changes(
+        result = da_trunk_allocator_deal_space_changes(
                 start, end - start, &used_bytes);
     } while (0);
 
     if (result != 0 || used_bytes == 0) {
-        trunk_fd_cache_delete(&FD_CACHE_CTX, (*start)->storage.trunk_id);
+        da_trunk_fd_cache_delete(&FD_CACHE_CTX, (*start)->storage.trunk_id);
     }
     return result;
 }
@@ -324,7 +324,7 @@ static int deal_records(DATrunkSpaceLogRecord *head)
 
     result = array_to_log_file(&RECORD_PTR_ARRAY);
 
-    sf_synchronize_counter_notify(&g_trunk_space_log_ctx.notify,
+    sf_synchronize_counter_notify(&g_da_trunk_space_log_ctx.notify,
             RECORD_PTR_ARRAY.count);
 
     fast_mblock_free_objects(&DA_SPACE_LOG_RECORD_ALLOCATOR,
@@ -347,7 +347,7 @@ static int redo_by_trunk(DATrunkSpaceLogRecord **start,
     DATrunkSpaceLogRecord target;
     DATrunkSpaceLogRecordArray array;
 
-    if ((result=da_space_log_reader_load_ex(&g_trunk_space_log_ctx.
+    if ((result=da_space_log_reader_load_ex(&g_da_trunk_space_log_ctx.
                     reader, (*start)->storage.trunk_id,
                     &skiplist, ignore_enoent)) != 0)
     {
@@ -435,7 +435,7 @@ int da_trunk_space_log_redo(const char *space_log_filename)
     struct fc_queue_info chain;
     int result;
 
-    if ((result=da_space_log_reader_load_to_chain(&g_trunk_space_log_ctx.
+    if ((result=da_space_log_reader_load_to_chain(&g_da_trunk_space_log_ctx.
                     reader, space_log_filename, &chain)) != 0)
     {
         return result;
@@ -458,13 +458,13 @@ int da_trunk_space_log_redo(const char *space_log_filename)
 static int dump_trunk_indexes()
 {
     int result;
-    if ((result=storage_allocator_trunks_to_array(
-                    &g_trunk_index_ctx.index_array)) != 0)
+    if ((result=da_storage_allocator_trunks_to_array(
+                    &g_da_trunk_index_ctx.index_array)) != 0)
     {
         return result;
     }
 
-    return trunk_index_save();
+    return da_trunk_index_save();
 }
 
 static int set_trunk_by_space_log(DATrunkFileInfo *trunk)
@@ -476,7 +476,7 @@ static int set_trunk_by_space_log(DATrunkFileInfo *trunk)
     DATrunkSpaceLogRecord *record;
     DATrunkSpaceLogRecord *last;
 
-    if ((result=da_space_log_reader_load_ex(&g_trunk_space_log_ctx.reader,
+    if ((result=da_space_log_reader_load_ex(&g_da_trunk_space_log_ctx.reader,
                     trunk->id_info.id, &skiplist, ignore_enoent)) != 0)
     {
         return result;
@@ -514,16 +514,16 @@ static int load_trunk_indexes()
     DATrunkFileInfo *trunk;
     DATrunkIndexRecord *index;
     DATrunkIndexRecord *end;
-    TrunkHashtableIterator it;
+    DATrunkHashtableIterator it;
 
-    if ((result=trunk_index_load()) != 0) {
+    if ((result=da_trunk_index_load()) != 0) {
         return result;
     }
 
-    end = (DATrunkIndexRecord *)g_trunk_index_ctx.index_array.indexes +
-        g_trunk_index_ctx.index_array.count;
-    for (index=g_trunk_index_ctx.index_array.indexes; index<end; index++) {
-        if ((trunk=trunk_hashtable_get(index->trunk_id)) == NULL) {
+    end = (DATrunkIndexRecord *)g_da_trunk_index_ctx.index_array.indexes +
+        g_da_trunk_index_ctx.index_array.count;
+    for (index=g_da_trunk_index_ctx.index_array.indexes; index<end; index++) {
+        if ((trunk=da_trunk_hashtable_get(index->trunk_id)) == NULL) {
             return ENOENT;
         }
 
@@ -549,8 +549,8 @@ static int load_trunk_indexes()
                 */
     }
 
-    trunk_hashtable_iterator(&it, false);
-    while ((trunk=trunk_hashtable_next(&it)) != NULL) {
+    da_trunk_hashtable_iterator(&it, false);
+    while ((trunk=da_trunk_hashtable_next(&it)) != NULL) {
         if (trunk->status == DA_TRUNK_STATUS_NONE) {
             if ((result=set_trunk_by_space_log(trunk)) != 0) {
                 return result;
@@ -578,7 +578,7 @@ static void *trunk_space_log_func(void *arg)
 #endif
 
     while (SF_G_CONTINUE_FLAG) {
-        if ((head=fc_queue_pop_all(&g_trunk_space_log_ctx.queue)) == NULL) {
+        if ((head=fc_queue_pop_all(&g_da_trunk_space_log_ctx.queue)) == NULL) {
             continue;
         }
 
@@ -614,29 +614,29 @@ int da_trunk_space_log_init()
     const bool allocator_use_lock = true;
     int result;
 
-    if ((result=da_space_log_reader_init(&g_trunk_space_log_ctx.reader,
+    if ((result=da_space_log_reader_init(&g_da_trunk_space_log_ctx.reader,
                     alloc_skiplist_once, allocator_use_lock)) != 0)
     {
         return result;
     }
 
-    if ((result=fc_queue_init(&g_trunk_space_log_ctx.queue, (long)
+    if ((result=fc_queue_init(&g_da_trunk_space_log_ctx.queue, (long)
                     (&((DATrunkSpaceLogRecord *)NULL)->next))) != 0)
     {
         return result;
     }
 
-    if ((result=sf_synchronize_ctx_init(&g_trunk_space_log_ctx.notify)) != 0) {
+    if ((result=sf_synchronize_ctx_init(&g_da_trunk_space_log_ctx.notify)) != 0) {
         return result;
     }
 
-    if ((result=trunk_fd_cache_init(&FD_CACHE_CTX, DA_STORE_CFG.
+    if ((result=da_trunk_fd_cache_init(&FD_CACHE_CTX, DA_STORE_CFG.
                     fd_cache_capacity_per_write_thread)) != 0)
     {
         return result;
     }
 
-    if ((result=fast_buffer_init_ex(&g_trunk_space_log_ctx.buffer,
+    if ((result=fast_buffer_init_ex(&g_da_trunk_space_log_ctx.buffer,
                     DA_BINLOG_BUFFER_SIZE)) != 0)
     {
         return result;

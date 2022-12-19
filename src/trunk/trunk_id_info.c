@@ -236,7 +236,7 @@ static int setup_sync_to_file_task()
     return sched_add_entries(&schedule_array);
 }
 
-int trunk_id_info_init()
+int da_trunk_id_info_init()
 {
     const int alloc_elements_once = 8 * 1024;
     int result;
@@ -267,7 +267,7 @@ int trunk_id_info_init()
     return setup_sync_to_file_task();
 }
 
-void trunk_id_info_destroy()
+void da_trunk_id_info_destroy()
 {
     int64_t current_trunk_id;
     int64_t current_subdir_id;
@@ -279,7 +279,7 @@ void trunk_id_info_destroy()
     save_current_trunk_id_ex(current_trunk_id, current_subdir_id, true);
 }
 
-int trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info)
+int da_trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info)
 {
     SortedSubdirs *sorted_subdirs;
     StoreSubdirInfo target;
@@ -328,7 +328,7 @@ int trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info)
     return result;
 }
 
-int trunk_id_info_delete(const int path_index, const DATrunkIdInfo *id_info)
+int da_trunk_id_info_delete(const int path_index, const DATrunkIdInfo *id_info)
 {
     SortedSubdirs *sorted_subdirs;
     StoreSubdirInfo target;
@@ -360,7 +360,7 @@ int trunk_id_info_delete(const int path_index, const DATrunkIdInfo *id_info)
     return result;
 }
 
-int trunk_id_info_generate(const int path_index, DATrunkIdInfo *id_info)
+int da_trunk_id_info_generate(const int path_index, DATrunkIdInfo *id_info)
 {
     SortedSubdirs *sorted_subdirs;
     StoreSubdirInfo *sd_info;

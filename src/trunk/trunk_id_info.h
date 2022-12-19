@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _TRUNK_ID_INFO_H
-#define _TRUNK_ID_INFO_H
+#ifndef _DA_TRUNK_ID_INFO_H
+#define _DA_TRUNK_ID_INFO_H
 
 #include "../storage_config.h"
 
@@ -23,15 +23,15 @@
 extern "C" {
 #endif
 
-    int trunk_id_info_init();
+    int da_trunk_id_info_init();
 
-    void trunk_id_info_destroy();
+    void da_trunk_id_info_destroy();
 
-    int trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info);
+    int da_trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info);
 
-    int trunk_id_info_delete(const int path_index, const DATrunkIdInfo *id_info);
+    int da_trunk_id_info_delete(const int path_index, const DATrunkIdInfo *id_info);
 
-    int trunk_id_info_generate(const int path_index, DATrunkIdInfo *id_info);
+    int da_trunk_id_info_generate(const int path_index, DATrunkIdInfo *id_info);
 
 #ifdef __cplusplus
 }

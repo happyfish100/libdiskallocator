@@ -25,7 +25,7 @@
 #include "trunk_maker.h"
 #include "trunk_freelist.h"
 
-int trunk_freelist_init(DATrunkFreelist *freelist)
+int da_trunk_freelist_init(DATrunkFreelist *freelist)
 {
     int result;
     if ((result=init_pthread_lock_cond_pair(&freelist->lcp)) != 0) {
@@ -69,7 +69,7 @@ static inline void push_trunk_util_event_force(DATrunkAllocator *allocator,
                 trunk_stat.avail, alloc_size);  \
     } while (0)
 
-void trunk_freelist_keep_water_mark(struct da_trunk_allocator
+void da_trunk_freelist_keep_water_mark(struct da_trunk_allocator
         *allocator)
 {
     int count;
@@ -91,11 +91,11 @@ void trunk_freelist_keep_water_mark(struct da_trunk_allocator
             path_info->store.path.str, allocator->freelist.count,
             allocator->freelist.water_mark_trunks, count);
     for (i=0; i<count; i++) {
-        trunk_maker_allocate(allocator);
+        da_trunk_maker_allocate(allocator);
     }
 }
 
-void trunk_freelist_add(DATrunkFreelist *freelist,
+void da_trunk_freelist_add(DATrunkFreelist *freelist,
         DATrunkFileInfo *trunk_info)
 {
     int64_t avail_bytes;
@@ -118,7 +118,7 @@ void trunk_freelist_add(DATrunkFreelist *freelist,
             trunk_stat.avail, avail_bytes);
 }
 
-static void trunk_freelist_remove(DATrunkFreelist *freelist)
+static void da_trunk_freelist_remove(DATrunkFreelist *freelist)
 {
     DATrunkFileInfo *trunk_info;
 
@@ -135,7 +135,7 @@ static void trunk_freelist_remove(DATrunkFreelist *freelist)
     da_set_trunk_status(trunk_info, DA_TRUNK_STATUS_NONE);
 
     if (freelist->count < freelist->water_mark_trunks) {
-        trunk_maker_allocate_ex(trunk_info->allocator,
+        da_trunk_maker_allocate_ex(trunk_info->allocator,
                 true, false, NULL, NULL);
     }
 }
@@ -152,7 +152,7 @@ static int waiting_avail_trunk(struct da_trunk_allocator *allocator,
                     allocator->allocate.last_trigger_time > 0 || i > 0))
         {
             allocator->allocate.last_trigger_time = g_current_time;
-            if ((result=trunk_maker_allocate_ex(allocator,
+            if ((result=da_trunk_maker_allocate_ex(allocator,
                             true, false, NULL, NULL)) != 0)
             {
                 break;
@@ -176,7 +176,7 @@ static int waiting_avail_trunk(struct da_trunk_allocator *allocator,
     return result;
 }
 
-int trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
+int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
         DATrunkFreelist *freelist, const uint64_t blk_hc, const int size,
         DATrunkSpaceInfo *spaces, int *count, const bool is_normal)
 {
@@ -215,7 +215,7 @@ int trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
                     aligned_size -= remain_bytes;
                 }
 
-                trunk_freelist_remove(freelist);
+                da_trunk_freelist_remove(freelist);
             }
         }
 
@@ -246,7 +246,7 @@ int trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
         if (DA_TRUNK_AVAIL_SPACE(trunk_info) <
                 DA_STORE_CFG.discard_remain_space_size)
         {
-            trunk_freelist_remove(freelist);
+            da_trunk_freelist_remove(freelist);
             __sync_sub_and_fetch(&trunk_info->allocator->path_info->
                     trunk_stat.avail, DA_TRUNK_AVAIL_SPACE(trunk_info));
         }
@@ -256,7 +256,7 @@ int trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
     } while (0);
 
     if (result == ENOSPC && is_normal) {
-        da_remove_from_avail_aptr_array(&g_allocator_mgr->
+        da_remove_from_avail_aptr_array(&g_da_allocator_mgr->
                 store_path, allocator);
     }
     PTHREAD_MUTEX_UNLOCK(&freelist->lcp.lock);

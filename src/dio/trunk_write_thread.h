@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _TRUNK_WRITE_THREAD_H
-#define _TRUNK_WRITE_THREAD_H
+#ifndef _DA_TRUNK_WRITE_THREAD_H
+#define _DA_TRUNK_WRITE_THREAD_H
 
 #include "../storage_config.h"
 #include "../storage_allocator.h"
@@ -25,13 +25,13 @@
 #define DA_IO_TYPE_WRITE_SLICE_BY_BUFF    'W'
 #define DA_IO_TYPE_WRITE_SLICE_BY_IOVEC   'V'
 
-struct trunk_write_io_buffer;
+struct da_trunk_write_io_buffer;
 
 //Note: the record can NOT be persisted
-typedef void (*trunk_write_io_notify_func)(struct trunk_write_io_buffer
+typedef void (*trunk_write_io_notify_func)(struct da_trunk_write_io_buffer
         *record, const int result);
 
-typedef struct trunk_write_io_buffer {
+typedef struct da_trunk_write_io_buffer {
     int type;
     DATrunkSpaceInfo space;
     int64_t version; //for write in order
@@ -45,61 +45,61 @@ typedef struct trunk_write_io_buffer {
         trunk_write_io_notify_func func;
         void *arg;
     } notify;
-    struct trunk_write_io_buffer *next;
+    struct da_trunk_write_io_buffer *next;
 } TrunkWriteIOBuffer;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int trunk_write_thread_init();
-    void trunk_write_thread_terminate();
+    int da_trunk_write_thread_init();
+    void da_trunk_write_thread_terminate();
 
-    int trunk_write_thread_push(const int type, const int64_t version,
+    int da_trunk_write_thread_push(const int type, const int64_t version,
             const DATrunkSpaceInfo *space, void *data,
             trunk_write_io_notify_func notify_func, void *notify_arg);
 
-    static inline int trunk_write_thread_push_trunk_op(const int type,
+    static inline int da_trunk_write_thread_push_trunk_op(const int type,
             const DATrunkSpaceInfo *space, trunk_write_io_notify_func
             notify_func, void *notify_arg)
     {
         DATrunkAllocator *allocator;
-        allocator = g_allocator_mgr->allocator_ptr_array.
+        allocator = g_da_allocator_mgr->allocator_ptr_array.
             allocators[space->store->index];
-        return trunk_write_thread_push(type, __sync_add_and_fetch(
+        return da_trunk_write_thread_push(type, __sync_add_and_fetch(
                     &allocator->allocate.current_version, 1), space,
                 NULL, notify_func, notify_arg);
     }
 
-    static inline int trunk_write_thread_push_slice_by_buff_ex(
+    static inline int da_trunk_write_thread_push_slice_by_buff_ex(
             const int64_t version, DATrunkSpaceInfo *space, char *buff,
             trunk_write_io_notify_func notify_func, void *notify_arg)
     {
-        return trunk_write_thread_push(DA_IO_TYPE_WRITE_SLICE_BY_BUFF,
+        return da_trunk_write_thread_push(DA_IO_TYPE_WRITE_SLICE_BY_BUFF,
                 version, space, buff, notify_func, notify_arg);
     }
 
-    static inline int trunk_write_thread_push_slice_by_buff(
+    static inline int da_trunk_write_thread_push_slice_by_buff(
             DATrunkSpaceInfo *space, char *buff,
             trunk_write_io_notify_func notify_func, void *notify_arg)
     {
         DATrunkAllocator *allocator;
-        allocator = g_allocator_mgr->allocator_ptr_array.
+        allocator = g_da_allocator_mgr->allocator_ptr_array.
             allocators[space->store->index];
-        return trunk_write_thread_push(DA_IO_TYPE_WRITE_SLICE_BY_BUFF,
+        return da_trunk_write_thread_push(DA_IO_TYPE_WRITE_SLICE_BY_BUFF,
                 __sync_add_and_fetch(&allocator->allocate.current_version, 1),
                 space, buff, notify_func, notify_arg);
     }
 
-    int trunk_write_thread_by_buff_synchronize(DATrunkSpaceInfo *space,
+    int da_trunk_write_thread_by_buff_synchronize(DATrunkSpaceInfo *space,
             char *buff, SFSynchronizeContext *sctx);
 
-    static inline int trunk_write_thread_push_slice_by_iovec(
+    static inline int da_trunk_write_thread_push_slice_by_iovec(
             const int64_t version, DATrunkSpaceInfo *space, iovec_array_t
             *iovec_array, trunk_write_io_notify_func notify_func,
             void *notify_arg)
     {
-        return trunk_write_thread_push(DA_IO_TYPE_WRITE_SLICE_BY_IOVEC,
+        return da_trunk_write_thread_push(DA_IO_TYPE_WRITE_SLICE_BY_IOVEC,
                 version, space, iovec_array, notify_func, notify_arg);
     }
 

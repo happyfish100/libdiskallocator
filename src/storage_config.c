@@ -93,7 +93,7 @@ static int load_one_path(DAStorageConfig *storage_cfg,
     return 0;
 }
 
-static int storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
+static int da_storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
 {
     struct statvfs sbuf;
 
@@ -129,7 +129,7 @@ static int storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
     return 0;
 }
 
-int storage_config_calc_path_avail_space(DAStoragePathInfo *path_info)
+int da_storage_config_calc_path_avail_space(DAStoragePathInfo *path_info)
 {
     struct statvfs sbuf;
     time_t last_stat_time;
@@ -158,7 +158,7 @@ int storage_config_calc_path_avail_space(DAStoragePathInfo *path_info)
     return 0;
 }
 
-void storage_config_stat_path_spaces(SFSpaceStat *ss)
+void da_storage_config_stat_path_spaces(SFSpaceStat *ss)
 {
     DAStoragePathInfo **pp;
     DAStoragePathInfo **end;
@@ -172,7 +172,7 @@ void storage_config_stat_path_spaces(SFSpaceStat *ss)
             continue;
         }
 
-        storage_config_calc_path_avail_space(*pp);
+        da_storage_config_calc_path_avail_space(*pp);
         disk_avail = (*pp)->space_stat.avail  - (*pp)->reserved_space.value;
         if (disk_avail < 0) {
             disk_avail = 0;
@@ -275,7 +275,7 @@ static int load_paths(DAStorageConfig *storage_cfg, IniFullContext *ini_ctx,
             return result;
         }
 
-        if ((result=storage_config_calc_path_spaces(
+        if ((result=da_storage_config_calc_path_spaces(
                         parray->paths + i)) != 0)
         {
             return result;
@@ -500,11 +500,11 @@ static int load_path_indexes(DAStoragePathArray *parray, const char *caption,
     bool regenerated;
     DAStoragePathInfo *p;
     DAStoragePathInfo *end;
-    StorePathEntry *pentry;
+    DAStorePathEntry *pentry;
 
     end = parray->paths + parray->count;
     for (p=parray->paths; p<end; p++) {
-        pentry = store_path_index_get(p->store.path.str);
+        pentry = da_store_path_index_get(p->store.path.str);
         if (pentry != NULL) {
             p->store.index = pentry->index;
             if ((result=store_path_check_mark(pentry, &regenerated)) != 0) {
@@ -514,7 +514,7 @@ static int load_path_indexes(DAStoragePathArray *parray, const char *caption,
                 ++(*change_count);
             }
         } else {
-            if ((result=store_path_index_add(p->store.path.str,
+            if ((result=da_store_path_index_add(p->store.path.str,
                             &p->store.index)) != 0)
             {
                 return result;
@@ -570,11 +570,11 @@ static int load_store_path_indexes(DAStorageConfig *storage_cfg,
     int old_count;
     int change_count;
 
-    if ((result=store_path_index_init()) != 0) {
+    if ((result=da_store_path_index_init()) != 0) {
         return result;
     }
 
-    old_count = store_path_index_count();
+    old_count = da_store_path_index_count();
     change_count = 0;
     do {
         if ((result=load_path_indexes(&storage_cfg->write_cache,
@@ -590,10 +590,10 @@ static int load_store_path_indexes(DAStorageConfig *storage_cfg,
 
     } while (0);
 
-    storage_cfg->max_store_path_index = store_path_index_max();
+    storage_cfg->max_store_path_index = da_store_path_index_max();
     if (change_count > 0) {
         int r;
-        r = store_path_index_save();
+        r = da_store_path_index_save();
         if (result == 0) {
             result = r;
         }
@@ -604,14 +604,14 @@ static int load_store_path_indexes(DAStorageConfig *storage_cfg,
 
     logDebug("old_count: %d, new_count: %d, change_count: %d, "
             "max_store_path_index: %d", old_count,
-            store_path_index_count(), change_count,
+            da_store_path_index_count(), change_count,
             storage_cfg->max_store_path_index);
 
-    store_path_index_destroy();
+    da_store_path_index_destroy();
     return result;
 }
 
-int storage_config_load(DAStorageConfig *storage_cfg,
+int da_storage_config_load(DAStorageConfig *storage_cfg,
         const char *storage_filename)
 {
     IniContext ini_context;
@@ -683,7 +683,7 @@ static void log_paths(DAStoragePathArray *parray, const char *caption)
     }
 }
 
-void storage_config_to_log(DAStorageConfig *storage_cfg)
+void da_storage_config_to_log(DAStorageConfig *storage_cfg)
 {
     logInfo("storage config, write_threads_per_path: %d, "
             "read_threads_per_path: %d, "

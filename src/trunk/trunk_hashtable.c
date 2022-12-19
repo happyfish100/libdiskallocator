@@ -42,12 +42,12 @@ typedef struct {
 
 static TrunkHtableContext trunk_htable_ctx;
 
-int trunk_hashtable_count()
+int da_trunk_hashtable_count()
 {
     return FC_ATOMIC_GET(trunk_htable_ctx.htable.count);
 }
 
-int trunk_hashtable_init()
+int da_trunk_hashtable_init()
 {
     int result;
     int bytes;
@@ -82,7 +82,7 @@ int trunk_hashtable_init()
     return 0;
 }
 
-void trunk_hashtable_destroy()
+void da_trunk_hashtable_destroy()
 {
     if (trunk_htable_ctx.htable.buckets != NULL) {
         free(trunk_htable_ctx.htable.buckets);
@@ -114,7 +114,7 @@ void trunk_hashtable_destroy()
     lock = trunk_htable_ctx.lock_array.locks + bucket_index %   \
         trunk_htable_ctx.lock_array.count
 
-int trunk_hashtable_add(DATrunkFileInfo *trunk)
+int da_trunk_hashtable_add(DATrunkFileInfo *trunk)
 {
     int result;
     DATrunkFileInfo *current;
@@ -157,7 +157,7 @@ int trunk_hashtable_add(DATrunkFileInfo *trunk)
     return result;
 }
 
-DATrunkFileInfo *trunk_hashtable_get(const uint32_t trunk_id)
+DATrunkFileInfo *da_trunk_hashtable_get(const uint32_t trunk_id)
 {
     DATrunkFileInfo *current;
     int result;
@@ -189,7 +189,7 @@ DATrunkFileInfo *trunk_hashtable_get(const uint32_t trunk_id)
     }
 }
 
-void trunk_hashtable_iterator(TrunkHashtableIterator *it,
+void da_trunk_hashtable_iterator(DATrunkHashtableIterator *it,
         const bool need_lock)
 {
     it->bucket = trunk_htable_ctx.htable.buckets;
@@ -197,7 +197,7 @@ void trunk_hashtable_iterator(TrunkHashtableIterator *it,
     it->need_lock = need_lock;
 }
 
-DATrunkFileInfo *trunk_hashtable_next(TrunkHashtableIterator *it)
+DATrunkFileInfo *da_trunk_hashtable_next(DATrunkHashtableIterator *it)
 {
     DATrunkFileInfo *trunk = NULL;
     pthread_mutex_t *lock = NULL;

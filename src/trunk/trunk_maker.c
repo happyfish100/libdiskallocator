@@ -29,37 +29,37 @@
 #include "trunk_reclaim.h"
 #include "trunk_maker.h"
 
-struct trunk_maker_thread_info;
-typedef struct trunk_maker_task {
+struct da_trunk_maker_thread_info;
+typedef struct da_trunk_maker_task {
     bool urgent;
     DATrunkAllocator *allocator;
     struct {
-        trunk_allocate_done_callback callback;
+        da_trunk_allocate_done_callback callback;
         void *arg;
     } notify;
-    struct trunk_maker_thread_info *thread;
-    struct trunk_maker_task *next;
+    struct da_trunk_maker_thread_info *thread;
+    struct da_trunk_maker_task *next;
 } TrunkMakerTask;
 
-typedef struct trunk_maker_thread_info {
+typedef struct da_trunk_maker_thread_info {
     int index;
     struct {
         int result;
         pthread_lock_cond_pair_t lcp; //for notify
     } allocate;
-    TrunkReclaimContext reclaim_ctx;
+    DATrunkReclaimContext reclaim_ctx;
     struct fast_mblock_man task_allocator;
     struct fc_queue queue;
     pthread_t tid;
     bool running;
 } TrunkMakerThreadInfo;
 
-typedef struct trunk_maker_thread_array {
+typedef struct da_trunk_maker_thread_array {
     int count;
     TrunkMakerThreadInfo *threads;
 } TrunkMakerThreadArray;
 
-typedef struct trunk_maker_context {
+typedef struct da_trunk_maker_context {
     volatile int running_count;
     TrunkMakerThreadArray thread_array;
 } TrunkMakerContext;
@@ -157,7 +157,7 @@ static void deal_trunk_util_change_events(DATrunkAllocator *allocator)
     }
 }
 
-static void create_trunk_done(struct trunk_write_io_buffer *record,
+static void create_trunk_done(struct da_trunk_write_io_buffer *record,
         const int result)
 {
     TrunkMakerThreadInfo *thread;
@@ -176,10 +176,10 @@ static int prealloc_trunk_finish(DATrunkAllocator *allocator,
     time_t last_stat_time;
     DATrunkFileInfo *trunk_info;
 
-    result = storage_allocator_add_trunk_ex(space->store->index,
+    result = da_storage_allocator_add_trunk_ex(space->store->index,
             &space->id_info, space->size, &trunk_info);
     if (result == 0) {
-        *freelist_type = trunk_allocator_add_to_freelist(allocator, trunk_info);
+        *freelist_type = da_trunk_allocator_add_to_freelist(allocator, trunk_info);
     }
 
     __sync_add_and_fetch(&allocator->path_info->
@@ -200,7 +200,7 @@ static int do_prealloc_trunk(TrunkMakerThreadInfo *thread,
     DATrunkSpaceInfo space;
 
     space.store = &task->allocator->path_info->store;
-    if ((result=trunk_id_info_generate(space.store->index,
+    if ((result=da_trunk_id_info_generate(space.store->index,
                     &space.id_info)) != 0)
     {
         return result;
@@ -208,7 +208,7 @@ static int do_prealloc_trunk(TrunkMakerThreadInfo *thread,
     space.offset = 0;
     space.size = DA_STORE_CFG.trunk_file_size;
 
-    if ((result=trunk_write_thread_push_trunk_op(DA_IO_TYPE_CREATE_TRUNK,
+    if ((result=da_trunk_write_thread_push_trunk_op(DA_IO_TYPE_CREATE_TRUNK,
                     &space, create_trunk_done, thread)) == 0)
     {
         PTHREAD_MUTEX_LOCK(&thread->allocate.lcp.lock);
@@ -262,7 +262,7 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
         return ENOENT;
     }
 
-    ratio_thredhold = trunk_allocator_calc_reclaim_ratio_thredhold(
+    ratio_thredhold = da_trunk_allocator_calc_reclaim_ratio_thredhold(
             task->allocator);
 
     /*
@@ -282,7 +282,7 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
         int64_t start_time_us;
         start_time_us = get_current_time_us();
         da_set_trunk_status(trunk, DA_TRUNK_STATUS_RECLAIMING);
-        result = trunk_reclaim(task->allocator, trunk,
+        result = da_trunk_reclaim(task->allocator, trunk,
                 &thread->reclaim_ctx);
         time_used = (get_current_time_us() - start_time_us) / 1000;
     } else {
@@ -316,7 +316,7 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
         PTHREAD_MUTEX_UNLOCK(&task->allocator->freelist.lcp.lock);
 
         uniq_skiplist_delete(task->allocator->trunks.by_size.skiplist, trunk);
-        *freelist_type = trunk_allocator_add_to_freelist(task->allocator, trunk);
+        *freelist_type = da_trunk_allocator_add_to_freelist(task->allocator, trunk);
     } else {
         da_set_trunk_status(trunk, DA_TRUNK_STATUS_NONE); //rollback status
     }
@@ -333,7 +333,7 @@ static int do_allocate_trunk(TrunkMakerThreadInfo *thread, TrunkMakerTask *task,
 
     *freelist_type = da_freelist_type_none;
     *is_new_trunk = false;
-    if ((result=storage_config_calc_path_avail_space(task->
+    if ((result=da_storage_config_calc_path_avail_space(task->
                     allocator->path_info)) != 0)
     {
         return result;
@@ -381,7 +381,7 @@ static void deal_allocate_task(TrunkMakerThreadInfo *thread,
         }
     } while (result == 0 && freelist_type == da_freelist_type_reclaim);
 
-    trunk_allocator_after_make_trunk(task->allocator, result);
+    da_trunk_allocator_after_make_trunk(task->allocator, result);
     fast_mblock_free_object(&thread->task_allocator, task);
 }
 
@@ -398,7 +398,7 @@ static inline void deal_allocate_requests(TrunkMakerThreadInfo *thread,
     }
 }
 
-static void *trunk_maker_thread_func(void *arg)
+static void *da_trunk_maker_thread_func(void *arg)
 {
     TrunkMakerThreadInfo *thread;
     TrunkMakerTask *head;
@@ -434,7 +434,7 @@ static int maker_task_alloc_init(void *element, void *args)
     return 0;
 }
 
-int trunk_maker_init()
+int da_trunk_maker_init()
 {
     int result;
     int bytes;
@@ -471,11 +471,11 @@ int trunk_maker_init()
             return result;
         }
 
-        if ((result=trunk_reclaim_init_ctx(&thread->reclaim_ctx)) != 0) {
+        if ((result=da_trunk_reclaim_init_ctx(&thread->reclaim_ctx)) != 0) {
             return result;
         }
 
-        if ((result=fc_create_thread(&thread->tid, trunk_maker_thread_func,
+        if ((result=fc_create_thread(&thread->tid, da_trunk_maker_thread_func,
                         thread, SF_G_THREAD_STACK_SIZE)) != 0)
         {
             return result;
@@ -485,8 +485,8 @@ int trunk_maker_init()
     return 0;
 }
 
-int trunk_maker_allocate_ex(DATrunkAllocator *allocator, const bool urgent,
-        const bool need_lock, trunk_allocate_done_callback callback, void *arg)
+int da_trunk_maker_allocate_ex(DATrunkAllocator *allocator, const bool urgent,
+        const bool need_lock, da_trunk_allocate_done_callback callback, void *arg)
 {
     TrunkMakerThreadInfo *thread;
     TrunkMakerTask *task;
@@ -503,7 +503,7 @@ int trunk_maker_allocate_ex(DATrunkAllocator *allocator, const bool urgent,
     task->allocator = allocator;
     task->notify.callback = callback;
     task->notify.arg = arg;
-    trunk_allocator_before_make_trunk(allocator, need_lock);
+    da_trunk_allocator_before_make_trunk(allocator, need_lock);
     fc_queue_push(&thread->queue, task);
     return 0;
 }

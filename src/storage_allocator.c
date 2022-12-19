@@ -25,7 +25,7 @@
 #include "storage_allocator.h"
 
 static DAStorageAllocatorManager allocator_mgr;
-DAStorageAllocatorManager *g_allocator_mgr = &allocator_mgr;
+DAStorageAllocatorManager *g_da_allocator_mgr = &allocator_mgr;
 static int check_trunk_avail_func(void *args);
 
 static int init_allocator_context(DAStorageAllocatorContext *allocator_ctx,
@@ -52,11 +52,11 @@ static int init_allocator_context(DAStorageAllocatorContext *allocator_ctx,
     for (path=parray->paths,pallocator=allocator_ctx->all.allocators;
             path<end; path++, pallocator++)
     {
-        if ((result=trunk_allocator_init_instance(pallocator, path)) != 0) {
+        if ((result=da_trunk_allocator_init_instance(pallocator, path)) != 0) {
             return result;
         }
 
-        g_allocator_mgr->allocator_ptr_array.allocators
+        g_da_allocator_mgr->allocator_ptr_array.allocators
             [path->store.index] = pallocator;
     }
     allocator_ctx->all.count = parray->count;
@@ -72,61 +72,61 @@ static int aptr_array_alloc_init(void *element, void *args)
     return 0;
 }
 
-int storage_allocator_init()
+int da_storage_allocator_init()
 {
     int result;
     int bytes;
     int count;
     int element_size;
 
-    memset(g_allocator_mgr, 0, sizeof(DAStorageAllocatorManager));
+    memset(g_da_allocator_mgr, 0, sizeof(DAStorageAllocatorManager));
     count = DA_STORE_CFG.max_store_path_index + 1;
     bytes = sizeof(DATrunkAllocator *) * count;
-    g_allocator_mgr->allocator_ptr_array.allocators =
+    g_da_allocator_mgr->allocator_ptr_array.allocators =
         (DATrunkAllocator **)fc_malloc(bytes);
-    if (g_allocator_mgr->allocator_ptr_array.allocators == NULL) {
+    if (g_da_allocator_mgr->allocator_ptr_array.allocators == NULL) {
         return ENOMEM;
     }
-    memset(g_allocator_mgr->allocator_ptr_array.allocators, 0, bytes);
-    g_allocator_mgr->allocator_ptr_array.count = count;
+    memset(g_da_allocator_mgr->allocator_ptr_array.allocators, 0, bytes);
+    g_da_allocator_mgr->allocator_ptr_array.count = count;
 
-    if ((result=init_pthread_lock(&g_allocator_mgr->lock)) != 0) {
+    if ((result=init_pthread_lock(&g_da_allocator_mgr->lock)) != 0) {
         return result;
     }
 
-    if ((result=trunk_freelist_init(&g_allocator_mgr->
+    if ((result=da_trunk_freelist_init(&g_da_allocator_mgr->
                     reclaim_freelist)) != 0)
     {
         return result;
     }
 
-    if ((result=trunk_allocator_init()) != 0) {
+    if ((result=da_trunk_allocator_init()) != 0) {
         return result;
     }
 
-    if ((result=init_allocator_context(&g_allocator_mgr->write_cache,
+    if ((result=init_allocator_context(&g_da_allocator_mgr->write_cache,
                     &DA_STORE_CFG.write_cache)) != 0)
     {
         return result;
     }
-    if ((result=init_allocator_context(&g_allocator_mgr->store_path,
+    if ((result=init_allocator_context(&g_da_allocator_mgr->store_path,
                     &DA_STORE_CFG.store_path)) != 0)
     {
         return result;
     }
 
-    count = FC_MAX(g_allocator_mgr->write_cache.all.count,
-            g_allocator_mgr->store_path.all.count);
+    count = FC_MAX(g_da_allocator_mgr->write_cache.all.count,
+            g_da_allocator_mgr->store_path.all.count);
     element_size = sizeof(DATrunkAllocatorPtrArray) +
         sizeof(DATrunkAllocator *) * count;
-    if ((result=fast_mblock_init_ex1(&g_allocator_mgr->aptr_array_allocator,
+    if ((result=fast_mblock_init_ex1(&g_da_allocator_mgr->aptr_array_allocator,
                     "aptr_array", element_size, 64, 0, aptr_array_alloc_init,
                     (void *)(long)count, true)) != 0)
     {
         return result;
     }
 
-    return trunk_id_info_init();
+    return da_trunk_id_info_init();
 }
 
 static int deal_allocator_on_ready(DAStorageAllocatorContext *allocator_ctx)
@@ -136,7 +136,7 @@ static int deal_allocator_on_ready(DAStorageAllocatorContext *allocator_ctx)
 
     end = allocator_ctx->all.allocators + allocator_ctx->all.count;
     for (allocator=allocator_ctx->all.allocators; allocator<end; allocator++) {
-        trunk_allocator_deal_on_ready(allocator);
+        da_trunk_allocator_deal_on_ready(allocator);
 
         logInfo("path index: %d, total: %"PRId64" MB, used: %"PRId64" MB, "
                 "avail: %"PRId64" MB", allocator->path_info->store.index,
@@ -155,7 +155,7 @@ static int prealloc_trunk_freelist(DAStorageAllocatorContext *allocator_ctx)
 
     end = allocator_ctx->all.allocators + allocator_ctx->all.count;
     for (allocator=allocator_ctx->all.allocators; allocator<end; allocator++) {
-        trunk_freelist_keep_water_mark(allocator);
+        da_trunk_freelist_keep_water_mark(allocator);
     }
 
     return 0;
@@ -168,7 +168,7 @@ static void wait_allocator_available()
     int i;
 
     i = 0;
-    while (g_allocator_mgr->store_path.full->count > 0 && i < 10) {
+    while (g_da_allocator_mgr->store_path.full->count > 0 && i < 10) {
         fc_sleep_ms(100);
         if (i % 5 == 0) {
             check_trunk_avail_func(NULL);
@@ -177,27 +177,27 @@ static void wait_allocator_available()
     }
 
     i = 0;
-    while (g_allocator_mgr->store_path.avail->count == 0 && i++ < 10) {
+    while (g_da_allocator_mgr->store_path.avail->count == 0 && i++ < 10) {
         fc_sleep_ms(100);
     }
 
     logInfo("file: "__FILE__", line: %d, "
             "waiting count: %d, path stat {avail count: %d, "
             "full count: %d}, reclaim freelist count: %d", __LINE__,
-            i, g_allocator_mgr->store_path.avail->count,
-            g_allocator_mgr->store_path.full->count,
-            g_allocator_mgr->reclaim_freelist.count);
+            i, g_da_allocator_mgr->store_path.avail->count,
+            g_da_allocator_mgr->store_path.full->count,
+            g_da_allocator_mgr->reclaim_freelist.count);
 
-    count = g_allocator_mgr->reclaim_freelist.water_mark_trunks -
-        g_allocator_mgr->reclaim_freelist.count;
+    count = g_da_allocator_mgr->reclaim_freelist.water_mark_trunks -
+        g_da_allocator_mgr->reclaim_freelist.count;
     if (count <= 0) {
         return;
     }
 
     avail_array = (DATrunkAllocatorPtrArray *)
-        g_allocator_mgr->store_path.avail;
+        g_da_allocator_mgr->store_path.avail;
     for (i=0; i<avail_array->count; i++) {
-        trunk_maker_allocate_ex(avail_array->allocators[i],
+        da_trunk_maker_allocate_ex(avail_array->allocators[i],
                 true, true, NULL, NULL);
     }
 }
@@ -277,13 +277,13 @@ int init_allocator_ptr_array(DAStorageAllocatorContext *allocator_ctx)
     DATrunkAllocatorPtrArray *aptr_array;
 
     allocator_ctx->full = (DATrunkAllocatorPtrArray *)
-        fast_mblock_alloc_object(&g_allocator_mgr->aptr_array_allocator);
+        fast_mblock_alloc_object(&g_da_allocator_mgr->aptr_array_allocator);
     if (allocator_ctx->full == NULL) {
         return ENOMEM;
     }
 
     allocator_ctx->avail = (DATrunkAllocatorPtrArray *)
-        fast_mblock_alloc_object(&g_allocator_mgr->aptr_array_allocator);
+        fast_mblock_alloc_object(&g_da_allocator_mgr->aptr_array_allocator);
     if (allocator_ctx->avail == NULL) {
         return ENOMEM;
     }
@@ -291,7 +291,7 @@ int init_allocator_ptr_array(DAStorageAllocatorContext *allocator_ctx)
     allocator_ctx->full->count = allocator_ctx->avail->count = 0;
     end = allocator_ctx->all.allocators + allocator_ctx->all.count;
     for (allocator=allocator_ctx->all.allocators; allocator<end; allocator++) {
-        if (trunk_allocator_is_available(allocator)) {
+        if (da_trunk_allocator_is_available(allocator)) {
             aptr_array = (DATrunkAllocatorPtrArray *)allocator_ctx->avail;
         } else {
             allocator->path_info->trunk_stat.last_used = __sync_add_and_fetch(
@@ -325,7 +325,7 @@ static int check_trunk_avail(DAStorageAllocatorContext *allocator_ctx)
     aptr_array = (DATrunkAllocatorPtrArray *)allocator_ctx->full;
     end = aptr_array->allocators + aptr_array->count;
     for (pp=aptr_array->allocators; pp<end; pp++) {
-        if (trunk_allocator_is_available(*pp)) {
+        if (da_trunk_allocator_is_available(*pp)) {
             if ((r=da_add_to_avail_aptr_array(allocator_ctx, *pp)) != 0) {
                 result = r;
             }
@@ -336,13 +336,13 @@ static int check_trunk_avail(DAStorageAllocatorContext *allocator_ctx)
                     DA_STORE_CFG.trunk_file_size)
             {
                 (*pp)->path_info->trunk_stat.last_used = used_bytes;
-                trunk_maker_allocate_ex(*pp, true, true, NULL, NULL);
+                da_trunk_maker_allocate_ex(*pp, true, true, NULL, NULL);
             } else {
-                storage_config_calc_path_avail_space((*pp)->path_info);
+                da_storage_config_calc_path_avail_space((*pp)->path_info);
                 if ((*pp)->path_info->space_stat.avail - DA_STORE_CFG.
                         trunk_file_size > (*pp)->path_info->reserved_space.value)
                 {
-                    trunk_maker_allocate(*pp);
+                    da_trunk_maker_allocate(*pp);
                 }
             }
         }
@@ -361,10 +361,10 @@ static int check_trunk_avail_func(void *args)
     }
 
     in_progress = true;
-    if (g_allocator_mgr->store_path.full->count > 0) {
+    if (g_da_allocator_mgr->store_path.full->count > 0) {
         logInfo("store_path full count: %d",
-                g_allocator_mgr->store_path.full->count);
-        result = check_trunk_avail(&g_allocator_mgr->store_path);
+                g_da_allocator_mgr->store_path.full->count);
+        result = check_trunk_avail(&g_da_allocator_mgr->store_path);
     } else {
         result = 0;
     }
@@ -385,31 +385,31 @@ static int setup_check_trunk_avail_schedule()
     return sched_add_entries(&scheduleArray);
 }
 
-int storage_allocator_prealloc_trunk_freelists()
+int da_storage_allocator_prealloc_trunk_freelists()
 {
     int result;
 
-    if ((result=deal_allocator_on_ready(&g_allocator_mgr->write_cache)) != 0) {
+    if ((result=deal_allocator_on_ready(&g_da_allocator_mgr->write_cache)) != 0) {
         return result;
     }
 
-    if ((result=deal_allocator_on_ready(&g_allocator_mgr->store_path)) != 0) {
+    if ((result=deal_allocator_on_ready(&g_da_allocator_mgr->store_path)) != 0) {
         return result;
     }
 
-    if ((result=init_allocator_ptr_array(&g_allocator_mgr->write_cache)) != 0) {
+    if ((result=init_allocator_ptr_array(&g_da_allocator_mgr->write_cache)) != 0) {
         return result;
     }
 
-    if ((result=init_allocator_ptr_array(&g_allocator_mgr->store_path)) != 0) {
+    if ((result=init_allocator_ptr_array(&g_da_allocator_mgr->store_path)) != 0) {
         return result;
     }
 
-    if ((result=prealloc_trunk_freelist(&g_allocator_mgr->write_cache)) != 0) {
+    if ((result=prealloc_trunk_freelist(&g_da_allocator_mgr->write_cache)) != 0) {
         return result;
     }
 
-    if ((result=prealloc_trunk_freelist(&g_allocator_mgr->store_path)) != 0) {
+    if ((result=prealloc_trunk_freelist(&g_da_allocator_mgr->store_path)) != 0) {
         return result;
     }
 
@@ -426,7 +426,7 @@ static inline DATrunkAllocatorPtrArray *duplicate_aptr_array(
     DATrunkAllocatorPtrArray *new_array;
 
     new_array = (DATrunkAllocatorPtrArray *)fast_mblock_alloc_object(
-            &g_allocator_mgr->aptr_array_allocator);
+            &g_da_allocator_mgr->aptr_array_allocator);
     if (new_array == NULL) {
         return NULL;
     }
@@ -447,7 +447,7 @@ static inline void switch_aptr_array(DATrunkAllocatorPtrArray **aptr_array,
 
     old_array = *aptr_array;
     *aptr_array = new_array;
-    fast_mblock_delay_free_object(&g_allocator_mgr->
+    fast_mblock_delay_free_object(&g_da_allocator_mgr->
             aptr_array_allocator, old_array, 60);
 }
 
@@ -459,7 +459,7 @@ int da_move_allocator_ptr_array(DATrunkAllocatorPtrArray **src_array,
     DATrunkAllocatorPtrArray *new_darray;
 
     new_sarray = new_darray = NULL;
-    PTHREAD_MUTEX_LOCK(&g_allocator_mgr->lock);
+    PTHREAD_MUTEX_LOCK(&g_da_allocator_mgr->lock);
     do {
         if (bsearch(&allocator, (*src_array)->allocators,
                     (*src_array)->count, sizeof(DATrunkAllocator *),
@@ -491,14 +491,14 @@ int da_move_allocator_ptr_array(DATrunkAllocatorPtrArray **src_array,
         switch_aptr_array(dest_array, new_darray);
         new_darray = NULL;
     } while (0);
-    PTHREAD_MUTEX_UNLOCK(&g_allocator_mgr->lock);
+    PTHREAD_MUTEX_UNLOCK(&g_da_allocator_mgr->lock);
 
     if (new_sarray != NULL) {
-        fast_mblock_free_object(&g_allocator_mgr->
+        fast_mblock_free_object(&g_da_allocator_mgr->
                 aptr_array_allocator, new_sarray);
     }
     if (new_darray != NULL) {
-        fast_mblock_free_object(&g_allocator_mgr->
+        fast_mblock_free_object(&g_da_allocator_mgr->
                 aptr_array_allocator, new_darray);
     }
 
@@ -538,16 +538,16 @@ static int dump_to_array(DATrunkAllocator *allocator,
     return result;
 }
 
-int storage_allocator_trunks_to_array(SFBinlogIndexArray *array)
+int da_storage_allocator_trunks_to_array(SFBinlogIndexArray *array)
 {
     DATrunkAllocator **allocator;
     DATrunkAllocator **end;
     int result;
 
     array->count = 0;
-    end = g_allocator_mgr->allocator_ptr_array.allocators +
-        g_allocator_mgr->allocator_ptr_array.count;
-    for (allocator=g_allocator_mgr->allocator_ptr_array.
+    end = g_da_allocator_mgr->allocator_ptr_array.allocators +
+        g_da_allocator_mgr->allocator_ptr_array.count;
+    for (allocator=g_da_allocator_mgr->allocator_ptr_array.
             allocators; allocator<end; allocator++)
     {
         if (*allocator != NULL) {

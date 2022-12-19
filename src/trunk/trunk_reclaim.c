@@ -31,7 +31,7 @@
 #include "../binlog/trunk/trunk_space_log.h"
 #include "trunk_reclaim.h"
 
-int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
+int da_trunk_reclaim_init_ctx(DATrunkReclaimContext *rctx)
 {
     const int alloc_skiplist_once = 1;
     const bool allocator_use_lock = false;
@@ -54,15 +54,15 @@ int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
     return 0;
 }
 
-static int realloc_rb_array(TrunkReclaimBlockArray *array)
+static int realloc_rb_array(DATrunkReclaimBlockArray *array)
 {
-    TrunkReclaimBlockInfo *blocks;
+    DATrunkReclaimBlockInfo *blocks;
     int new_alloc;
     int bytes;
 
     new_alloc = (array->alloc > 0) ? 2 * array->alloc : 1024;
-    bytes = sizeof(TrunkReclaimBlockInfo) * new_alloc;
-    blocks = (TrunkReclaimBlockInfo *)fc_malloc(bytes);
+    bytes = sizeof(DATrunkReclaimBlockInfo) * new_alloc;
+    blocks = (DATrunkReclaimBlockInfo *)fc_malloc(bytes);
     if (blocks == NULL) {
         return ENOMEM;
     }
@@ -70,7 +70,7 @@ static int realloc_rb_array(TrunkReclaimBlockArray *array)
     if (array->blocks != NULL) {
         if (array->count > 0) {
             memcpy(blocks, array->blocks, array->count *
-                    sizeof(TrunkReclaimBlockInfo));
+                    sizeof(DATrunkReclaimBlockInfo));
         }
         free(array->blocks);
     }
@@ -80,14 +80,14 @@ static int realloc_rb_array(TrunkReclaimBlockArray *array)
     return 0;
 }
 
-static int combine_to_rb_array(TrunkReclaimContext *rctx,
-        TrunkReclaimBlockArray *barray)
+static int combine_to_rb_array(DATrunkReclaimContext *rctx,
+        DATrunkReclaimBlockArray *barray)
 {
     int result;
     UniqSkiplistIterator it;
     DATrunkSpaceLogRecord *record;
     DATrunkSpaceLogRecord *tail;
-    TrunkReclaimBlockInfo *block;
+    DATrunkReclaimBlockInfo *block;
 
     rctx->slice_counts.total = 0;
     uniq_skiplist_iterator(rctx->skiplist, &it);
@@ -138,14 +138,14 @@ static inline void log_rw_error(DASliceOpContext *op_ctx,
             result, STRERROR(result));
 }
 
-static int slice_write(TrunkReclaimContext *rctx,
+static int slice_write(DATrunkReclaimContext *rctx,
         const uint64_t oid, DATrunkSpaceInfo *space)
 {
     int count;
     int result;
 
     count = 1;
-    if ((result=storage_allocator_reclaim_alloc(oid, rctx->read_ctx.
+    if ((result=da_storage_allocator_reclaim_alloc(oid, rctx->read_ctx.
                     op_ctx.storage->length, space, &count)) != 0)
     {
         logError("file: "__FILE__", line: %d, "
@@ -156,12 +156,12 @@ static int slice_write(TrunkReclaimContext *rctx,
         return result;
     }
 
-    return trunk_write_thread_by_buff_synchronize(space,
+    return da_trunk_write_thread_by_buff_synchronize(space,
             DA_OP_CTX_BUFFER_PTR(rctx->read_ctx.op_ctx),
             &rctx->read_ctx.sctx);
 }
 
-static int migrate_one_slice(TrunkReclaimContext *rctx,
+static int migrate_one_slice(DATrunkReclaimContext *rctx,
         DATrunkSpaceLogRecord *record)
 {
     int result;
@@ -185,8 +185,8 @@ static int migrate_one_slice(TrunkReclaimContext *rctx,
     return 0;
 }
 
-static int migrate_one_block(TrunkReclaimContext *rctx,
-        TrunkReclaimBlockInfo *block)
+static int migrate_one_block(DATrunkReclaimContext *rctx,
+        DATrunkReclaimBlockInfo *block)
 {
     DATrunkSpaceLogRecord holder;
     DATrunkSpaceLogRecord *record;
@@ -262,10 +262,10 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
     return 0;
 }
 
-static int migrate_blocks(TrunkReclaimContext *rctx)
+static int migrate_blocks(DATrunkReclaimContext *rctx)
 {
-    TrunkReclaimBlockInfo *block;
-    TrunkReclaimBlockInfo *bend;
+    DATrunkReclaimBlockInfo *block;
+    DATrunkReclaimBlockInfo *bend;
     int result;
 
     __sync_add_and_fetch(&rctx->log_notify.waiting_count,
@@ -282,8 +282,8 @@ static int migrate_blocks(TrunkReclaimContext *rctx)
     return 0;
 }
 
-int trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
-        TrunkReclaimContext *rctx)
+int da_trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
+        DATrunkReclaimContext *rctx)
 {
     int result;
 
