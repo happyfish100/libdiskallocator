@@ -81,7 +81,7 @@ typedef struct {
 extern "C" {
 #endif
 
-#define G_TRUNK_ALLOCATOR     g_da_da_trunk_allocator_vars.trunk_allocator
+#define G_DA_TRUNK_ALLOCATOR  g_da_da_trunk_allocator_vars.trunk_allocator
 
     extern DATrunkAllocatorGlobalVars g_da_da_trunk_allocator_vars;
 

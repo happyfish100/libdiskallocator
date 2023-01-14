@@ -49,10 +49,10 @@ static void trunk_free_func(void *ptr, const int delay_seconds)
     trunk_info = (DATrunkFileInfo *)ptr;
 
     if (delay_seconds > 0) {
-        fast_mblock_delay_free_object(&G_TRUNK_ALLOCATOR, trunk_info,
+        fast_mblock_delay_free_object(&G_DA_TRUNK_ALLOCATOR, trunk_info,
                 delay_seconds);
     } else {
-        fast_mblock_free_object(&G_TRUNK_ALLOCATOR, trunk_info);
+        fast_mblock_free_object(&G_DA_TRUNK_ALLOCATOR, trunk_info);
     }
 }
 
@@ -70,7 +70,7 @@ int da_trunk_allocator_init()
 {
     int result;
 
-    if ((result=fast_mblock_init_ex1(&G_TRUNK_ALLOCATOR,
+    if ((result=fast_mblock_init_ex1(&G_DA_TRUNK_ALLOCATOR,
                     "trunk_file_info", sizeof(DATrunkFileInfo),
                     16384, 0, NULL, NULL, true)) != 0)
     {
@@ -129,7 +129,7 @@ int da_trunk_allocator_add(DATrunkAllocator *allocator,
     int result;
 
     trunk_info = (DATrunkFileInfo *)fast_mblock_alloc_object(
-            &G_TRUNK_ALLOCATOR);
+            &G_DA_TRUNK_ALLOCATOR);
     if (trunk_info == NULL) {
         if (pp_trunk != NULL) {
             *pp_trunk = NULL;
@@ -159,7 +159,7 @@ int da_trunk_allocator_add(DATrunkAllocator *allocator,
                 "add trunk fail, trunk id: %u, "
                 "errno: %d, error info: %s", __LINE__,
                 id_info->id, result, STRERROR(result));
-        fast_mblock_free_object(&G_TRUNK_ALLOCATOR, trunk_info);
+        fast_mblock_free_object(&G_DA_TRUNK_ALLOCATOR, trunk_info);
         trunk_info = NULL;
     }
     if (pp_trunk != NULL) {
