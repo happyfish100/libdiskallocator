@@ -3,7 +3,7 @@
 %define CommitVersion %(echo $COMMIT_VERSION)
 
 Name: libdiskallocator
-Version: 1.0.9
+Version: 1.0.10
 Release: 1%{?dist}
 Summary: rapid disk allocator
 License: AGPL
@@ -13,10 +13,8 @@ Source: http://github.com/happyfish100/libdiskallocator/%{name}-%{version}.tar.g
 
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
-BuildRequires: libfastcommon-devel >= 1.0.64
-BuildRequires: libserverframe-devel >= 1.1.23
-Requires: libfastcommon >= 1.0.64
-Requires: libserverframe >= 1.1.23
+BuildRequires: libserverframe-devel >= 1.1.24
+Requires: libserverframe >= 1.1.24
 Requires: %__cp %__mv %__chmod %__grep %__mkdir %__install %__id
 
 %description
@@ -25,8 +23,7 @@ commit version: %{CommitVersion}
 
 %package devel
 Summary: Development header file
-Requires: libfastcommon-devel >= 1.0.64
-Requires: libserverframe-devel >= 1.1.23
+Requires: libserverframe-devel >= 1.1.24
 Requires: %{name}%{?_isa} = %{version}-%{release}
 
 %description devel
