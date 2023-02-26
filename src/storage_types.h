@@ -131,7 +131,7 @@ typedef struct da_piece_field_storage {
 
 typedef struct da_piece_field_info {
     uint64_t oid;
-    uint64_t fid;  //filed ID (key)
+    uint64_t fid;  //field ID (key)
     unsigned char source;
     DABinlogOpType op_type;
     DAPieceFieldStorage storage;
@@ -144,7 +144,7 @@ typedef struct da_piece_field_array {
 
 typedef struct da_trunk_space_log_record {
     int64_t oid;    //object ID
-    int64_t fid;    //filed ID (key)
+    int64_t fid;    //field ID (key)
     char op_type;
     DAPieceFieldStorage storage;
     struct fast_mblock_man *allocator;

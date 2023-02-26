@@ -261,6 +261,10 @@ static int load_paths(DAStorageConfig *storage_cfg, IniFullContext *ini_ctx,
             parray->paths[i].read_io_depth = 64;
         }
 
+        parray->paths[i].fsync_every_n_writes = iniGetIntValue(section_name,
+                "fsync_every_n_writes", ini_ctx->context,
+                storage_cfg->fsync_every_n_writes);
+
         if ((result=iniGetPercentValue(ini_ctx, "prealloc_space",
                         &parray->paths[i].prealloc_space.ratio,
                         storage_cfg->prealloc_space.ratio_per_path)) != 0)
@@ -372,6 +376,9 @@ static int load_global_items(DAStorageConfig *storage_cfg,
     if (storage_cfg->io_depth_per_read_thread <= 0) {
         storage_cfg->io_depth_per_read_thread = 64;
     }
+
+    storage_cfg->fsync_every_n_writes = iniGetIntValue(NULL,
+            "fsync_every_n_writes", ini_ctx->context, 0);
 
     if ((result=iniGetPercentValue(ini_ctx, "prealloc_space_per_path",
                     &storage_cfg->prealloc_space.ratio_per_path, 0.05)) != 0)
@@ -658,6 +665,7 @@ static void log_paths(DAStoragePathArray *parray, const char *caption)
                 (1024 * 1024), prealloc_space_buff);
         logInfo("  path %d: %s, index: %d, write_threads: %d, "
                 "read_threads: %d, read_io_depth: %d, "
+                "fsync_every_n_writes: %d, "
                 "prealloc_space ratio: %.2f%%, "
                 "reserved_space ratio: %.2f%%, "
                 "avail_space: %s MB, prealloc_space: %s MB, "
@@ -670,6 +678,7 @@ static void log_paths(DAStoragePathArray *parray, const char *caption)
                 (int)(p - parray->paths + 1), p->store.path.str,
                 p->store.index, p->write_thread_count,
                 p->read_thread_count, p->read_io_depth,
+                p->fsync_every_n_writes,
                 p->prealloc_space.ratio * 100.00,
                 p->reserved_space.ratio * 100.00,
                 avail_space_buff, prealloc_space_buff,
@@ -687,7 +696,7 @@ void da_storage_config_to_log(DAStorageConfig *storage_cfg)
 {
     logInfo("storage config, write_threads_per_path: %d, "
             "read_threads_per_path: %d, "
-            "io_depth_per_read_thread: %d, "
+            "io_depth_per_read_thread: %d, fsync_every_n_writes: %d, "
             "fd_cache_capacity_per_read_thread: %d, "
             "fd_cache_capacity_per_write_thread: %d, "
             "prealloc_space: {ratio_per_path: %.2f%%, "
@@ -714,6 +723,7 @@ void da_storage_config_to_log(DAStorageConfig *storage_cfg)
             storage_cfg->write_threads_per_path,
             storage_cfg->read_threads_per_path,
             storage_cfg->io_depth_per_read_thread,
+            storage_cfg->fsync_every_n_writes,
             storage_cfg->fd_cache_capacity_per_read_thread,
             storage_cfg->fd_cache_capacity_per_write_thread,
             storage_cfg->prealloc_space.ratio_per_path * 100.00,
