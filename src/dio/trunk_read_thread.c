@@ -35,6 +35,7 @@
 #include "trunk_read_thread.h"
 
 typedef struct da_trunk_read_thread_context {
+    const DAStoragePathInfo *path_info;
     struct {
         short path;
         short thread;
@@ -84,11 +85,24 @@ static TrunkReadContext trunk_io_ctx = {{0, NULL}};
 
 static void *da_trunk_read_thread_func(void *arg);
 
+static inline int init_op_ctx(DASliceOpContext *op_ctx)
+{
+    const int alloc_size = 64 * 1024;
+
+    op_ctx->storage = NULL;
+
+#ifdef OS_LINUX
+    op_ctx->rb.aio_buffer = NULL;
+#endif
+
+    return fc_init_buffer(&op_ctx->rb.buffer, alloc_size);
+}
+
 int da_init_read_context(DASynchronizedReadContext *ctx)
 {
     int result;
 
-    if ((result=da_init_op_ctx(&ctx->op_ctx)) != 0) {
+    if ((result=init_op_ctx(&ctx->op_ctx)) != 0) {
         return result;
     }
 
@@ -154,7 +168,7 @@ static int init_thread_context(TrunkReadThreadContext *ctx,
     }
 
 #ifdef OS_LINUX
-    if (DA_READ_BY_DIRECT_IO) {
+    if (path_info->read_direct_io) {
         ctx->block_size = path_info->block_size;
         ctx->iocbs.alloc = path_info->read_io_depth;
         ctx->iocbs.pp = (struct iocb **)fc_malloc(sizeof(
@@ -196,6 +210,7 @@ static int init_thread_contexts(TrunkReadThreadContextArray *ctx_array,
     
     end = ctx_array->contexts + ctx_array->count;
     for (ctx=ctx_array->contexts; ctx<end; ctx++) {
+        ctx->path_info = path_info;
         ctx->indexes.path = path_info->store.index;
         if (ctx_array->count == 1) {
             ctx->indexes.thread = -1;
@@ -279,7 +294,7 @@ int da_trunk_read_thread_init()
     int result;
 
 #ifdef OS_LINUX
-    if (DA_READ_BY_DIRECT_IO) {
+    if (READ_DIRECT_IO_PATHS > 0) {
         if ((result=rbpool_init_start()) != 0) {
             return result;
         }
@@ -349,7 +364,7 @@ static int get_read_fd(TrunkReadThreadContext *ctx,
 
     dio_get_trunk_filename(space, trunk_filename, sizeof(trunk_filename));
 #ifdef OS_LINUX
-    if (DA_READ_BY_DIRECT_IO) {
+    if (ctx->path_info->read_direct_io) {
         *fd = open(trunk_filename, O_RDONLY | O_DIRECT | O_CLOEXEC);
     } else {
         *fd = open(trunk_filename, O_RDONLY | O_CLOEXEC);
@@ -681,7 +696,7 @@ static void *da_trunk_read_thread_func(void *arg)
     }
     prctl(PR_SET_NAME, thread_name);
 
-    if (DA_READ_BY_DIRECT_IO) {
+    if (ctx->path_info->read_direct_io) {
         while (SF_G_CONTINUE_FLAG) {
             if (process(ctx) != 0) {
                 sf_terminate_myself();
@@ -716,7 +731,8 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
 #ifdef OS_LINUX
     int aligned_size;
 
-    if (DA_READ_BY_DIRECT_IO) {
+    if (path_info->read_direct_io) {
+        op_ctx->rb.direct_io = true;
         aligned_size = op_ctx->storage->size + path_info->block_size * 2;
         if (op_ctx->rb.aio_buffer != NULL && op_ctx->rb.
                 aio_buffer->size < aligned_size)
@@ -734,6 +750,8 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
         }
 
         return 0;
+    } else {
+        op_ctx->rb.direct_io = false;
     }
 #endif
 

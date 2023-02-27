@@ -161,10 +161,9 @@ typedef struct da_trunk_index_record {
 
 typedef struct da_trunk_read_buffer {
 #ifdef OS_LINUX
-    union {
-        DAAlignedReadBuffer *aio_buffer;   //NULL for alloc from pool
-        BufferInfo buffer;
-    };
+    bool direct_io;
+    DAAlignedReadBuffer *aio_buffer;   //NULL for alloc from pool
+    BufferInfo buffer;
 #else
     BufferInfo buffer;
 #endif
@@ -176,10 +175,10 @@ typedef struct da_slice_op_context {
 } DASliceOpContext;
 
 #ifdef OS_LINUX
-#define DA_OP_CTX_BUFFER_PTR(op_ctx) (DA_READ_BY_DIRECT_IO ?      \
+#define DA_OP_CTX_BUFFER_PTR(op_ctx) ((op_ctx).rb.direct_io ?  \
         (op_ctx).rb.aio_buffer->buff + (op_ctx).rb.aio_buffer->offset : \
         (op_ctx).rb.buffer.buff)
-#define DA_OP_CTX_BUFFER_LEN(op_ctx) (DA_READ_BY_DIRECT_IO ?  \
+#define DA_OP_CTX_BUFFER_LEN(op_ctx) ((op_ctx).rb.direct_io ?  \
         (op_ctx).rb.aio_buffer->length : (op_ctx).rb.buffer.length)
 #else
 #define DA_OP_CTX_BUFFER_PTR(op_ctx) (op_ctx).rb.buffer.buff

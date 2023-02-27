@@ -62,22 +62,7 @@ extern "C" {
     int da_trunk_read_thread_init();
     void da_trunk_read_thread_terminate();
 
-    static inline int da_init_op_ctx(DASliceOpContext *op_ctx)
-    {
-        const int alloc_size = 64 * 1024;
-
-        op_ctx->storage = NULL;
-
-#ifdef OS_LINUX
-        if (DA_READ_BY_DIRECT_IO) {
-            op_ctx->rb.aio_buffer = NULL;
-            return 0;
-        }
-#endif
-
-        return fc_init_buffer(&op_ctx->rb.buffer, alloc_size);
-    }
-
+    /* MUST set rb->direct_io in Linux before call this function */
     int da_trunk_read_thread_push(const DATrunkSpaceInfo *space,
             const int read_bytes, DATrunkReadBuffer *rb,
             da_trunk_read_io_notify_func notify_func, void *notify_arg);
