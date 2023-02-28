@@ -68,20 +68,18 @@ typedef struct da_trunk_read_thread_context_array {
     TrunkReadThreadContext *contexts;
 } TrunkReadThreadContextArray;
 
-typedef struct trunk_io_path_context {
+typedef struct trunk_read_path_context {
     TrunkReadThreadContextArray reads;
 } TrunkReadPathContext;
 
-typedef struct trunk_io_path_contexts_array {
+typedef struct trunk_read_path_contexts_array {
     int count;
     TrunkReadPathContext *paths;
 } TrunkReadPathContextArray;
 
-typedef struct trunk_io_context {
+typedef struct da_trunk_read_context {
     TrunkReadPathContextArray path_ctx_array;
 } TrunkReadContext;
-
-static TrunkReadContext trunk_io_ctx = {{0, NULL}};
 
 static void *da_trunk_read_thread_func(void *arg);
 
@@ -113,17 +111,21 @@ int da_init_read_context(DASynchronizedReadContext *ctx)
     return 0;
 }
 
-static int alloc_path_contexts()
+static int alloc_path_contexts(DAContext *ctx)
 {
+    int count;
     int bytes;
 
-    trunk_io_ctx.path_ctx_array.count = DA_STORE_CFG.max_store_path_index + 1;
-    bytes = sizeof(TrunkReadPathContext) * trunk_io_ctx.path_ctx_array.count;
-    trunk_io_ctx.path_ctx_array.paths = (TrunkReadPathContext *)fc_malloc(bytes);
-    if (trunk_io_ctx.path_ctx_array.paths == NULL) {
+    count = ctx->storage.cfg.max_store_path_index + 1;
+    bytes = sizeof(TrunkReadContext) + sizeof(TrunkReadPathContext) * count;
+    ctx->trunk_read_ctx = fc_malloc(bytes);
+    if (ctx->trunk_read_ctx == NULL) {
         return ENOMEM;
     }
-    memset(trunk_io_ctx.path_ctx_array.paths, 0, bytes);
+    memset(ctx->trunk_read_ctx, 0, bytes);
+    ctx->trunk_read_ctx->path_ctx_array.count = count;
+    ctx->trunk_read_ctx->path_ctx_array.paths = (TrunkReadPathContext *)
+        (ctx->trunk_read_ctx + 1);
     return 0;
 }
 
@@ -141,27 +143,28 @@ static TrunkReadThreadContext *alloc_thread_contexts(const int count)
     return contexts;
 }
 
-static int init_thread_context(TrunkReadThreadContext *ctx,
+static int init_thread_context(DAContext *ctx,
+        TrunkReadThreadContext *thread,
         const DAStoragePathInfo *path_info)
 {
     int result;
     pthread_t tid;
 
-    if ((result=fast_mblock_init_ex1(&ctx->mblock, "trunk_read_buffer",
+    if ((result=fast_mblock_init_ex1(&thread->mblock, "trunk_read_buffer",
                     sizeof(DATrunkReadIOBuffer), 1024, 0, NULL,
                     NULL, true)) != 0)
     {
         return result;
     }
 
-    if ((result=fc_queue_init(&ctx->queue, (long)
+    if ((result=fc_queue_init(&thread->queue, (long)
                     (&((DATrunkReadIOBuffer *)NULL)->next))) != 0)
     {
         return result;
     }
 
 
-    if ((result=da_trunk_fd_cache_init(&ctx->fd_cache, DA_STORE_CFG.
+    if ((result=da_trunk_fd_cache_init(&thread->fd_cache, ctx->storage.cfg.
                     fd_cache_capacity_per_read_thread)) != 0)
     {
         return result;
@@ -169,55 +172,56 @@ static int init_thread_context(TrunkReadThreadContext *ctx,
 
 #ifdef OS_LINUX
     if (path_info->read_direct_io) {
-        ctx->block_size = path_info->block_size;
-        ctx->iocbs.alloc = path_info->read_io_depth;
-        ctx->iocbs.pp = (struct iocb **)fc_malloc(sizeof(
-                    struct iocb *) * ctx->iocbs.alloc);
-        if (ctx->iocbs.pp == NULL) {
+        thread->block_size = path_info->block_size;
+        thread->iocbs.alloc = path_info->read_io_depth;
+        thread->iocbs.pp = (struct iocb **)fc_malloc(sizeof(
+                    struct iocb *) * thread->iocbs.alloc);
+        if (thread->iocbs.pp == NULL) {
             return ENOMEM;
         }
 
-        ctx->aio.max_event = path_info->read_io_depth;
-        ctx->aio.events = (struct io_event *)fc_malloc(sizeof(
-                    struct io_event) * ctx->aio.max_event);
-        if (ctx->aio.events == NULL) {
+        thread->aio.max_event = path_info->read_io_depth;
+        thread->aio.events = (struct io_event *)fc_malloc(sizeof(
+                    struct io_event) * thread->aio.max_event);
+        if (thread->aio.events == NULL) {
             return ENOMEM;
         }
 
-        ctx->aio.ctx = 0;
-        if (io_setup(ctx->aio.max_event, &ctx->aio.ctx) != 0) {
+        thread->aio.ctx = 0;
+        if (io_setup(thread->aio.max_event, &thread->aio.ctx) != 0) {
             result = errno != 0 ? errno : ENOMEM;
             logError("file: "__FILE__", line: %d, "
                     "io_setup fail, errno: %d, error info: %s",
                     __LINE__, result, STRERROR(result));
             return result;
         }
-        ctx->aio.doing_count = 0;
+        thread->aio.doing_count = 0;
     }
 
 #endif
 
     return fc_create_thread(&tid, da_trunk_read_thread_func,
-            ctx, SF_G_THREAD_STACK_SIZE);
+            thread, SF_G_THREAD_STACK_SIZE);
 }
 
-static int init_thread_contexts(TrunkReadThreadContextArray *ctx_array,
+static int init_thread_contexts(DAContext *ctx,
+        TrunkReadThreadContextArray *ctx_array,
         const DAStoragePathInfo *path_info)
 {
     int result;
-    TrunkReadThreadContext *ctx;
+    TrunkReadThreadContext *thread;
     TrunkReadThreadContext *end;
-    
+
     end = ctx_array->contexts + ctx_array->count;
-    for (ctx=ctx_array->contexts; ctx<end; ctx++) {
-        ctx->path_info = path_info;
-        ctx->indexes.path = path_info->store.index;
+    for (thread=ctx_array->contexts; thread<end; thread++) {
+        thread->path_info = path_info;
+        thread->indexes.path = path_info->store.index;
         if (ctx_array->count == 1) {
-            ctx->indexes.thread = -1;
+            thread->indexes.thread = -1;
         } else {
-            ctx->indexes.thread = ctx - ctx_array->contexts;
+            thread->indexes.thread = thread - ctx_array->contexts;
         }
-        if ((result=init_thread_context(ctx, path_info)) != 0) {
+        if ((result=init_thread_context(ctx, thread, path_info)) != 0) {
             return result;
         }
     }
@@ -225,7 +229,7 @@ static int init_thread_contexts(TrunkReadThreadContextArray *ctx_array,
     return 0;
 }
 
-static int init_path_contexts(DAStoragePathArray *parray)
+static int init_path_contexts(DAContext *ctx, DAStoragePathArray *parray)
 {
     DAStoragePathInfo *p;
     DAStoragePathInfo *end;
@@ -235,7 +239,7 @@ static int init_path_contexts(DAStoragePathArray *parray)
 
     end = parray->paths + parray->count;
     for (p=parray->paths; p<end; p++) {
-        path_ctx = trunk_io_ctx.path_ctx_array.paths + p->store.index;
+        path_ctx = ctx->trunk_read_ctx->path_ctx_array.paths + p->store.index;
         if ((thread_ctxs=alloc_thread_contexts(
                         p->read_thread_count)) == NULL)
         {
@@ -244,7 +248,7 @@ static int init_path_contexts(DAStoragePathArray *parray)
 
         path_ctx->reads.contexts = thread_ctxs;
         path_ctx->reads.count = p->read_thread_count;
-        if ((result=init_thread_contexts(&path_ctx->reads, p)) != 0) {
+        if ((result=init_thread_contexts(ctx, &path_ctx->reads, p)) != 0) {
             return result;
         }
     }
@@ -261,20 +265,20 @@ static int rbpool_init_start()
     int path_count;
     int result;
 
-    path_count = da_storage_config_path_count(&DA_STORE_CFG);
-    memory_watermark.low = DA_STORE_CFG.aio_read_buffer.
+    path_count = da_storage_config_path_count(&ctx->storage.cfg);
+    memory_watermark.low = ctx->storage.cfg.aio_read_buffer.
         memory_watermark_low.value / path_count;
-    memory_watermark.high = DA_STORE_CFG.aio_read_buffer.
+    memory_watermark.high = ctx->storage.cfg.aio_read_buffer.
         memory_watermark_high.value / path_count;
-    if ((result=da_read_buffer_pool_init(DA_STORE_CFG.paths_by_index.count,
+    if ((result=da_read_buffer_pool_init(ctx->storage.cfg.paths_by_index.count,
                     &memory_watermark)) != 0)
     {
         return result;
     }
 
-    end = DA_STORE_CFG.paths_by_index.paths +
-        DA_STORE_CFG.paths_by_index.count;
-    for (pp=DA_STORE_CFG.paths_by_index.paths; pp<end; pp++) {
+    end = ctx->storage.cfg.paths_by_index.paths +
+        ctx->storage.cfg.paths_by_index.count;
+    for (pp=ctx->storage.cfg.paths_by_index.paths; pp<end; pp++) {
         if (*pp != NULL) {
             if ((result=da_read_buffer_pool_create((*pp)->store.index,
                             (*pp)->block_size)) != 0)
@@ -284,12 +288,12 @@ static int rbpool_init_start()
         }
     }
 
-    return da_read_buffer_pool_start(DA_STORE_CFG.aio_read_buffer.max_idle_time,
-            DA_STORE_CFG.aio_read_buffer.reclaim_interval);
+    return da_read_buffer_pool_start(ctx->storage.cfg.aio_read_buffer.max_idle_time,
+            ctx->storage.cfg.aio_read_buffer.reclaim_interval);
 }
 #endif
 
-int da_trunk_read_thread_init()
+int da_trunk_read_thread_init(DAContext *ctx)
 {
     int result;
 
@@ -301,29 +305,29 @@ int da_trunk_read_thread_init()
     }
 #endif
 
-    if ((result=alloc_path_contexts()) != 0) {
+    if ((result=alloc_path_contexts(ctx)) != 0) {
         return result;
     }
 
-    if ((result=init_path_contexts(&DA_STORE_CFG.write_cache)) != 0) {
+    if ((result=init_path_contexts(ctx, &ctx->storage.cfg.write_cache)) != 0) {
         return result;
     }
-    if ((result=init_path_contexts(&DA_STORE_CFG.store_path)) != 0) {
+    if ((result=init_path_contexts(ctx, &ctx->storage.cfg.store_path)) != 0) {
         return result;
     }
 
     /*
-       logInfo("trunk_io_ctx.path_ctx_array.count: %d",
-               trunk_io_ctx.path_ctx_array.count);
+       logInfo("ctx->trunk_read_ctx->path_ctx_array.count: %d",
+               ctx->trunk_read_ctx->path_ctx_array.count);
      */
     return 0;
 }
 
-void da_trunk_read_thread_terminate()
+void da_trunk_read_thread_terminate(DAContext *ctx)
 {
 }
 
-int da_trunk_read_thread_push(const DATrunkSpaceInfo *space,
+int da_trunk_read_thread_push(DAContext *ctx, const DATrunkSpaceInfo *space,
         const int read_bytes, DATrunkReadBuffer *rb,
         da_trunk_read_io_notify_func notify_func, void *notify_arg)
 {
@@ -331,7 +335,7 @@ int da_trunk_read_thread_push(const DATrunkSpaceInfo *space,
     TrunkReadThreadContext *thread_ctx;
     DATrunkReadIOBuffer *iob;
 
-    path_ctx = trunk_io_ctx.path_ctx_array.paths +
+    path_ctx = ctx->trunk_read_ctx->path_ctx_array.paths +
         space->store->index;
     thread_ctx = path_ctx->reads.contexts + space->
         id_info.id % path_ctx->reads.count;
@@ -776,40 +780,43 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
     return 0;
 }
 
-int da_slice_read(DASynchronizedReadContext *ctx)
+int da_slice_read(DAContext *ctx, DASynchronizedReadContext *rctx)
 {
     int result;
     DATrunkSpaceInfo space;
     DATrunkFileInfo *trunk;
 
-    if ((trunk=da_trunk_hashtable_get(ctx->op_ctx.storage->trunk_id)) == NULL) {
+    if ((trunk=da_trunk_hashtable_get(&ctx->trunk_htable_ctx,
+                    rctx->op_ctx.storage->trunk_id)) == NULL)
+    {
         return ENOENT;
     }
 
-    if ((result=check_alloc_buffer(&ctx->op_ctx, trunk->
+    if ((result=check_alloc_buffer(&rctx->op_ctx, trunk->
                     allocator->path_info)) != 0)
     {
         return result;
     }
 
-    ctx->sctx.result = INT16_MIN;
+    rctx->sctx.result = INT16_MIN;
     space.store = &trunk->allocator->path_info->store;
     space.id_info = trunk->id_info;
-    space.offset = ctx->op_ctx.storage->offset;
-    space.size = ctx->op_ctx.storage->size;
-    if ((result=da_trunk_read_thread_push(&space, ctx->op_ctx.storage->length,
-                    &ctx->op_ctx.rb, slice_read_done, &ctx->sctx)) != 0)
+    space.offset = rctx->op_ctx.storage->offset;
+    space.size = rctx->op_ctx.storage->size;
+    if ((result=da_trunk_read_thread_push(ctx, &space, rctx->
+                    op_ctx.storage->length, &rctx->op_ctx.rb,
+                    slice_read_done, &rctx->sctx)) != 0)
     {
         return result;
     }
 
-    PTHREAD_MUTEX_LOCK(&ctx->sctx.lcp.lock);
-    while (ctx->sctx.result == INT16_MIN && SF_G_CONTINUE_FLAG) {
-        pthread_cond_wait(&ctx->sctx.lcp.cond,
-                &ctx->sctx.lcp.lock);
+    PTHREAD_MUTEX_LOCK(&rctx->sctx.lcp.lock);
+    while (rctx->sctx.result == INT16_MIN && SF_G_CONTINUE_FLAG) {
+        pthread_cond_wait(&rctx->sctx.lcp.cond,
+                &rctx->sctx.lcp.lock);
     }
-    result = ctx->sctx.result == INT16_MIN ? EINTR : ctx->sctx.result;
-    PTHREAD_MUTEX_UNLOCK(&ctx->sctx.lcp.lock);
+    result = rctx->sctx.result == INT16_MIN ? EINTR : rctx->sctx.result;
+    PTHREAD_MUTEX_UNLOCK(&rctx->sctx.lcp.lock);
 
     return result;
 }

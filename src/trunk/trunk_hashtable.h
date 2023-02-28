@@ -19,28 +19,24 @@
 
 #include "../storage_config.h"
 
-typedef struct {
-    DATrunkFileInfo **bucket;
-    DATrunkFileInfo *current;
-    bool need_lock;
-} DATrunkHashtableIterator;
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int da_trunk_hashtable_init();
+    int da_trunk_hashtable_init(DATrunkHTableContext *ctx);
 
-    void da_trunk_hashtable_destroy();
+    void da_trunk_hashtable_destroy(DATrunkHTableContext *ctx);
 
-    int da_trunk_hashtable_count();
+    int da_trunk_hashtable_count(DATrunkHTableContext *ctx);
 
-    int da_trunk_hashtable_add(DATrunkFileInfo *trunk);
+    int da_trunk_hashtable_add(DATrunkHTableContext *ctx,
+            DATrunkFileInfo *trunk);
 
-    DATrunkFileInfo *da_trunk_hashtable_get(const uint32_t trunk_id);
+    DATrunkFileInfo *da_trunk_hashtable_get(DATrunkHTableContext *ctx,
+            const uint32_t trunk_id);
 
-    void da_trunk_hashtable_iterator(DATrunkHashtableIterator *it,
-            const bool need_lock);
+    void da_trunk_hashtable_iterator(DATrunkHTableContext *ctx,
+            DATrunkHashtableIterator *it, const bool need_lock);
 
     DATrunkFileInfo *da_trunk_hashtable_next(DATrunkHashtableIterator *it);
 

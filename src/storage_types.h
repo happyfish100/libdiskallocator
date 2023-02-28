@@ -21,6 +21,8 @@
 #include "fastcommon/shared_buffer.h"
 #include "fastcommon/uniq_skiplist.h"
 #include "sf/sf_types.h"
+#include "sf/sf_binlog_index.h"
+#include "sf/sf_binlog_writer.h"
 #include "binlog/common/binlog_types.h"
 
 #ifdef OS_LINUX
@@ -173,6 +175,222 @@ typedef struct da_slice_op_context {
     DAPieceFieldStorage *storage;
     DATrunkReadBuffer rb;
 } DASliceOpContext;
+
+typedef struct {
+    volatile int64_t total;
+    volatile int64_t avail;  //current available space
+    volatile int64_t used;
+    int64_t last_used;      //for avail allocator check
+} DATrunkSpaceStat;
+
+struct da_context;
+typedef struct {
+#ifdef OS_LINUX
+    int block_size;
+#endif
+    DAStorePath store;
+    int write_thread_count;
+    int read_thread_count;
+    int prealloc_trunks;
+    int read_io_depth;
+    bool read_direct_io;
+    int fsync_every_n_writes;
+    struct {
+        int64_t value;
+        double ratio;
+    } reserved_space;
+
+    struct {
+        int64_t value;
+        double ratio;
+        int trunk_count;  //calculate by: value / trunk_file_size
+    } prealloc_space;
+
+    struct {
+        int64_t total;
+        int64_t avail;  //current available space
+        volatile time_t last_stat_time;
+        double used_ratio;
+    } space_stat;  //for disk space
+
+    DATrunkSpaceStat trunk_stat;  //for trunk space
+    struct da_context *ctx;
+} DAStoragePathInfo;
+
+typedef struct {
+    DAStoragePathInfo *paths;
+    int count;
+} DAStoragePathArray;
+
+typedef struct {
+    DAStoragePathInfo **paths;
+    int count;
+} DAStoragePathPtrArray;
+
+typedef struct da_storage_config {
+    DAStoragePathArray store_path;
+    DAStoragePathArray write_cache;
+    DAStoragePathPtrArray paths_by_index;
+    int max_store_path_index;  //the max of DAStorePath->index from dat file
+
+    struct {
+        double on_usage;  //usage ratio
+        TimeInfo start_time;
+        TimeInfo end_time;
+    } write_cache_to_hd;
+
+    int write_threads_per_path;
+    int read_threads_per_path;
+    int io_depth_per_read_thread;
+    bool read_direct_io;
+    int fsync_every_n_writes;
+    double reserved_space_per_disk;
+    int max_trunk_files_per_subdir;
+    uint32_t trunk_file_size;
+    int discard_remain_space_size;
+    int trunk_prealloc_threads;
+    int fd_cache_capacity_per_read_thread;
+    int fd_cache_capacity_per_write_thread;
+    double reclaim_trunks_on_path_usage;
+    double never_reclaim_on_trunk_usage;
+
+    struct {
+        double ratio_per_path;
+        TimeInfo start_time;
+        TimeInfo end_time;
+    } prealloc_space;
+
+#ifdef OS_LINUX
+    struct {
+        struct {
+            int64_t value;
+            double ratio;
+        } memory_watermark_low;
+
+        struct {
+            int64_t value;
+            double ratio;
+        } memory_watermark_high;
+
+        int max_idle_time;
+        int reclaim_interval;
+    } aio_read_buffer;
+#endif
+
+} DAStorageConfig;
+
+
+typedef struct {
+    string_t path;   //data path
+    int binlog_buffer_size;
+    int binlog_subdirs;
+    int trunk_index_dump_interval;
+    TimeInfo trunk_index_dump_base_time;
+} DADataConfig;
+
+typedef struct {
+    DATrunkFileInfo **buckets;
+    DATrunkFileInfo **end;
+    int capacity;
+    volatile int count;
+} DATrunkHashtable;
+
+typedef struct {
+    int count;
+    pthread_mutex_t *locks;
+} DATrunkSharedLockArray;
+
+typedef struct {
+    DATrunkHashtable htable;
+    DATrunkSharedLockArray lock_array;
+} DATrunkHTableContext;
+
+typedef struct {
+    DATrunkHTableContext *ctx;
+    DATrunkFileInfo **bucket;
+    DATrunkFileInfo *current;
+    bool need_lock;
+} DATrunkHashtableIterator;
+
+typedef struct {
+    int index;
+    char path[PATH_MAX];
+    char mark[64];
+} DAStorePathEntry;
+
+typedef struct {
+    int alloc;
+    int count;
+    DAStorePathEntry *entries;  //sort by index
+} DAStorePathArray;
+
+typedef struct da_trunk_space_log_record_array {
+    DATrunkSpaceLogRecord **records;
+    int count;
+    int alloc;
+} DATrunkSpaceLogRecordArray;
+
+typedef struct da_space_log_reader {
+    struct fast_mblock_man record_allocator;
+    UniqSkiplistFactory factory;
+} DASpaceLogReader;
+
+/* trunk fd cache */
+typedef struct da_trunk_id_fd_pair {
+    uint32_t trunk_id;
+    int fd;
+} DATrunkIdFDPair;
+
+typedef struct da_trunk_fd_cache_entry {
+    DATrunkIdFDPair pair;
+    struct fc_list_head dlink;
+    struct da_trunk_fd_cache_entry *next;  //for hashtable
+} DATrunkFDCacheEntry;
+
+typedef struct {
+    DATrunkFDCacheEntry **buckets;
+    unsigned int size;
+} DATrunkFDCacheHashtable;
+
+typedef struct {
+    DATrunkFDCacheHashtable htable;
+    struct {
+        int capacity;
+        int count;
+        struct fc_list_head head;
+    } lru;
+    struct fast_mblock_man allocator;
+} DATrunkFDCacheContext;
+
+typedef struct da_trunk_space_log_context {
+    struct fc_queue queue;
+    SFSynchronizeContext notify;
+    DASpaceLogReader reader;
+    DATrunkSpaceLogRecordArray record_array;
+    DATrunkFDCacheContext fd_cache_ctx;
+    FastBuffer buffer;
+} DATrunkSpaceLogContext;
+
+typedef struct da_context {
+    DADataConfig data;
+
+    struct {
+        int file_block_size;
+        DAStorageConfig cfg;
+        int read_direct_io_paths;
+    } storage;
+
+    DAStorePathArray store_path_array;
+    SFBinlogIndexContext trunk_index_ctx;
+    DATrunkHTableContext trunk_htable_ctx;
+    SFBinlogWriterContext trunk_binlog_writer;
+    DATrunkSpaceLogContext space_log_ctx;
+
+    struct da_trunk_read_context  *trunk_read_ctx;
+    struct da_trunk_write_context *trunk_write_ctx;
+
+    da_redo_queue_push_func redo_queue_push_func;
+} DAContext;
 
 #ifdef OS_LINUX
 #define DA_OP_CTX_BUFFER_PTR(op_ctx) ((op_ctx).rb.direct_io ?  \

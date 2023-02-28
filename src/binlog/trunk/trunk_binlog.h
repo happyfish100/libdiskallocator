@@ -23,13 +23,14 @@
 extern "C" {
 #endif
 
-    int da_trunk_binlog_init();
-    void da_trunk_binlog_destroy();
+    int da_trunk_binlog_init(DAContext *ctx);
+    void da_trunk_binlog_destroy(DAContext *ctx);
 
-    int da_trunk_binlog_get_current_write_index();
+    int da_trunk_binlog_get_current_write_index(DAContext *ctx);
 
-    int da_trunk_binlog_write(const char op_type, const int path_index,
-            const DATrunkIdInfo *id_info, const uint32_t file_size);
+    int da_trunk_binlog_write(DAContext *ctx, const char op_type,
+            const int path_index, const DATrunkIdInfo *id_info,
+            const uint32_t file_size);
 
 #ifdef __cplusplus
 }

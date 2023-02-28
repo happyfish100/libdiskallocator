@@ -24,23 +24,23 @@ extern "C" {
 
     extern DABinlogFDCacheContext g_da_write_cache_ctx;
 
-    static inline int da_write_fd_cache_init_ex(const char *subdir_name,
-            const int max_idle_time, const int capacity,
-            da_binlog_fd_cache_filename_func filename_func,
-            const int subdirs)
+    static inline int da_write_fd_cache_init_ex(const char *data_path,
+            const char *subdir_name, const int max_idle_time,
+            const int capacity, da_binlog_fd_cache_filename_func
+            filename_func, const int subdirs)
     {
         const int open_flags =  O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC;
-        return da_binlog_fd_cache_init_ex(&g_da_write_cache_ctx,
-                subdir_name, open_flags, max_idle_time, capacity,
-                filename_func, subdirs);
+        return da_binlog_fd_cache_init(&g_da_write_cache_ctx,
+                data_path, subdir_name, open_flags, max_idle_time,
+                capacity, filename_func, subdirs);
     }
 
-    static inline int da_write_fd_cache_init(const char *subdir_name,
-            const int max_idle_time, const int capacity)
+    static inline int da_write_fd_cache_init(const char *data_path,
+            const char *subdir_name, const int max_idle_time,
+            const int capacity, const int subdirs)
     {
-        return da_write_fd_cache_init_ex(subdir_name, max_idle_time,
-                capacity, da_binlog_fd_cache_binlog_filename,
-                DA_BINLOG_SUBDIRS);
+        return da_write_fd_cache_init_ex(data_path, subdir_name, max_idle_time,
+                capacity, da_binlog_fd_cache_binlog_filename, subdirs);
     }
 
     //return fd, < 0 for error

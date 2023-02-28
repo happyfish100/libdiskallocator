@@ -24,12 +24,6 @@
 #include "global.h"
 #include "store_path_index.h"
 
-typedef struct {
-    int alloc;
-    int count;
-    DAStorePathEntry *entries;
-} StorePathArray;
-
 typedef struct
 {
     int server_id;
@@ -48,9 +42,6 @@ typedef struct
 
 #define STORE_PATH_MARK_FILENAME    ".da_vars"
 
-static StorePathArray store_paths = {0, 0, NULL};   //sort by index
-static struct base64_context base64_ctx;
-
 static int store_path_generate_mark(const char *store_path,
         const int index, char *mark_str)
 {
@@ -64,7 +55,7 @@ static int store_path_generate_mark(const char *store_path,
     mark_info.index = index;
     mark_info.crc32 = CRC32(store_path, strlen(store_path));
     mark_info.create_time = g_current_time;
-    base64_encode_ex(&base64_ctx, (char *)&mark_info,
+    base64_encode_ex(&DA_BASE64_CTX, (char *)&mark_info,
             sizeof(mark_info), mark_str, &mark_len, false);
 
     snprintf(filename, sizeof(filename), "%s/%s",
@@ -77,7 +68,7 @@ static int store_path_generate_mark(const char *store_path,
 static int store_path_get_mark(const char *filename,
         char *mark, const int size)
 {
-    IniContext ini_context;
+    IniContext ini_ctx;
     char *value;
     int len;
     int result;
@@ -87,14 +78,14 @@ static int store_path_get_mark(const char *filename,
         return ENOENT;
     }
 
-    if ((result=iniLoadFromFile(filename, &ini_context)) != 0) {
+    if ((result=iniLoadFromFile(filename, &ini_ctx)) != 0) {
         logError("file: "__FILE__", line: %d, "
                 "load from file \"%s\" fail, error code: %d",
                 __LINE__, filename, result);
         return result;
     }
 
-    value = iniGetStrValue(NULL, STORE_PATH_INDEX_ITEM_MARK, &ini_context);
+    value = iniGetStrValue(NULL, STORE_PATH_INDEX_ITEM_MARK, &ini_ctx);
     if (value != NULL && *value != '\0') {
         len = strlen(value);
         if (len < size) {
@@ -110,7 +101,7 @@ static int store_path_get_mark(const char *filename,
         result = ENOENT;
     }
 
-    iniFreeContext(&ini_context);
+    iniFreeContext(&ini_ctx);
     return result;
 }
 
@@ -149,7 +140,7 @@ int store_path_check_mark(DAStorePathEntry *pentry, bool *regenerated)
                 "the mark file: %s, the mark string: %s",
                 __LINE__, mark_len, dest_len, filename, mark);
         memset(&mark_info, 0, sizeof(StorePathMarkInfo));
-    } else if (base64_decode_auto(&base64_ctx, mark, mark_len,
+    } else if (base64_decode_auto(&DA_BASE64_CTX, mark, mark_len,
                 (char *)&mark_info, &dest_len) == NULL)
     {
         logError("file: "__FILE__", line: %d, "
@@ -186,29 +177,30 @@ int store_path_check_mark(DAStorePathEntry *pentry, bool *regenerated)
     return EINVAL;
 }
 
-static char *get_da_store_path_index_filename(char *full_filename, const int size)
+static char *get_da_store_path_index_filename(DAContext *ctx,
+        char *full_filename, const int size)
 {
-    snprintf(full_filename, size, "%s/%s",
-            DA_DATA_PATH_STR, STORE_PATH_INDEX_FILENAME);
+    snprintf(full_filename, size, "%s/%s", ctx->data.path.str,
+            STORE_PATH_INDEX_FILENAME);
     return full_filename;
 }
 
-static int check_alloc_store_paths(const int inc_count)
+static int check_alloc_store_paths(DAContext *ctx, const int inc_count)
 {
     int alloc;
     int target_count;
     int bytes;
     DAStorePathEntry *entries;
 
-    target_count = store_paths.count + inc_count;
-    if (store_paths.alloc >= target_count) {
+    target_count = ctx->store_path_array.count + inc_count;
+    if (ctx->store_path_array.alloc >= target_count) {
         return 0;
     }
 
-    if (store_paths.alloc == 0) {
+    if (ctx->store_path_array.alloc == 0) {
         alloc = 8;
     } else {
-        alloc = store_paths.alloc * 2;
+        alloc = ctx->store_path_array.alloc * 2;
     }
 
     while (alloc < target_count) {
@@ -221,18 +213,18 @@ static int check_alloc_store_paths(const int inc_count)
         return ENOMEM;
     }
 
-    if (store_paths.entries != NULL) {
-        memcpy(entries, store_paths.entries,
-                sizeof(DAStorePathEntry) * store_paths.count);
-        free(store_paths.entries);
+    if (ctx->store_path_array.entries != NULL) {
+        memcpy(entries, ctx->store_path_array.entries,
+                sizeof(DAStorePathEntry) * ctx->store_path_array.count);
+        free(ctx->store_path_array.entries);
     }
 
-    store_paths.entries = entries;
-    store_paths.alloc = alloc;
+    ctx->store_path_array.entries = entries;
+    ctx->store_path_array.alloc = alloc;
     return 0;
 }
 
-static int load_one_store_path_index(IniContext *ini_context, char *full_filename,
+static int load_one_store_path_index(IniContext *ini_ctx, char *full_filename,
         IniSectionInfo *section, DAStorePathEntry *pentry)
 {
     char *index_str;
@@ -249,7 +241,7 @@ static int load_one_store_path_index(IniContext *ini_context, char *full_filenam
         return EINVAL;
     }
 
-    path = iniGetStrValue(section->section_name, "path", ini_context);
+    path = iniGetStrValue(section->section_name, "path", ini_ctx);
     if (path == NULL) {
         logError("file: "__FILE__", line: %d, "
                 "data file: %s, section: %s, item \"path\" not exist",
@@ -257,7 +249,7 @@ static int load_one_store_path_index(IniContext *ini_context, char *full_filenam
         return ENOENT;
     }
 
-    mark = iniGetStrValue(section->section_name, "mark", ini_context);
+    mark = iniGetStrValue(section->section_name, "mark", ini_ctx);
     if (mark == NULL) {
         logError("file: "__FILE__", line: %d, "
                 "data file: %s, section: %s, item \"mark\" not exist",
@@ -275,8 +267,8 @@ static int compare_store_path_index(const void *p1, const void *p2)
     return ((DAStorePathEntry *)p1)->index - ((DAStorePathEntry *)p2)->index;
 }
 
-static int load_store_path_index(IniContext *ini_context,
-        char *full_filename)
+static int load_store_path_index(DAContext *ctx,
+        IniContext *ini_ctx, char *full_filename)
 {
 #define FIXED_SECTION_COUNT 64
     int result;
@@ -291,7 +283,7 @@ static int load_store_path_index(IniContext *ini_context,
 
     sections = fixed_sections;
     alloc_size = FIXED_SECTION_COUNT;
-    result = iniGetSectionNamesByPrefix(ini_context,
+    result = iniGetSectionNamesByPrefix(ini_ctx,
             STORE_PATH_INDEX_SECTION_PREFIX_STR, sections,
             alloc_size, &count);
     if (result == ENOSPC) {
@@ -303,7 +295,7 @@ static int load_store_path_index(IniContext *ini_context,
             if (sections == NULL) {
                 return ENOMEM;
             }
-            result = iniGetSectionNamesByPrefix(ini_context,
+            result = iniGetSectionNamesByPrefix(ini_ctx,
                     STORE_PATH_INDEX_SECTION_PREFIX_STR, sections,
                     alloc_size, &count);
         } while (result == ENOSPC);
@@ -313,23 +305,23 @@ static int load_store_path_index(IniContext *ini_context,
         return result;
     }
 
-    if ((result=check_alloc_store_paths(count)) != 0) {
+    if ((result=check_alloc_store_paths(ctx, count)) != 0) {
         return result;
     }
 
-    pentry = store_paths.entries;
+    pentry = ctx->store_path_array.entries;
     end = sections + count;
     for (section=sections; section<end; section++,pentry++) {
-        if ((result=load_one_store_path_index(ini_context, full_filename,
+        if ((result=load_one_store_path_index(ini_ctx, full_filename,
                         section, pentry)) != 0)
         {
             return result;
         }
     }
-    store_paths.count = count;
+    ctx->store_path_array.count = count;
 
-    if (store_paths.count > 1) {
-        qsort(store_paths.entries, store_paths.count,
+    if (ctx->store_path_array.count > 1) {
+        qsort(ctx->store_path_array.entries, ctx->store_path_array.count,
                 sizeof(DAStorePathEntry), compare_store_path_index);
     }
 
@@ -339,29 +331,28 @@ static int load_store_path_index(IniContext *ini_context,
     return 0;
 }
 
-int da_store_path_index_count()
+int da_store_path_index_count(DAContext *ctx)
 {
-    return store_paths.count;
+    return ctx->store_path_array.count;
 }
 
-int da_store_path_index_max()
+int da_store_path_index_max(DAContext *ctx)
 {
-    if (store_paths.count > 0) {
-        return store_paths.entries[store_paths.count - 1].index;
+    if (ctx->store_path_array.count > 0) {
+        return ctx->store_path_array.entries[ctx->
+            store_path_array.count - 1].index;
     } else {
         return 0;
     }
 }
 
-int da_store_path_index_init()
+int da_store_path_index_init(DAContext *ctx)
 {
     int result;
-    IniContext ini_context;
+    IniContext ini_ctx;
     char full_filename[PATH_MAX];
 
-    base64_init_ex(&base64_ctx, 0, '-', '_', '.');
-
-    get_da_store_path_index_filename(full_filename, sizeof(full_filename));
+    get_da_store_path_index_filename(ctx, full_filename, sizeof(full_filename));
     if (access(full_filename, F_OK) != 0) {
         if (errno == ENOENT) {
             return 0;
@@ -374,37 +365,38 @@ int da_store_path_index_init()
         return result;
     }
 
-    if ((result=iniLoadFromFile(full_filename, &ini_context)) != 0) {
+    if ((result=iniLoadFromFile(full_filename, &ini_ctx)) != 0) {
         logError("file: "__FILE__", line: %d, "
                 "load conf file \"%s\" fail, ret code: %d",
                 __LINE__, full_filename, result);
         return result;
     }
 
-    result = load_store_path_index(&ini_context, full_filename);
-    iniFreeContext(&ini_context);
+    result = load_store_path_index(ctx, &ini_ctx, full_filename);
+    iniFreeContext(&ini_ctx);
     return result;
 }
 
-void da_store_path_index_destroy()
+void da_store_path_index_destroy(DAContext *ctx)
 {
-    if (store_paths.entries != NULL) {
-        free(store_paths.entries);
-        store_paths.entries = NULL;
-        store_paths.count = store_paths.alloc = 0;
+    if (ctx->store_path_array.entries != NULL) {
+        free(ctx->store_path_array.entries);
+        ctx->store_path_array.entries = NULL;
+        ctx->store_path_array.count = ctx->store_path_array.alloc = 0;
     }
 }
 
-DAStorePathEntry *da_store_path_index_get(const char *path)
+DAStorePathEntry *da_store_path_index_get(
+        DAContext *ctx, const char *path)
 {
     DAStorePathEntry *entry;
 
-    if (store_paths.count == 0) {
+    if (ctx->store_path_array.count == 0) {
         return NULL;
     }
 
-    for (entry=store_paths.entries + store_paths.count - 1;
-            entry>=store_paths.entries; entry--)
+    for (entry=ctx->store_path_array.entries + ctx->store_path_array.count - 1;
+            entry>=ctx->store_path_array.entries; entry--)
     {
         if (strcmp(path, entry->path) == 0) {
             return entry;
@@ -414,24 +406,25 @@ DAStorePathEntry *da_store_path_index_get(const char *path)
     return NULL;
 }
 
-int da_store_path_index_add(const char *path, int *index)
+int da_store_path_index_add(DAContext *ctx,
+        const char *path, int *index)
 {
     int result;
     char filename[PATH_MAX];
     char mark[64];
     DAStorePathEntry *pentry;
 
-    if ((result=check_alloc_store_paths(1)) != 0) {
+    if ((result=check_alloc_store_paths(ctx, 1)) != 0) {
         return result;
     }
 
-    if (store_paths.count > 0) {
-        *index = store_paths.entries[store_paths.count - 1].index + 1;
+    if (ctx->store_path_array.count > 0) {
+        *index = ctx->store_path_array.entries[ctx->store_path_array.count - 1].index + 1;
     } else {
         *index = 0;
     }
 
-    pentry = store_paths.entries + store_paths.count;
+    pentry = ctx->store_path_array.entries + ctx->store_path_array.count;
     snprintf(filename, sizeof(filename), "%s/%s",
             path, STORE_PATH_MARK_FILENAME);
     result = store_path_get_mark(filename, mark, sizeof(mark));
@@ -453,11 +446,11 @@ int da_store_path_index_add(const char *path, int *index)
 
     pentry->index = *index;
     snprintf(pentry->path, sizeof(pentry->path), "%s", path);
-    store_paths.count++;
+    ctx->store_path_array.count++;
     return 0;
 }
 
-int da_store_path_index_save()
+int da_store_path_index_save(DAContext *ctx)
 {
     int result;
     FastBuffer buffer;
@@ -465,12 +458,14 @@ int da_store_path_index_save()
     DAStorePathEntry *end;
     char full_filename[PATH_MAX];
 
-    if ((result=fast_buffer_init_ex(&buffer, 128 * store_paths.count)) != 0) {
+    if ((result=fast_buffer_init_ex(&buffer, 128 * ctx->
+                    store_path_array.count)) != 0)
+    {
         return result;
     }
 
-    end  = store_paths.entries + store_paths.count;
-    for (pentry=store_paths.entries; pentry<end; pentry++) {
+    end  = ctx->store_path_array.entries + ctx->store_path_array.count;
+    for (pentry=ctx->store_path_array.entries; pentry<end; pentry++) {
         result = fast_buffer_append(&buffer,
                 "[%s%d]\n"
                 "%s=%s\n"
@@ -483,7 +478,7 @@ int da_store_path_index_save()
         }
     }
 
-    get_da_store_path_index_filename(full_filename, sizeof(full_filename));
+    get_da_store_path_index_filename(ctx, full_filename, sizeof(full_filename));
     result = safeWriteToFile(full_filename, buffer.data, buffer.length);
 
     fast_buffer_destroy(&buffer);

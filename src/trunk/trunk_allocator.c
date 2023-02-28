@@ -28,8 +28,6 @@
 #include "trunk_maker.h"
 #include "trunk_allocator.h"
 
-DATrunkAllocatorGlobalVars g_da_da_trunk_allocator_vars;
-
 static int compare_trunk_by_id(const DATrunkFileInfo *t1,
         const DATrunkFileInfo *t2)
 {
@@ -49,10 +47,10 @@ static void trunk_free_func(void *ptr, const int delay_seconds)
     trunk_info = (DATrunkFileInfo *)ptr;
 
     if (delay_seconds > 0) {
-        fast_mblock_delay_free_object(&G_DA_TRUNK_ALLOCATOR, trunk_info,
+        fast_mblock_delay_free_object(&DA_TRUNK_ALLOCATOR, trunk_info,
                 delay_seconds);
     } else {
-        fast_mblock_free_object(&G_DA_TRUNK_ALLOCATOR, trunk_info);
+        fast_mblock_free_object(&DA_TRUNK_ALLOCATOR, trunk_info);
     }
 }
 
@@ -64,20 +62,6 @@ static inline void push_trunk_util_change_event(DATrunkAllocator *allocator,
     {
         fc_queue_push(&allocator->reclaim.queue, trunk);
     }
-}
-
-int da_trunk_allocator_init()
-{
-    int result;
-
-    if ((result=fast_mblock_init_ex1(&G_DA_TRUNK_ALLOCATOR,
-                    "trunk_file_info", sizeof(DATrunkFileInfo),
-                    16384, 0, NULL, NULL, true)) != 0)
-    {
-        return result;
-    }
-
-    return 0;
 }
 
 int da_trunk_allocator_init_instance(DATrunkAllocator *allocator,
@@ -129,7 +113,7 @@ int da_trunk_allocator_add(DATrunkAllocator *allocator,
     int result;
 
     trunk_info = (DATrunkFileInfo *)fast_mblock_alloc_object(
-            &G_DA_TRUNK_ALLOCATOR);
+            &DA_TRUNK_ALLOCATOR);
     if (trunk_info == NULL) {
         if (pp_trunk != NULL) {
             *pp_trunk = NULL;
@@ -151,7 +135,8 @@ int da_trunk_allocator_add(DATrunkAllocator *allocator,
     PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
 
     if (result == 0) {
-        result = da_trunk_hashtable_add(trunk_info);
+        result = da_trunk_hashtable_add(&allocator->path_info->
+                ctx->trunk_htable_ctx, trunk_info);
     } 
 
     if (result != 0) {
@@ -159,7 +144,7 @@ int da_trunk_allocator_add(DATrunkAllocator *allocator,
                 "add trunk fail, trunk id: %u, "
                 "errno: %d, error info: %s", __LINE__,
                 id_info->id, result, STRERROR(result));
-        fast_mblock_free_object(&G_DA_TRUNK_ALLOCATOR, trunk_info);
+        fast_mblock_free_object(&DA_TRUNK_ALLOCATOR, trunk_info);
         trunk_info = NULL;
     }
     if (pp_trunk != NULL) {
@@ -181,8 +166,9 @@ int da_trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
     return result;
 }
 
-int da_trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
-        const int count, uint32_t *used_bytes)
+int da_trunk_allocator_deal_space_changes(DAContext *ctx,
+        DATrunkSpaceLogRecord **records, const int count,
+        uint32_t *used_bytes)
 {
     DATrunkSpaceLogRecord **record;
     DATrunkSpaceLogRecord **end;
@@ -192,7 +178,9 @@ int da_trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
         return 0;
     }
 
-    if ((trunk=da_trunk_hashtable_get(records[0]->storage.trunk_id)) == NULL) {
+    if ((trunk=da_trunk_hashtable_get(&ctx->trunk_htable_ctx,
+                    records[0]->storage.trunk_id)) == NULL)
+    {
         return ENOENT;
     }
 
@@ -259,19 +247,24 @@ static bool can_add_to_freelist(DATrunkFileInfo *trunk_info)
     }
 
     remain_size = DA_TRUNK_AVAIL_SPACE(trunk_info);
-    if (remain_size < DA_FILE_BLOCK_SIZE) {
+    if (remain_size < trunk_info->allocator->path_info->
+            ctx->storage.file_block_size)
+    {
         return false;
     }
 
     if (trunk_info->allocator->path_info->space_stat.used_ratio <=
-            DA_STORE_CFG.reclaim_trunks_on_path_usage)
+            trunk_info->allocator->path_info->ctx->storage.cfg.
+            reclaim_trunks_on_path_usage)
     {
         return ((double)trunk_info->free_start / (double)trunk_info->size
-                <= (1.00 -  DA_STORE_CFG.reclaim_trunks_on_path_usage));
+                <= (1.00 -  trunk_info->allocator->path_info->
+                    ctx->storage.cfg.reclaim_trunks_on_path_usage));
     }
 
     if ((double)remain_size / (double)trunk_info->size >=
-            (1.00 - DA_STORE_CFG.reclaim_trunks_on_path_usage))
+            (1.00 - trunk_info->allocator->path_info->
+             ctx->storage.cfg.reclaim_trunks_on_path_usage))
     {
         return true;
     }

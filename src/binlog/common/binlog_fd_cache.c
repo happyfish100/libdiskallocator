@@ -24,7 +24,8 @@ const char *da_binlog_fd_cache_binlog_filename(
         DABinlogFDCacheContext *cache_ctx, const uint64_t id,
         char *full_filename, const int size)
 {
-    return da_binlog_fd_cache_binlog_filename_ex(cache_ctx->subdir_name,
+    return da_binlog_fd_cache_binlog_filename_ex(
+            cache_ctx->data_path, cache_ctx->subdir_name,
             cache_ctx->subdirs, id, full_filename, size);
 }
 
@@ -32,17 +33,18 @@ const char *da_binlog_fd_cache_hash_filename(
         DABinlogFDCacheContext *cache_ctx, const uint64_t id,
         char *full_filename, const int size)
 {
-    return da_binlog_fd_cache_hash_filename_ex(cache_ctx->subdir_name,
-            cache_ctx->subdir_bits, cache_ctx->subdir_mask,
-            id, full_filename, size);
+    return da_binlog_fd_cache_hash_filename_ex(cache_ctx->data_path,
+            cache_ctx->subdir_name, cache_ctx->subdir_bits,
+            cache_ctx->subdir_mask, id, full_filename, size);
 }
 
-static bool subdir_exists(const char *subdir_name, const int subdir_index)
+static inline bool subdir_exists(const char *data_path,
+        const char *subdir_name, const int subdir_index)
 {
     char filepath[PATH_MAX];
 
     snprintf(filepath, sizeof(filepath), "%s/%s/%02X/%02X",
-            DA_DATA_PATH_STR, subdir_name, subdir_index, subdir_index);
+            data_path, subdir_name, subdir_index, subdir_index);
     return isDir(filepath);
 }
 
@@ -54,20 +56,21 @@ static int check_make_subdirs(const DABinlogFDCacheContext *cache_ctx)
     char filepath2[PATH_MAX];
 
     snprintf(filepath1, sizeof(filepath1), "%s/%s",
-            DA_DATA_PATH_STR, cache_ctx->subdir_name);
+            cache_ctx->data_path, cache_ctx->subdir_name);
     if ((result=fc_check_mkdir(filepath1, 0755)) != 0) {
         return result;
     }
 
-    if (subdir_exists(cache_ctx->subdir_name, 0) && subdir_exists(
-                cache_ctx->subdir_name, cache_ctx->subdirs - 1))
+    if (subdir_exists(cache_ctx->data_path, cache_ctx->subdir_name, 0) &&
+            subdir_exists(cache_ctx->data_path, cache_ctx->subdir_name,
+                cache_ctx->subdirs - 1))
     {
         return 0;
     }
 
     for (i=0; i<cache_ctx->subdirs; i++) {
         snprintf(filepath1, sizeof(filepath1), "%s/%s/%02X",
-                DA_DATA_PATH_STR, cache_ctx->subdir_name, i);
+                cache_ctx->data_path, cache_ctx->subdir_name, i);
         if ((result=fc_check_mkdir(filepath1, 0755)) != 0) {
             return result;
         }
@@ -120,11 +123,11 @@ static int init_htable_and_allocator(DABinlogFDCacheContext
             alloc_elements_once, 0, NULL, NULL, false);
 }
 
-int da_binlog_fd_cache_init_ex(DABinlogFDCacheContext *cache_ctx,
-        const char *subdir_name, const int open_flags,
-        const int max_idle_time, const int capacity,
-        da_binlog_fd_cache_filename_func filename_func,
-        const int subdirs)
+int da_binlog_fd_cache_init(DABinlogFDCacheContext *cache_ctx,
+        const char *data_path, const char *subdir_name,
+        const int open_flags, const int max_idle_time,
+        const int capacity, da_binlog_fd_cache_filename_func
+        filename_func, const int subdirs)
 {
     int result;
     int subdir_bits;
@@ -134,6 +137,10 @@ int da_binlog_fd_cache_init_ex(DABinlogFDCacheContext *cache_ctx,
         return result;
     }
 
+    cache_ctx->data_path = fc_strdup(data_path);
+    if (cache_ctx->data_path == NULL) {
+        return ENOMEM;
+    }
     cache_ctx->subdirs = subdirs;
     snprintf(cache_ctx->subdir_name, sizeof(cache_ctx->subdir_name),
             "%s", subdir_name);

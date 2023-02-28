@@ -22,32 +22,6 @@
 #include "../trunk/trunk_allocator.h"
 #include "../trunk/trunk_hashtable.h"
 
-typedef struct da_trunk_id_fd_pair {
-    uint32_t trunk_id;
-    int fd;
-} DATrunkIdFDPair;
-
-typedef struct da_trunk_fd_cache_entry {
-    DATrunkIdFDPair pair;
-    struct fc_list_head dlink;
-    struct da_trunk_fd_cache_entry *next;  //for hashtable
-} DATrunkFDCacheEntry;
-
-typedef struct {
-    DATrunkFDCacheEntry **buckets;
-    unsigned int size;
-} DATrunkFDCacheHashtable;
-
-typedef struct {
-    DATrunkFDCacheHashtable htable;
-    struct {
-        int capacity;
-        int count;
-        struct fc_list_head head;
-    } lru;
-    struct fast_mblock_man allocator;
-} DATrunkFDCacheContext;
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -73,18 +47,20 @@ extern "C" {
                 space->id_info.id);
     }
 
-    static inline void dio_get_space_log_filename(const uint32_t trunk_id,
-            char *binlog_filename, const int size)
+    static inline void dio_get_space_log_filename(DAContext *ctx, const
+            uint32_t trunk_id, char *binlog_filename, const int size)
     {
         DATrunkFileInfo *trunk;
 
-        if ((trunk=da_trunk_hashtable_get(trunk_id)) != NULL) {
+        if ((trunk=da_trunk_hashtable_get(&ctx->trunk_htable_ctx,
+                        trunk_id)) != NULL)
+        {
             snprintf(binlog_filename, size, "%s/%04d/.%06u.log",
                     trunk->allocator->path_info->store.path.str,
                     trunk->id_info.subdir, trunk->id_info.id);
         } else {
             snprintf(binlog_filename, size, "%s/.unkown_trunk.log",
-                    DA_DATA_PATH_STR);
+                    ctx->data.path.str);
         }
     }
 

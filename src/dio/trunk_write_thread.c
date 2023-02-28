@@ -37,6 +37,7 @@ typedef struct write_file_handle {
 } WriteFileHandle;
 
 typedef struct da_trunk_write_thread_context {
+    DAContext *ctx;
     const DAStoragePathInfo *path_info;
     struct {
         short path;
@@ -80,27 +81,28 @@ typedef struct trunk_write_path_contexts_array {
     TrunkWritePathContext *paths;
 } TrunkWritePathContextArray;
 
-typedef struct trunk_write_context {
+typedef struct da_trunk_write_context {
     TrunkWritePathContextArray path_ctx_array;
     UniqSkiplistFactory factory;
 } TrunkWriteContext;
 
-static TrunkWriteContext trunk_io_ctx = {{0, NULL}};
-
 static void *da_trunk_write_thread_func(void *arg);
 
-static int alloc_path_contexts()
+static int alloc_path_contexts(DAContext *ctx)
 {
+    int count;
     int bytes;
 
-    trunk_io_ctx.path_ctx_array.count = DA_STORE_CFG.max_store_path_index + 1;
-    bytes = sizeof(TrunkWritePathContext) * trunk_io_ctx.path_ctx_array.count;
-    trunk_io_ctx.path_ctx_array.paths = (TrunkWritePathContext *)
-        fc_malloc(bytes);
-    if (trunk_io_ctx.path_ctx_array.paths == NULL) {
+    count = ctx->storage.cfg.max_store_path_index + 1;
+    bytes = sizeof(TrunkWriteContext) + sizeof(TrunkWritePathContext) * count;
+    ctx->trunk_write_ctx = fc_malloc(bytes);
+    if (ctx->trunk_write_ctx == NULL) {
         return ENOMEM;
     }
-    memset(trunk_io_ctx.path_ctx_array.paths, 0, bytes);
+    memset(ctx->trunk_write_ctx, 0, bytes);
+    ctx->trunk_write_ctx->path_ctx_array.count = count;
+    ctx->trunk_write_ctx->path_ctx_array.paths = (TrunkWritePathContext *)
+        (ctx->trunk_write_ctx + 1);
     return 0;
 }
 
@@ -182,23 +184,25 @@ static int init_thread_context(TrunkWriteThreadContext *ctx)
             ctx, SF_G_THREAD_STACK_SIZE);
 }
 
-static int init_thread_contexts(TrunkWriteThreadContextArray *ctx_array,
+static int init_thread_contexts(DAContext *ctx,
+        TrunkWriteThreadContextArray *ctx_array,
         const int path_index)
 {
     int result;
-    TrunkWriteThreadContext *ctx;
+    TrunkWriteThreadContext *thread;
     TrunkWriteThreadContext *end;
     
     end = ctx_array->contexts + ctx_array->count;
-    for (ctx=ctx_array->contexts; ctx<end; ctx++) {
-        ctx->indexes.path = path_index;
+    for (thread=ctx_array->contexts; thread<end; thread++) {
+        thread->ctx = ctx;
+        thread->indexes.path = path_index;
         if (ctx_array->count == 1) {
-            ctx->indexes.thread = -1;
+            thread->indexes.thread = -1;
         } else {
-            ctx->indexes.thread = ctx - ctx_array->contexts;
+            thread->indexes.thread = thread - ctx_array->contexts;
         }
-        ctx->path_info = DA_STORE_CFG.paths_by_index.paths[path_index];
-        if ((result=init_thread_context(ctx)) != 0) {
+        thread->path_info = ctx->storage.cfg.paths_by_index.paths[path_index];
+        if ((result=init_thread_context(thread)) != 0) {
             return result;
         }
     }
@@ -206,7 +210,7 @@ static int init_thread_contexts(TrunkWriteThreadContextArray *ctx_array,
     return 0;
 }
 
-static int init_path_contexts(DAStoragePathArray *parray)
+static int init_path_contexts(DAContext *ctx, DAStoragePathArray *parray)
 {
     DAStoragePathInfo *p;
     DAStoragePathInfo *end;
@@ -216,7 +220,8 @@ static int init_path_contexts(DAStoragePathArray *parray)
 
     end = parray->paths + parray->count;
     for (p=parray->paths; p<end; p++) {
-        path_ctx = trunk_io_ctx.path_ctx_array.paths + p->store.index;
+        path_ctx = ctx->trunk_write_ctx->path_ctx_array.
+            paths + p->store.index;
         if ((thread_ctxs=alloc_thread_contexts(p->
                         write_thread_count)) == NULL)
         {
@@ -225,8 +230,8 @@ static int init_path_contexts(DAStoragePathArray *parray)
 
         path_ctx->writes.contexts = thread_ctxs;
         path_ctx->writes.count = p->write_thread_count;
-        if ((result=init_thread_contexts(&path_ctx->writes,
-                        p->store.index)) != 0)
+        if ((result=init_thread_contexts(ctx, &path_ctx->
+                        writes, p->store.index)) != 0)
         {
             return result;
         }
@@ -235,41 +240,43 @@ static int init_path_contexts(DAStoragePathArray *parray)
     return 0;
 }
 
-int da_trunk_write_thread_init()
+int da_trunk_write_thread_init(DAContext *ctx)
 {
     int result;
 
-    if ((result=alloc_path_contexts()) != 0) {
+    if ((result=alloc_path_contexts(ctx)) != 0) {
         return result;
     }
 
-    if ((result=init_path_contexts(&DA_STORE_CFG.write_cache)) != 0) {
+    if ((result=init_path_contexts(ctx, &ctx->storage.cfg.write_cache)) != 0) {
         return result;
     }
-    if ((result=init_path_contexts(&DA_STORE_CFG.store_path)) != 0) {
+    if ((result=init_path_contexts(ctx, &ctx->storage.cfg.store_path)) != 0) {
         return result;
     }
 
     /*
-       logInfo("trunk_io_ctx.path_ctx_array.count: %d",
-               trunk_io_ctx.path_ctx_array.count);
+       logInfo("ctx->trunk_write_ctx->path_ctx_array.count: %d",
+               ctx->trunk_write_ctx->path_ctx_array.count);
      */
     return 0;
 }
 
-void da_trunk_write_thread_terminate()
+void da_trunk_write_thread_terminate(DAContext *ctx)
 {
 }
 
-int da_trunk_write_thread_push(const int type, const int64_t version,
-        const DATrunkSpaceInfo *space, void *data,
-        trunk_write_io_notify_func notify_func, void *notify_arg)
+int da_trunk_write_thread_push(DAContext *ctx, const int type,
+        const int64_t version, const DATrunkSpaceInfo *space,
+        void *data, trunk_write_io_notify_func notify_func,
+        void *notify_arg)
 {
     TrunkWritePathContext *path_ctx;
     TrunkWriteThreadContext *thread_ctx;
     TrunkWriteIOBuffer *iob;
 
-    path_ctx = trunk_io_ctx.path_ctx_array.paths + space->store->index;
+    path_ctx = ctx->trunk_write_ctx->path_ctx_array.
+        paths + space->store->index;
     thread_ctx = path_ctx->writes.contexts + space->
         id_info.id % path_ctx->writes.count;
     iob = (TrunkWriteIOBuffer *)fast_mblock_alloc_object(&thread_ctx->mblock);
@@ -342,7 +349,7 @@ static int get_write_fd(TrunkWriteThreadContext *ctx,
     return 0;
 }
 
-static int do_create_trunk(TrunkWriteThreadContext *ctx,
+static int do_create_trunk(TrunkWriteThreadContext *thread,
         TrunkWriteIOBuffer *iob)
 {
     char trunk_filename[PATH_MAX];
@@ -381,7 +388,7 @@ static int do_create_trunk(TrunkWriteThreadContext *ctx,
     }
 
     if (fc_fallocate(fd, iob->space.size) == 0) {
-        result = da_trunk_binlog_write(DA_IO_TYPE_CREATE_TRUNK,
+        result = da_trunk_binlog_write(thread->ctx, DA_IO_TYPE_CREATE_TRUNK,
                 iob->space.store->index, &iob->space.id_info,
                 iob->space.size);
     } else {
@@ -395,14 +402,15 @@ static int do_create_trunk(TrunkWriteThreadContext *ctx,
     return result;
 }
 
-static int do_delete_trunk(TrunkWriteThreadContext *ctx, TrunkWriteIOBuffer *iob)
+static int do_delete_trunk(TrunkWriteThreadContext *thread,
+        TrunkWriteIOBuffer *iob)
 {
     char trunk_filename[PATH_MAX];
     int result;
 
     dio_get_trunk_filename(&iob->space, trunk_filename, sizeof(trunk_filename));
     if (unlink(trunk_filename) == 0) {
-        result = da_trunk_binlog_write(DA_IO_TYPE_DELETE_TRUNK,
+        result = da_trunk_binlog_write(thread->ctx, DA_IO_TYPE_DELETE_TRUNK,
                 iob->space.store->index, &iob->space.id_info,
                 iob->space.size);
     } else {
@@ -415,8 +423,8 @@ static int do_delete_trunk(TrunkWriteThreadContext *ctx, TrunkWriteIOBuffer *iob
     return result;
 }
 
-static int write_iovec(TrunkWriteThreadContext *ctx, int fd,
-        struct iovec *iovec, int iovcnt, int *remain_bytes)
+static int write_iovec(int fd, struct iovec *iovec,
+        int iovcnt, int *remain_bytes)
 {
     struct iovec *iov;
     struct iovec *end;
@@ -505,14 +513,14 @@ static int do_write_slices(TrunkWriteThreadContext *ctx)
 
     remain_bytes = ctx->iovec_bytes;
     if (ctx->iovec_array.count <= IOV_MAX) {
-        result = write_iovec(ctx, fd, ctx->iovec_array.iovs,
+        result = write_iovec(fd, ctx->iovec_array.iovs,
                 ctx->iovec_array.count, &remain_bytes);
     } else {
         iovec = ctx->iovec_array.iovs;
         remain_count = ctx->iovec_array.count;
         while (remain_count > 0) {
             iovcnt = (remain_count < IOV_MAX ? remain_count : IOV_MAX);
-            if ((result=write_iovec(ctx, fd, iovec, iovcnt,
+            if ((result=write_iovec(fd, iovec, iovcnt,
                             &remain_bytes)) != 0)
             {
                 break;
@@ -639,7 +647,7 @@ static inline int pop_to_request_skiplist(TrunkWriteThreadContext *ctx,
     ((current->space.id_info.id == last->space.id_info.id) && \
      (last->space.offset + last->space.size == current->space.offset))
 
-static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
+static void deal_request_skiplist(TrunkWriteThreadContext *thread)
 {
     TrunkWriteIOBuffer *iob;
     TrunkWriteIOBuffer *last;
@@ -651,7 +659,7 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
     io_count = 0;
     while (1) {
         iob = (TrunkWriteIOBuffer *)uniq_skiplist_get_first(
-                ctx->sl_pair->skiplist);
+                thread->sl_pair->skiplist);
         if (iob == NULL) {
             break;
         }
@@ -659,15 +667,15 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
         switch (iob->type) {
             case DA_IO_TYPE_CREATE_TRUNK:
             case DA_IO_TYPE_DELETE_TRUNK:
-                if (ctx->iovec_array.count > 0) {
-                    batch_write(ctx);
+                if (thread->iovec_array.count > 0) {
+                    batch_write(thread);
                     ++io_count;
                 }
 
                 if (iob->type == DA_IO_TYPE_CREATE_TRUNK) {
-                    result = do_create_trunk(ctx, iob);
+                    result = do_create_trunk(thread, iob);
                 } else {
-                    result = do_delete_trunk(ctx, iob);
+                    result = do_delete_trunk(thread, iob);
                 }
 
                 if (iob->notify.func != NULL) {
@@ -677,34 +685,34 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
                 break;
             case DA_IO_TYPE_WRITE_SLICE_BY_BUFF:
             case DA_IO_TYPE_WRITE_SLICE_BY_IOVEC:
-                if (ctx->iob_array.count > 0) {
-                    last = ctx->iob_array.iobs[ctx->iob_array.count - 1];
+                if (thread->iob_array.count > 0) {
+                    last = thread->iob_array.iobs[thread->iob_array.count - 1];
                     if (!(IOB_IS_SUCCESSIVE(last, iob) &&
-                                (ctx->iob_array.count < ctx->iob_array.alloc) &&
-                                (ctx->iovec_array.count < IOV_MAX) &&
-                                (ctx->iovec_bytes < IO_THREAD_BYTES_MAX)))
+                                (thread->iob_array.count < thread->iob_array.alloc) &&
+                                (thread->iovec_array.count < IOV_MAX) &&
+                                (thread->iovec_bytes < IO_THREAD_BYTES_MAX)))
                     {
-                        batch_write(ctx);
+                        batch_write(thread);
                         ++io_count;
                     }
                 }
 
                 inc_count = (iob->type == DA_IO_TYPE_WRITE_SLICE_BY_BUFF ?
                         1 : iob->iovec_array.count);
-                if ((result=fc_check_realloc_iovec_array(&ctx->iovec_array,
-                                ctx->iovec_array.count + inc_count)) != 0)
+                if ((result=fc_check_realloc_iovec_array(&thread->iovec_array,
+                                thread->iovec_array.count + inc_count)) != 0)
                 {
                     return;
                 }
 
                 if (iob->type == DA_IO_TYPE_WRITE_SLICE_BY_BUFF) {
-                    current = ctx->iovec_array.iovs +
-                        ctx->iovec_array.count++;
+                    current = thread->iovec_array.iovs +
+                        thread->iovec_array.count++;
                     current->iov_base = iob->buff;
                     current->iov_len = iob->space.size;
                 } else if (iob->iovec_array.count == 1) {  //fast path
-                    current = ctx->iovec_array.iovs +
-                        ctx->iovec_array.count++;
+                    current = thread->iovec_array.iovs +
+                        thread->iovec_array.count++;
                     current->iov_base = iob->iovec_array.iovs[0].iov_base;
                     current->iov_len = iob->space.size;
                 } else {
@@ -715,7 +723,7 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
                     int padding;
 
                     total = 0;
-                    dest = ctx->iovec_array.iovs + ctx->iovec_array.count;
+                    dest = thread->iovec_array.iovs + thread->iovec_array.count;
                     end = iob->iovec_array.iovs + iob->iovec_array.count;
                     for (src=iob->iovec_array.iovs; src<end; src++) {
                         *dest++ = *src;
@@ -727,11 +735,11 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
                         (dest - 1)->iov_len += padding;
                     }
 
-                    ctx->iovec_array.count += iob->iovec_array.count;
+                    thread->iovec_array.count += iob->iovec_array.count;
                 }
 
-                ctx->iob_array.iobs[ctx->iob_array.count++] = iob;
-                ctx->iovec_bytes += iob->space.size;
+                thread->iob_array.iobs[thread->iob_array.count++] = iob;
+                thread->iovec_bytes += iob->space.size;
                 break;
             default:
                 logError("file: "__FILE__", line: %d, "
@@ -740,7 +748,7 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
                 return;
         }
 
-        if ((result=uniq_skiplist_delete(ctx->sl_pair->
+        if ((result=uniq_skiplist_delete(thread->sl_pair->
                         skiplist, iob)) != 0)
         {
             logCrit("file: "__FILE__", line: %d, "
@@ -753,53 +761,53 @@ static void deal_request_skiplist(TrunkWriteThreadContext *ctx)
         if (iob->type == DA_IO_TYPE_CREATE_TRUNK ||
                 iob->type == DA_IO_TYPE_DELETE_TRUNK)
         {
-            fast_mblock_free_object(&ctx->mblock, iob);
+            fast_mblock_free_object(&thread->mblock, iob);
         }
     }
 
-    if (ctx->iovec_array.count > 0) {
+    if (thread->iovec_array.count > 0) {
         if (io_count == 0) {
-            batch_write(ctx);
+            batch_write(thread);
         }
     }
 }
 
 static void *da_trunk_write_thread_func(void *arg)
 {
-    TrunkWriteThreadContext *ctx;
+    TrunkWriteThreadContext *thread;
     int count;
 
-    ctx = (TrunkWriteThreadContext *)arg;
+    thread = (TrunkWriteThreadContext *)arg;
 #ifdef OS_LINUX
     {
         int len;
         char thread_name[16];
 
         len = snprintf(thread_name, sizeof(thread_name),
-                "dio-p%02d-w", ctx->indexes.path);
-        if (ctx->indexes.thread >= 0) {
+                "dio-p%02d-w", thread->indexes.path);
+        if (thread->indexes.thread >= 0) {
             snprintf(thread_name + len, sizeof(thread_name) - len,
-                    "[%d]", ctx->indexes.thread);
+                    "[%d]", thread->indexes.thread);
         }
         prctl(PR_SET_NAME, thread_name);
     }
 #endif
 
     while (SF_G_CONTINUE_FLAG) {
-        count = pop_to_request_skiplist(ctx,
-                ctx->iovec_array.count == 0);
+        count = pop_to_request_skiplist(thread,
+                thread->iovec_array.count == 0);
         if (count < 0) {  //error
             continue;
         }
 
         if (count == 0) {
-            if (ctx->iovec_array.count > 0) {
-                batch_write(ctx);
+            if (thread->iovec_array.count > 0) {
+                batch_write(thread);
             }
             continue;
         }
 
-        deal_request_skiplist(ctx);
+        deal_request_skiplist(thread);
     }
 
     return NULL;
@@ -817,14 +825,14 @@ static void write_io_notify_callback(struct da_trunk_write_io_buffer
     PTHREAD_MUTEX_UNLOCK(&sctx->lcp.lock);
 }
 
-int da_trunk_write_thread_by_buff_synchronize(DATrunkSpaceInfo *space,
-        char *buff, SFSynchronizeContext *sctx)
+int da_trunk_write_thread_by_buff_synchronize(DAContext *ctx,
+        DATrunkSpaceInfo *space, char *buff, SFSynchronizeContext *sctx)
 {
     int result;
 
     sctx->result = INT16_MIN;
-    if ((result=da_trunk_write_thread_push_slice_by_buff(space, buff,
-                    write_io_notify_callback, sctx)) != 0)
+    if ((result=da_trunk_write_thread_push_slice_by_buff(ctx, space,
+                    buff, write_io_notify_callback, sctx)) != 0)
     {
         return result;
     }

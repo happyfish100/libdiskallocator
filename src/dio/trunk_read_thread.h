@@ -59,17 +59,18 @@ typedef struct da_synchronized_read_context {
 extern "C" {
 #endif
 
-    int da_trunk_read_thread_init();
-    void da_trunk_read_thread_terminate();
+    int da_trunk_read_thread_init(DAContext *ctx);
+    void da_trunk_read_thread_terminate(DAContext *ctx);
 
     /* MUST set rb->direct_io in Linux before call this function */
-    int da_trunk_read_thread_push(const DATrunkSpaceInfo *space,
+    int da_trunk_read_thread_push(DAContext *ctx,
+            const DATrunkSpaceInfo *space,
             const int read_bytes, DATrunkReadBuffer *rb,
             da_trunk_read_io_notify_func notify_func, void *notify_arg);
 
-    int da_init_read_context(DASynchronizedReadContext *ctx);
+    int da_init_read_context(DASynchronizedReadContext *rctx);
 
-    int da_slice_read(DASynchronizedReadContext *ctx);
+    int da_slice_read(DAContext *ctx, DASynchronizedReadContext *rctx);
 
 #ifdef __cplusplus
 }

@@ -23,49 +23,34 @@
 #include "../../dio/trunk_fd_cache.h"
 #include "space_log_reader.h"
 
-typedef struct da_trunk_space_log_record_array {
-    DATrunkSpaceLogRecord **records;
-    int count;
-    int alloc;
-} DATrunkSpaceLogRecordArray;
-
-typedef struct da_trunk_space_log_context {
-    struct fc_queue queue;
-    SFSynchronizeContext notify;
-    DASpaceLogReader reader;
-    DATrunkSpaceLogRecordArray record_array;
-    DATrunkFDCacheContext fd_cache_ctx;
-    FastBuffer buffer;
-} DATrunkSpaceLogContext;
-
-#define DA_SPACE_LOG_RECORD_ALLOCATOR g_da_trunk_space_log_ctx.reader.record_allocator
-#define DA_SPACE_LOG_SKIPLIST_FACTORY g_da_trunk_space_log_ctx.reader.factory
+#define DA_SPACE_LOG_RECORD_ALLOCATOR(ctx)   \
+    ctx->space_log_ctx.reader.record_allocator
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    extern DATrunkSpaceLogContext g_da_trunk_space_log_ctx;
+    int da_trunk_space_log_init(DAContext *ctx);
+    int da_trunk_space_log_start(DAContext *ctx);
+    void da_trunk_space_log_destroy(DAContext *ctx);
 
-    int da_trunk_space_log_init();
-    int da_trunk_space_log_start();
-    void da_trunk_space_log_destroy();
+    int da_trunk_space_log_calc_version(DAContext *ctx,
+            const uint32_t trunk_id, int64_t *version);
 
-    int da_trunk_space_log_calc_version(const uint32_t trunk_id,
-            int64_t *version);
-
-    static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_record()
+    static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_record(
+            DAContext *ctx)
     {
         return (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &DA_SPACE_LOG_RECORD_ALLOCATOR);
+                &DA_SPACE_LOG_RECORD_ALLOCATOR(ctx));
     }
 
     static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_fill_record(
-            const int64_t version, const int64_t oid, const int64_t fid,
-            const char op_type, const DAPieceFieldStorage *storage)
+            DAContext *ctx, const int64_t version, const int64_t oid,
+            const int64_t fid, const char op_type,
+            const DAPieceFieldStorage *storage)
     {
         DATrunkSpaceLogRecord *record;
-        if ((record=da_trunk_space_log_alloc_record()) == NULL) {
+        if ((record=da_trunk_space_log_alloc_record(ctx)) == NULL) {
             return NULL;
         }
 
@@ -80,29 +65,31 @@ extern "C" {
         return record;
     }
 
-    static inline int da_trunk_space_log_alloc_chain(const int count,
-            struct fc_queue_info *chain)
+    static inline int da_trunk_space_log_alloc_chain(DAContext *ctx,
+            const int count, struct fc_queue_info *chain)
     {
-        return fc_queue_alloc_chain(&g_da_trunk_space_log_ctx.queue,
-                &DA_SPACE_LOG_RECORD_ALLOCATOR, count, chain);
+        return fc_queue_alloc_chain(&ctx->space_log_ctx.queue,
+                &DA_SPACE_LOG_RECORD_ALLOCATOR(ctx), count, chain);
     }
 
     static inline void da_trunk_space_log_free_chain(
-            struct fc_queue_info *chain)
+            DAContext *ctx, struct fc_queue_info *chain)
     {
-        fc_queue_free_chain(&g_da_trunk_space_log_ctx.queue,
-                &DA_SPACE_LOG_RECORD_ALLOCATOR, chain);
+        fc_queue_free_chain(&ctx->space_log_ctx.queue,
+                &DA_SPACE_LOG_RECORD_ALLOCATOR(ctx), chain);
     }
 
     static inline void da_trunk_space_log_push_chain(
-            struct fc_queue_info *qinfo)
+            DAContext *ctx, struct fc_queue_info *qinfo)
     {
-        fc_queue_push_queue_to_tail(&g_da_trunk_space_log_ctx.queue, qinfo);
+        fc_queue_push_queue_to_tail(&ctx->space_log_ctx.queue, qinfo);
     }
 
-    int da_trunk_space_log_redo(const char *space_log_filename);
+    int da_trunk_space_log_redo(DAContext *ctx,
+            const char *space_log_filename);
 
-    int da_trunk_space_log_unlink(const uint32_t trunk_id);
+    int da_trunk_space_log_unlink(DAContext *ctx,
+            const uint32_t trunk_id);
 
     static inline void da_trunk_space_log_pack(const DATrunkSpaceLogRecord
             *record, FastBuffer *buffer)
@@ -118,14 +105,15 @@ extern "C" {
     int da_trunk_space_log_unpack(const string_t *line,
             DATrunkSpaceLogRecord *record, char *error_info);
 
-    static inline void da_trunk_space_log_inc_waiting_count(const int count)
+    static inline void da_trunk_space_log_inc_waiting_count(
+            DAContext *ctx, const int count)
     {
-        sf_synchronize_counter_add(&g_da_trunk_space_log_ctx.notify, count);
+        sf_synchronize_counter_add(&ctx->space_log_ctx.notify, count);
     }
 
-    static inline void da_trunk_space_log_wait()
+    static inline void da_trunk_space_log_wait(DAContext *ctx)
     {
-        sf_synchronize_counter_wait(&g_da_trunk_space_log_ctx.notify);
+        sf_synchronize_counter_wait(&ctx->space_log_ctx.notify);
     }
 
 #ifdef __cplusplus

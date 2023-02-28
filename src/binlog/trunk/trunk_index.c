@@ -28,8 +28,6 @@
 #define TRUNK_RECORD_FIELD_INDEX_USED_BYTES   3
 #define TRUNK_RECORD_FIELD_INDEX_FREE_START   4
 
-SFBinlogIndexContext g_da_trunk_index_ctx;
-
 static int pack_record(char *buff, DATrunkIndexRecord *record)
 {
     return sprintf(buff, "%"PRId64" %u %u %u %u\n",
@@ -65,13 +63,13 @@ static int unpack_record(const string_t *line,
     return 0;
 }
 
-void da_trunk_index_init()
+void da_trunk_index_init(DAContext *ctx)
 {
     char filename[PATH_MAX];
 
     snprintf(filename, sizeof(filename), "%s/%s",
-            DA_DATA_PATH_STR, TRUNK_INDEX_FILENAME);
-    sf_binlog_index_init(&g_da_trunk_index_ctx, "trunk", filename,
+            ctx->data.path.str, TRUNK_INDEX_FILENAME);
+    sf_binlog_index_init(&ctx->trunk_index_ctx, "trunk", filename,
             TRUNK_INDEX_RECORD_MAX_SIZE, sizeof(DATrunkIndexRecord),
             (pack_record_func)pack_record, (unpack_record_func)unpack_record);
 }

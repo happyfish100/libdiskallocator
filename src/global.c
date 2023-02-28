@@ -26,29 +26,47 @@
 
 DiskAllocatorGlobalVars g_disk_allocator_vars;
 
-int da_load_config(const int my_server_id, const int file_block_size,
-        const DADataGlobalConfig *data_cfg, const char *storage_filename)
+int da_global_init(const int my_server_id)
 {
     int result;
 
+    if ((result=fast_mblock_init_ex1(&DA_TRUNK_ALLOCATOR,
+                    "trunk_file_info", sizeof(DATrunkFileInfo),
+                    16384, 0, NULL, NULL, true)) != 0)
+    {
+        return result;
+    }
+
     DA_MY_SERVER_ID = my_server_id;
-    DA_FILE_BLOCK_SIZE = file_block_size;
-    g_disk_allocator_vars.data = *data_cfg;
-    if ((result=da_storage_config_load(&DA_STORE_CFG, storage_filename)) == 0) {
-        da_storage_config_to_log(&DA_STORE_CFG);
+    base64_init_ex(&DA_BASE64_CTX, 0, '-', '_', '.');
+    return 0;
+}
+
+int da_load_config(DAContext *context, const int file_block_size,
+        const DADataConfig *data_cfg, const char *storage_filename)
+{
+    int result;
+
+    context->storage.file_block_size = file_block_size;
+    context->data = *data_cfg;
+    if ((result=da_storage_config_load(&context->storage.cfg,
+                    storage_filename)) == 0)
+    {
+        da_storage_config_to_log(&context->storage.cfg);
     }
 
     return result;
 }
 
-int da_init_start(da_redo_queue_push_func redo_queue_push_func)
+int da_init_start(DAContext *ctx, da_redo_queue_push_func
+        redo_queue_push_func)
 {
     int result;
 
-    DA_REDO_QUEUE_PUSH_FUNC = redo_queue_push_func;
-    da_trunk_index_init();
+    ctx->redo_queue_push_func = redo_queue_push_func;
+    da_trunk_index_init(ctx);
 
-    if ((result=da_trunk_hashtable_init()) != 0) {
+    if ((result=da_trunk_hashtable_init(&ctx->trunk_htable_ctx)) != 0) {
         return result;
     }
 
@@ -60,7 +78,7 @@ int da_init_start(da_redo_queue_push_func redo_queue_push_func)
         return result;
     }
 
-    if ((result=da_trunk_space_log_init()) != 0) {
+    if ((result=da_trunk_space_log_init(ctx)) != 0) {
         return result;
     }
 
@@ -72,7 +90,7 @@ int da_init_start(da_redo_queue_push_func redo_queue_push_func)
         return result;
     }
 
-    if ((result=da_trunk_space_log_start()) != 0) {
+    if ((result=da_trunk_space_log_start(ctx)) != 0) {
         return result;
     }
 

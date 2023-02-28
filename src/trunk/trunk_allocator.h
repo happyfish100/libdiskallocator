@@ -73,19 +73,9 @@ typedef struct da_trunk_allocator {
     } reclaim; //for trunk reclaim
 } DATrunkAllocator;
 
-typedef struct {
-    struct fast_mblock_man trunk_allocator;
-} DATrunkAllocatorGlobalVars;
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define G_DA_TRUNK_ALLOCATOR  g_da_da_trunk_allocator_vars.trunk_allocator
-
-    extern DATrunkAllocatorGlobalVars g_da_da_trunk_allocator_vars;
-
-    int da_trunk_allocator_init();
 
     int da_trunk_allocator_init_instance(DATrunkAllocator *allocator,
             DAStoragePathInfo *path_info);
@@ -183,16 +173,21 @@ extern "C" {
         used_ratio = allocator->path_info->space_stat.used_ratio
             + allocator->path_info->reserved_space.ratio;
         if (used_ratio >= 1.00) {
-            return DA_STORE_CFG.never_reclaim_on_trunk_usage;
+            return allocator->path_info->ctx->storage.cfg.
+                never_reclaim_on_trunk_usage;
         } else {
-            return DA_STORE_CFG.never_reclaim_on_trunk_usage *
-                (used_ratio - DA_STORE_CFG.reclaim_trunks_on_path_usage) /
-                (1.00 -  DA_STORE_CFG.reclaim_trunks_on_path_usage);
+            return allocator->path_info->ctx->storage.cfg.
+                never_reclaim_on_trunk_usage * (used_ratio -
+                        allocator->path_info->ctx->storage.cfg.
+                        reclaim_trunks_on_path_usage) / (1.00 -
+                            allocator->path_info->ctx->storage.cfg.
+                            reclaim_trunks_on_path_usage);
         }
     }
 
-    int da_trunk_allocator_deal_space_changes(DATrunkSpaceLogRecord **records,
-            const int count, uint32_t *used_bytes);
+    int da_trunk_allocator_deal_space_changes(DAContext *ctx,
+            DATrunkSpaceLogRecord **records, const int count,
+            uint32_t *used_bytes);
 
 #ifdef __cplusplus
 }

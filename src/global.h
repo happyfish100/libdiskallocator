@@ -18,52 +18,22 @@
 #define _DISK_ALLOCATOR_GLOBAL_H
 
 #include "fastcommon/common_define.h"
+#include "fastcommon/base64.h"
 #include "sf/sf_global.h"
 #include "binlog/common/binlog_types.h"
 #include "storage_config.h"
 
 typedef struct {
-    string_t path;   //data path
-    int binlog_buffer_size;
-    int binlog_subdirs;
-    int trunk_index_dump_interval;
-    TimeInfo trunk_index_dump_base_time;
-} DADataGlobalConfig;
-
-typedef struct {
-    DADataGlobalConfig data;
-
-    struct {
-        int file_block_size;
-        DAStorageConfig cfg;
-        int read_direct_io_paths;
-    } storage;
-
     int my_server_id;
-
-    da_redo_queue_push_func redo_queue_push_func;
+    struct base64_context base64_ctx;
+    struct fast_mblock_man trunk_allocator;  //element: DATrunkAllocator
     da_binlog_unpack_record_func unpack_record;
     da_binlog_shrink_func shrink;
 } DiskAllocatorGlobalVars;
 
-#define DA_DATA_PATH           g_disk_allocator_vars.data.path
-#define DA_DATA_PATH_STR       DA_DATA_PATH.str
-#define DA_DATA_PATH_LEN       DA_DATA_PATH.len
-
-#define DA_BINLOG_BUFFER_SIZE  g_disk_allocator_vars.data.binlog_buffer_size
-#define DA_BINLOG_SUBDIRS      g_disk_allocator_vars.data.binlog_subdirs
-
-#define DA_TRUNK_INDEX_DUMP_INTERVAL  g_disk_allocator_vars. \
-    data.trunk_index_dump_interval
-
-#define DA_TRUNK_INDEX_DUMP_BASE_TIME g_disk_allocator_vars. \
-    data.trunk_index_dump_base_time
-
 #define DA_MY_SERVER_ID        g_disk_allocator_vars.my_server_id
-#define DA_STORE_CFG           g_disk_allocator_vars.storage.cfg
-#define DA_FILE_BLOCK_SIZE     g_disk_allocator_vars.storage.file_block_size
-
-#define DA_REDO_QUEUE_PUSH_FUNC g_disk_allocator_vars.redo_queue_push_func
+#define DA_BASE64_CTX          g_disk_allocator_vars.base64_ctx
+#define DA_TRUNK_ALLOCATOR     g_disk_allocator_vars.trunk_allocator
 
 #define READ_DIRECT_IO_PATHS g_disk_allocator_vars.storage.read_direct_io_paths
 
@@ -73,10 +43,13 @@ extern "C" {
 
     extern DiskAllocatorGlobalVars g_disk_allocator_vars;
 
-    int da_load_config(const int my_server_id, const int file_block_size,
-            const DADataGlobalConfig *data_cfg, const char *storage_filename);
+    int da_global_init(const int my_server_id);
 
-    int da_init_start(da_redo_queue_push_func redo_queue_push_func);
+    int da_load_config(DAContext *context, const int file_block_size,
+            const DADataConfig *data_cfg, const char *storage_filename);
+
+    int da_init_start(DAContext *context, da_redo_queue_push_func
+            redo_queue_push_func);
 
 #ifdef __cplusplus
 }

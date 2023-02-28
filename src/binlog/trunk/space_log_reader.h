@@ -19,11 +19,6 @@
 
 #include "fastcommon/uniq_skiplist.h"
 
-typedef struct da_space_log_reader {
-    struct fast_mblock_man record_allocator;
-    UniqSkiplistFactory factory;
-} DASpaceLogReader;
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -33,15 +28,15 @@ extern "C" {
 
     void da_space_log_reader_destroy(DASpaceLogReader *reader);
 
-    int da_space_log_reader_load_ex(DASpaceLogReader *reader,
+    int da_space_log_reader_load_ex(DAContext *ctx,
             const uint32_t trunk_id, UniqSkiplist **skiplist,
             const bool ignore_enoent);
 
-    static inline int da_space_log_reader_load(DASpaceLogReader *reader,
+    static inline int da_space_log_reader_load(DAContext *ctx,
             const uint32_t trunk_id, UniqSkiplist **skiplist)
     {
         const bool ignore_enoent = false;
-        return da_space_log_reader_load_ex(reader,
+        return da_space_log_reader_load_ex(ctx,
                 trunk_id, skiplist, ignore_enoent);
     }
 
