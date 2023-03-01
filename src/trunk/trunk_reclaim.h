@@ -45,13 +45,14 @@ typedef struct da_trunk_reclaim_context {
         int ignore; //object/inode not exist
     } slice_counts;
     SFSynchronizeContext log_notify;  //for binlog
+    DAContext *ctx;
 } DATrunkReclaimContext;
 
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-    int da_trunk_reclaim_init_ctx(DATrunkReclaimContext *rctx);
+    int da_trunk_reclaim_init_ctx(DATrunkReclaimContext *rctx, DAContext *ctx);
 
     int da_trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
             DATrunkReclaimContext *rctx);

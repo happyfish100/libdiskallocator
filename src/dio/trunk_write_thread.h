@@ -65,7 +65,7 @@ extern "C" {
             trunk_write_io_notify_func notify_func, void *notify_arg)
     {
         DATrunkAllocator *allocator;
-        allocator = g_da_allocator_mgr->allocator_ptr_array.
+        allocator = ctx->store_allocator_mgr->allocator_ptr_array.
             allocators[space->store->index];
         return da_trunk_write_thread_push(ctx, type, __sync_add_and_fetch(
                     &allocator->allocate.current_version, 1), space,
@@ -86,7 +86,7 @@ extern "C" {
             trunk_write_io_notify_func notify_func, void *notify_arg)
     {
         DATrunkAllocator *allocator;
-        allocator = g_da_allocator_mgr->allocator_ptr_array.
+        allocator = ctx->store_allocator_mgr->allocator_ptr_array.
             allocators[space->store->index];
         return da_trunk_write_thread_push(ctx, DA_IO_TYPE_WRITE_SLICE_BY_BUFF,
                 __sync_add_and_fetch(&allocator->allocate.current_version, 1),

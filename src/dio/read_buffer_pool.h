@@ -39,18 +39,20 @@ typedef struct da_aligned_read_buffer {
 extern "C" {
 #endif
 
-    int da_read_buffer_pool_init(const int path_count,
+    int da_read_buffer_pool_init(DAContext *ctx, const int path_count,
             const SFMemoryWatermark *watermark);
 
-    int da_read_buffer_pool_start(const int max_idle_time,
+    int da_read_buffer_pool_start(DAContext *ctx, const int max_idle_time,
             const int reclaim_interval);
 
-    int da_read_buffer_pool_create(const short path_index, const int block_size);
+    int da_read_buffer_pool_create(DAContext *ctx, const short path_index,
+            const int block_size);
 
-    DAAlignedReadBuffer *da_read_buffer_pool_alloc(
+    DAAlignedReadBuffer *da_read_buffer_pool_alloc(DAContext *ctx,
             const short path_index, const int size);
 
-    void da_read_buffer_pool_free(DAAlignedReadBuffer *buffer);
+    void da_read_buffer_pool_free(DAContext *ctx,
+            DAAlignedReadBuffer *buffer);
 
 #ifdef __cplusplus
 }

@@ -49,8 +49,8 @@ int da_load_config(DAContext *context, const int file_block_size,
 
     context->storage.file_block_size = file_block_size;
     context->data = *data_cfg;
-    if ((result=da_storage_config_load(&context->storage.cfg,
-                    storage_filename)) == 0)
+    if ((result=da_storage_config_load(context, &context->
+                    storage.cfg, storage_filename)) == 0)
     {
         da_storage_config_to_log(&context->storage.cfg);
     }
@@ -70,11 +70,11 @@ int da_init_start(DAContext *ctx, da_redo_queue_push_func
         return result;
     }
 
-    if ((result=da_trunk_write_thread_init()) != 0) {
+    if ((result=da_trunk_write_thread_init(ctx)) != 0) {
         return result;
     }
 
-    if ((result=da_trunk_read_thread_init()) != 0) {
+    if ((result=da_trunk_read_thread_init(ctx)) != 0) {
         return result;
     }
 
@@ -82,11 +82,11 @@ int da_init_start(DAContext *ctx, da_redo_queue_push_func
         return result;
     }
 
-    if ((result=da_storage_allocator_init()) != 0) {
+    if ((result=da_storage_allocator_init(ctx)) != 0) {
         return result;
     }
 
-    if ((result=da_trunk_binlog_init()) != 0) {
+    if ((result=da_trunk_binlog_init(ctx)) != 0) {
         return result;
     }
 
@@ -94,15 +94,15 @@ int da_init_start(DAContext *ctx, da_redo_queue_push_func
         return result;
     }
 
-    if ((result=da_trunk_maker_init()) != 0) {
+    if ((result=da_trunk_maker_init(ctx)) != 0) {
         return result;
     }
 
-    if ((result=da_storage_allocator_prealloc_trunk_freelists()) != 0) {
+    if ((result=da_storage_allocator_prealloc_trunk_freelists(ctx)) != 0) {
         return result;
     }
 
-    if ((result=da_trunk_prealloc_init()) != 0) {
+    if ((result=da_trunk_prealloc_init(ctx)) != 0) {
         return result;
     }
 

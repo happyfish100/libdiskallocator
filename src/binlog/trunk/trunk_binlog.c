@@ -78,14 +78,14 @@ static int trunk_parse_line(DAContext *ctx,
     }
 
     if (op_type == DA_IO_TYPE_CREATE_TRUNK) {
-        if ((result=da_storage_allocator_add_trunk(path_index,
+        if ((result=da_storage_allocator_add_trunk(ctx, path_index,
                        &id_info, trunk_size)) != 0)
         {
             sprintf(error_info, "add trunk fail, errno: %d, "
                     "error info: %s", result, STRERROR(result));
         }
     } else if (op_type == DA_IO_TYPE_DELETE_TRUNK) {
-        if ((result=da_storage_allocator_delete_trunk(path_index,
+        if ((result=da_storage_allocator_delete_trunk(ctx, path_index,
                         &id_info)) != 0)
         {
             sprintf(error_info, "delete trunk fail, errno: %d, "

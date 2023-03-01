@@ -243,8 +243,8 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
 
         TRUNK_ALLOC_SPACE(trunk_info, space_info, aligned_size);
         space_info++;
-        if (DA_TRUNK_AVAIL_SPACE(trunk_info) <
-                DA_STORE_CFG.discard_remain_space_size)
+        if (DA_TRUNK_AVAIL_SPACE(trunk_info) < allocator->path_info->
+                ctx->storage.cfg.discard_remain_space_size)
         {
             da_trunk_freelist_remove(freelist);
             __sync_sub_and_fetch(&trunk_info->allocator->path_info->
@@ -256,7 +256,8 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
     } while (0);
 
     if (result == ENOSPC && is_normal) {
-        da_remove_from_avail_aptr_array(&g_da_allocator_mgr->
+        da_remove_from_avail_aptr_array(allocator->path_info->ctx,
+                &allocator->path_info->ctx->store_allocator_mgr->
                 store_path, allocator);
     }
     PTHREAD_MUTEX_UNLOCK(&freelist->lcp.lock);

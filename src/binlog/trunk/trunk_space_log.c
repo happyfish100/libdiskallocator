@@ -348,8 +348,8 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
     DATrunkSpaceLogRecord target;
     DATrunkSpaceLogRecordArray array;
 
-    if ((result=da_space_log_reader_load_ex(ctx, (*start)->storage.
-                    trunk_id, &skiplist, ignore_enoent)) != 0)
+    if ((result=da_space_log_reader_load_ex(&ctx->space_log_ctx.reader,
+                    (*start)->storage.trunk_id, &skiplist, ignore_enoent)) != 0)
     {
         return result;
     }
@@ -458,7 +458,7 @@ int da_trunk_space_log_redo(DAContext *ctx, const char *space_log_filename)
 static int dump_trunk_indexes(DAContext *ctx)
 {
     int result;
-    if ((result=da_storage_allocator_trunks_to_array(
+    if ((result=da_storage_allocator_trunks_to_array(ctx,
                     &ctx->trunk_index_ctx.index_array)) != 0)
     {
         return result;
@@ -476,8 +476,8 @@ static int set_trunk_by_space_log(DAContext *ctx, DATrunkFileInfo *trunk)
     DATrunkSpaceLogRecord *record;
     DATrunkSpaceLogRecord *last;
 
-    if ((result=da_space_log_reader_load_ex(ctx, trunk->id_info.id,
-                    &skiplist, ignore_enoent)) != 0)
+    if ((result=da_space_log_reader_load_ex(&ctx->space_log_ctx.reader,
+                    trunk->id_info.id, &skiplist, ignore_enoent)) != 0)
     {
         return result;
     }
@@ -618,7 +618,7 @@ int da_trunk_space_log_init(DAContext *ctx)
     const bool allocator_use_lock = true;
     int result;
 
-    if ((result=da_space_log_reader_init(&ctx->space_log_ctx.reader,
+    if ((result=da_space_log_reader_init(&ctx->space_log_ctx.reader, ctx,
                     alloc_skiplist_once, allocator_use_lock)) != 0)
     {
         return result;

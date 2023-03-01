@@ -29,7 +29,7 @@ typedef void (*da_trunk_allocate_done_callback)(DATrunkAllocator *allocator,
 extern "C" {
 #endif
 
-    int da_trunk_maker_init();
+    int da_trunk_maker_init(DAContext *ctx);
 
     int da_trunk_maker_allocate_ex(DATrunkAllocator *allocator,
             const bool urgent, const bool need_lock,

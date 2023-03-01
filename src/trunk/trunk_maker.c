@@ -64,8 +64,6 @@ typedef struct da_trunk_maker_context {
     TrunkMakerThreadArray thread_array;
 } TrunkMakerContext;
 
-static TrunkMakerContext tmaker_ctx;
-
 static int deal_trunk_util_change_event(DATrunkAllocator *allocator,
         DATrunkFileInfo *trunk)
 {
@@ -176,8 +174,8 @@ static int prealloc_trunk_finish(DATrunkAllocator *allocator,
     time_t last_stat_time;
     DATrunkFileInfo *trunk_info;
 
-    result = da_storage_allocator_add_trunk_ex(space->store->index,
-            &space->id_info, space->size, &trunk_info);
+    result = da_storage_allocator_add_trunk_ex(allocator->path_info->ctx,
+            space->store->index,&space->id_info, space->size, &trunk_info);
     if (result == 0) {
         *freelist_type = da_trunk_allocator_add_to_freelist(allocator, trunk_info);
     }
@@ -200,15 +198,15 @@ static int do_prealloc_trunk(TrunkMakerThreadInfo *thread,
     DATrunkSpaceInfo space;
 
     space.store = &task->allocator->path_info->store;
-    if ((result=da_trunk_id_info_generate(space.store->index,
-                    &space.id_info)) != 0)
+    if ((result=da_trunk_id_info_generate(task->allocator->path_info->ctx,
+                    space.store->index, &space.id_info)) != 0)
     {
         return result;
     }
     space.offset = 0;
-    space.size = DA_STORE_CFG.trunk_file_size;
-
-    if ((result=da_trunk_write_thread_push_trunk_op(DA_IO_TYPE_CREATE_TRUNK,
+    space.size = task->allocator->path_info->ctx->storage.cfg.trunk_file_size;
+    if ((result=da_trunk_write_thread_push_trunk_op(task->allocator->
+                    path_info->ctx, DA_IO_TYPE_CREATE_TRUNK,
                     &space, create_trunk_done, thread)) == 0)
     {
         PTHREAD_MUTEX_LOCK(&thread->allocate.lcp.lock);
@@ -258,7 +256,9 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     }
 
     used_bytes = __sync_fetch_and_add(&trunk->used.bytes, 0);
-    if ((int64_t)trunk->size - used_bytes < DA_FILE_BLOCK_SIZE) {
+    if ((int64_t)trunk->size - used_bytes < task->allocator->
+            path_info->ctx->storage.file_block_size)
+    {
         return ENOENT;
     }
 
@@ -309,7 +309,8 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
             result, time_prompt);
 
     if (result == 0) {
-        da_trunk_space_log_unlink(trunk->id_info.id);
+        da_trunk_space_log_unlink(task->allocator->
+                path_info->ctx, trunk->id_info.id);
 
         PTHREAD_MUTEX_LOCK(&task->allocator->freelist.lcp.lock);
         trunk->free_start = 0;
@@ -340,10 +341,11 @@ static int do_allocate_trunk(TrunkMakerThreadInfo *thread, TrunkMakerTask *task,
     }
 
     avail_enough = task->allocator->path_info->space_stat.avail -
-        DA_STORE_CFG.trunk_file_size > task->allocator->
-        path_info->reserved_space.value;
+        task->allocator->path_info->ctx->storage.cfg.trunk_file_size >
+        task->allocator->path_info->reserved_space.value;
     if (task->allocator->path_info->space_stat.used_ratio <=
-            DA_STORE_CFG.reclaim_trunks_on_path_usage)
+            task->allocator->path_info->ctx->storage.
+            cfg.reclaim_trunks_on_path_usage)
     {
         need_reclaim = !avail_enough;
     } else {
@@ -434,26 +436,31 @@ static int maker_task_alloc_init(void *element, void *args)
     return 0;
 }
 
-int da_trunk_maker_init()
+int da_trunk_maker_init(DAContext *ctx)
 {
     int result;
+    int count;
     int bytes;
     TrunkMakerThreadInfo *thread;
     TrunkMakerThreadInfo *end;
 
-    tmaker_ctx.thread_array.count = DA_STORE_CFG.trunk_prealloc_threads;
-    bytes = sizeof(TrunkMakerThreadInfo) * tmaker_ctx.thread_array.count;
-    tmaker_ctx.thread_array.threads =
-        (TrunkMakerThreadInfo *)fc_malloc(bytes);
-    if (tmaker_ctx.thread_array.threads == NULL) {
+    count = ctx->storage.cfg.trunk_prealloc_threads;
+    bytes = sizeof(TrunkMakerContext) + sizeof(TrunkMakerThreadInfo) * count;
+    ctx->trunk_maker_ctx = fc_malloc(bytes);
+    if (ctx->trunk_maker_ctx == NULL) {
         return ENOMEM;
     }
-    memset(tmaker_ctx.thread_array.threads, 0, bytes);
+    memset(ctx->trunk_maker_ctx, 0, bytes);
+    ctx->trunk_maker_ctx->thread_array.count = count;
+    ctx->trunk_maker_ctx->thread_array.threads = (TrunkMakerThreadInfo *)
+        (ctx->trunk_maker_ctx + 1);
 
-    end = tmaker_ctx.thread_array.threads +
-        tmaker_ctx.thread_array.count;
-    for (thread=tmaker_ctx.thread_array.threads; thread<end; thread++) {
-        thread->index = thread - tmaker_ctx.thread_array.threads;
+    end = ctx->trunk_maker_ctx->thread_array.threads +
+        ctx->trunk_maker_ctx->thread_array.count;
+    for (thread=ctx->trunk_maker_ctx->thread_array.threads;
+            thread<end; thread++)
+    {
+        thread->index = thread - ctx->trunk_maker_ctx->thread_array.threads;
         thread->allocate.result = -1;
         if ((result=init_pthread_lock_cond_pair(&thread->allocate.lcp)) != 0) {
             return result;
@@ -471,7 +478,9 @@ int da_trunk_maker_init()
             return result;
         }
 
-        if ((result=da_trunk_reclaim_init_ctx(&thread->reclaim_ctx)) != 0) {
+        if ((result=da_trunk_reclaim_init_ctx(&thread->
+                        reclaim_ctx, ctx)) != 0)
+        {
             return result;
         }
 
@@ -491,8 +500,9 @@ int da_trunk_maker_allocate_ex(DATrunkAllocator *allocator, const bool urgent,
     TrunkMakerThreadInfo *thread;
     TrunkMakerTask *task;
 
-    thread = tmaker_ctx.thread_array.threads + allocator->path_info->
-        store.index % tmaker_ctx.thread_array.count;
+    thread = allocator->path_info->ctx->trunk_maker_ctx->thread_array.threads +
+        allocator->path_info->store.index % allocator->path_info->
+        ctx->trunk_maker_ctx->thread_array.count;
     if ((task=(TrunkMakerTask *)fast_mblock_alloc_object(
                     &thread->task_allocator)) == NULL)
     {

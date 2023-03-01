@@ -333,6 +333,7 @@ typedef struct da_trunk_space_log_record_array {
 typedef struct da_space_log_reader {
     struct fast_mblock_man record_allocator;
     UniqSkiplistFactory factory;
+    struct da_context *ctx;
 } DASpaceLogReader;
 
 /* trunk fd cache */
@@ -380,6 +381,7 @@ typedef struct da_context {
         int read_direct_io_paths;
     } storage;
 
+    bool check_trunk_avail_in_progress;
     DAStorePathArray store_path_array;
     SFBinlogIndexContext trunk_index_ctx;
     DATrunkHTableContext trunk_htable_ctx;
@@ -388,6 +390,12 @@ typedef struct da_context {
 
     struct da_trunk_read_context  *trunk_read_ctx;
     struct da_trunk_write_context *trunk_write_ctx;
+    struct da_read_buffer_pool_context *rbpool_ctx;
+
+    struct da_trunk_id_info_context *trunk_id_info_ctx;
+    struct da_storage_allocator_manager *store_allocator_mgr;
+    struct da_trunk_prealloc_context *trunk_prealloc_ctx;
+    struct da_trunk_maker_context *trunk_maker_ctx;
 
     da_redo_queue_push_func redo_queue_push_func;
 } DAContext;

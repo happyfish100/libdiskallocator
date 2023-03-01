@@ -45,37 +45,36 @@ typedef struct {
     SortedSubdirs *subdirs;  //mapped by store path index
 } SortedSubdirArray;
 
-typedef struct {
+typedef struct da_trunk_id_info_context {
     volatile int64_t current_trunk_id;
     volatile int64_t current_subdir_id;
     int64_t last_trunk_id;
     int64_t last_subdir_id;
     SortedSubdirArray subdir_array;
-    struct fast_mblock_man subdir_allocator;
-} TrunkIdInfoContext;
+} DATrunkIdInfoContext;
 
-static TrunkIdInfoContext id_info_context = {0, 0, 0, 0, {0, NULL}};
+static struct fast_mblock_man *subdir_allocator = NULL;
 
-
-static inline void get_trunk_id_dat_filename(
+static inline void get_trunk_id_dat_filename(DAContext *ctx,
         char *full_filename, const int size)
 {
-    snprintf(full_filename, size, "%s/%s", DA_DATA_PATH_STR,
+    snprintf(full_filename, size, "%s/%s", ctx->data.path.str,
             TRUNK_ID_DATA_FILENAME);
 }
 
-#define save_current_trunk_id(current_trunk_id, current_subdir_id) \
-    save_current_trunk_id_ex(current_trunk_id, current_subdir_id, false)
+#define save_current_trunk_id(ctx, current_trunk_id, current_subdir_id) \
+    save_current_trunk_id_ex(ctx, current_trunk_id, current_subdir_id, false)
 
-static int save_current_trunk_id_ex(const int64_t current_trunk_id,
-        const int64_t current_subdir_id, const bool on_exit)
+static int save_current_trunk_id_ex(DAContext *ctx,
+        const int64_t current_trunk_id, const int64_t current_subdir_id,
+        const bool on_exit)
 {
     char full_filename[PATH_MAX];
     char buff[256];
     int len;
     int result;
 
-    get_trunk_id_dat_filename(full_filename, sizeof(full_filename));
+    get_trunk_id_dat_filename(ctx, full_filename, sizeof(full_filename));
     len = sprintf(buff, "%s=%"PRId64"\n"
             "%s=%"PRId64"\n",
             ITEM_NAME_TRUNK_ID, current_trunk_id,
@@ -95,13 +94,13 @@ static int save_current_trunk_id_ex(const int64_t current_trunk_id,
     return result;
 }
 
-static int load_current_trunk_id()
+static int load_current_trunk_id(DAContext *ctx)
 {
     char full_filename[PATH_MAX];
     IniContext ini_context;
     int result;
 
-    get_trunk_id_dat_filename(full_filename, sizeof(full_filename));
+    get_trunk_id_dat_filename(ctx, full_filename, sizeof(full_filename));
     if (access(full_filename, F_OK) != 0) {
         if (errno == ENOENT) {
             return 0;
@@ -115,15 +114,15 @@ static int load_current_trunk_id()
         return result;
     }
 
-    id_info_context.current_trunk_id = iniGetInt64Value(NULL,
+    ctx->trunk_id_info_ctx->current_trunk_id = iniGetInt64Value(NULL,
             ITEM_NAME_TRUNK_ID, &ini_context, 0);
-    id_info_context.current_subdir_id  = iniGetInt64Value(NULL,
+    ctx->trunk_id_info_ctx->current_subdir_id  = iniGetInt64Value(NULL,
             ITEM_NAME_SUBDIR_ID, &ini_context, 0);
 
     /*
     if (!iniGetBoolValue(NULL, ITEM_NAME_NORMAL_EXIT, &ini_context, false)) {
-        id_info_context.current_trunk_id += 10000;
-        id_info_context.current_subdir_id += 100;
+        ctx->trunk_id_info_ctx->current_trunk_id += 10000;
+        ctx->trunk_id_info_ctx->current_subdir_id += 100;
     }
     */
 
@@ -140,28 +139,28 @@ static int compare_by_id(const void *p1, const void *p2)
 static void id_info_free_func(void *ptr, const int delay_seconds)
 {
     if (delay_seconds > 0) {
-        fast_mblock_delay_free_object(&id_info_context.subdir_allocator,
-                ptr, delay_seconds);
+        fast_mblock_delay_free_object(subdir_allocator, ptr, delay_seconds);
     } else {
-        fast_mblock_free_object(&id_info_context.subdir_allocator, ptr);
+        fast_mblock_free_object(subdir_allocator, ptr);
     }
 }
 
-static int alloc_sorted_subdirs()
+static int alloc_sorted_subdirs(DAContext *ctx)
 {
     int bytes;
 
-    id_info_context.subdir_array.count = DA_STORE_CFG.max_store_path_index + 1;
-    bytes = sizeof(SortedSubdirs) * id_info_context.subdir_array.count;
-    id_info_context.subdir_array.subdirs = (SortedSubdirs *)fc_malloc(bytes);
-    if (id_info_context.subdir_array.subdirs == NULL) {
+    ctx->trunk_id_info_ctx->subdir_array.count = ctx->
+        storage.cfg.max_store_path_index + 1;
+    bytes = sizeof(SortedSubdirs) * ctx->trunk_id_info_ctx->subdir_array.count;
+    ctx->trunk_id_info_ctx->subdir_array.subdirs = fc_malloc(bytes);
+    if (ctx->trunk_id_info_ctx->subdir_array.subdirs == NULL) {
         return ENOMEM;
     }
-    memset(id_info_context.subdir_array.subdirs, 0, bytes);
+    memset(ctx->trunk_id_info_ctx->subdir_array.subdirs, 0, bytes);
     return 0;
 }
 
-static int init_sorted_subdirs(DAStoragePathArray *parray)
+static int init_sorted_subdirs(DAContext *ctx, DAStoragePathArray *parray)
 {
     const int init_level_count = 4;
     const int max_level_count = 16;
@@ -174,7 +173,8 @@ static int init_sorted_subdirs(DAStoragePathArray *parray)
 
     end = parray->paths + parray->count;
     for (p=parray->paths; p<end; p++) {
-        sorted_subdirs = id_info_context.subdir_array.subdirs + p->store.index;
+        sorted_subdirs = ctx->trunk_id_info_ctx->
+            subdir_array.subdirs + p->store.index;
         if ((result=uniq_skiplist_init_pair(&sorted_subdirs->all,
                         init_level_count, max_level_count,
                         compare_by_id, id_info_free_func,
@@ -204,82 +204,103 @@ static int init_sorted_subdirs(DAStoragePathArray *parray)
 
 static int trunk_id_sync_to_file(void *arg)
 {
+    DAContext *ctx;
     int64_t current_trunk_id;
     int64_t current_subdir_id;
 
+    ctx = arg;
     current_trunk_id = __sync_add_and_fetch(
-            &id_info_context.current_trunk_id, 0);
+            &ctx->trunk_id_info_ctx->current_trunk_id, 0);
     current_subdir_id = __sync_add_and_fetch(
-            &id_info_context.current_subdir_id, 0);
+            &ctx->trunk_id_info_ctx->current_subdir_id, 0);
 
-    if (id_info_context.last_trunk_id != id_info_context.current_trunk_id ||
-            id_info_context.last_subdir_id != id_info_context.current_subdir_id)
+    if (ctx->trunk_id_info_ctx->last_trunk_id != ctx->trunk_id_info_ctx->
+            current_trunk_id || ctx->trunk_id_info_ctx->last_subdir_id !=
+            ctx->trunk_id_info_ctx->current_subdir_id)
     {
-        id_info_context.last_trunk_id = id_info_context.current_trunk_id;
-        id_info_context.last_subdir_id = id_info_context.current_subdir_id;
-        return save_current_trunk_id(current_trunk_id, current_subdir_id);
+        ctx->trunk_id_info_ctx->last_trunk_id = ctx->
+            trunk_id_info_ctx->current_trunk_id;
+        ctx->trunk_id_info_ctx->last_subdir_id = ctx->
+            trunk_id_info_ctx->current_subdir_id;
+        return save_current_trunk_id(ctx, current_trunk_id,
+                current_subdir_id);
     }
 
     return 0;
 }
 
-static int setup_sync_to_file_task()
+static int setup_sync_to_file_task(DAContext *ctx)
 {
     ScheduleEntry schedule_entry;
     ScheduleArray schedule_array;
 
     INIT_SCHEDULE_ENTRY(schedule_entry, sched_generate_next_id(),
-            0, 0, 0, 1, trunk_id_sync_to_file, NULL);
+            0, 0, 0, 1, trunk_id_sync_to_file, ctx);
 
     schedule_array.count = 1;
     schedule_array.entries = &schedule_entry;
     return sched_add_entries(&schedule_array);
 }
 
-int da_trunk_id_info_init()
+int da_trunk_id_info_init(DAContext *ctx)
 {
     const int alloc_elements_once = 8 * 1024;
     int result;
 
-    if ((result=fast_mblock_init_ex1(&id_info_context.subdir_allocator,
-                    "subdir_info", sizeof(StoreSubdirInfo),
-                    alloc_elements_once, 0, NULL, NULL, true)) != 0)
-    {
+    ctx->trunk_id_info_ctx = fc_malloc(sizeof(DATrunkIdInfoContext));
+    if (ctx->trunk_id_info_ctx == NULL) {
+        return ENOMEM;
+    }
+    memset(ctx->trunk_id_info_ctx, 0, sizeof(DATrunkIdInfoContext));
+
+    if (subdir_allocator == NULL) {
+        subdir_allocator = fc_malloc(sizeof(struct fast_mblock_man));
+        if (subdir_allocator == NULL) {
+            return ENOMEM;
+        }
+        if ((result=fast_mblock_init_ex1(subdir_allocator, "subdir_info",
+                        sizeof(StoreSubdirInfo), alloc_elements_once,
+                        0, NULL, NULL, true)) != 0)
+        {
+            return result;
+        }
+    }
+
+    if ((result=alloc_sorted_subdirs(ctx)) != 0) {
+        return result;
+    }
+    if ((result=init_sorted_subdirs(ctx, &ctx->storage.cfg.write_cache)) != 0) {
+        return result;
+    }
+    if ((result=init_sorted_subdirs(ctx, &ctx->storage.cfg.store_path)) != 0) {
         return result;
     }
 
-    if ((result=alloc_sorted_subdirs()) != 0) {
-        return result;
-    }
-    if ((result=init_sorted_subdirs(&DA_STORE_CFG.write_cache)) != 0) {
-        return result;
-    }
-    if ((result=init_sorted_subdirs(&DA_STORE_CFG.store_path)) != 0) {
+    if ((result=load_current_trunk_id(ctx)) != 0) {
         return result;
     }
 
-    if ((result=load_current_trunk_id()) != 0) {
-        return result;
-    }
-
-    id_info_context.last_trunk_id = id_info_context.current_trunk_id;
-    id_info_context.last_subdir_id = id_info_context.current_subdir_id;
-    return setup_sync_to_file_task();
+    ctx->trunk_id_info_ctx->last_trunk_id = ctx->
+        trunk_id_info_ctx->current_trunk_id;
+    ctx->trunk_id_info_ctx->last_subdir_id = ctx->
+        trunk_id_info_ctx->current_subdir_id;
+    return setup_sync_to_file_task(ctx);
 }
 
-void da_trunk_id_info_destroy()
+void da_trunk_id_info_destroy(DAContext *ctx)
 {
     int64_t current_trunk_id;
     int64_t current_subdir_id;
 
     current_trunk_id = __sync_add_and_fetch(
-            &id_info_context.current_trunk_id, 0);
+            &ctx->trunk_id_info_ctx->current_trunk_id, 0);
     current_subdir_id = __sync_add_and_fetch(
-            &id_info_context.current_subdir_id, 0);
-    save_current_trunk_id_ex(current_trunk_id, current_subdir_id, true);
+            &ctx->trunk_id_info_ctx->current_subdir_id, 0);
+    save_current_trunk_id_ex(ctx, current_trunk_id, current_subdir_id, true);
 }
 
-int da_trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info)
+int da_trunk_id_info_add(DAContext *ctx, const int path_index,
+        const DATrunkIdInfo *id_info)
 {
     SortedSubdirs *sorted_subdirs;
     StoreSubdirInfo target;
@@ -289,7 +310,7 @@ int da_trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info)
     target.subdir = id_info->subdir;
     target.file_count = 1;
     result = 0;
-    sorted_subdirs = id_info_context.subdir_array.subdirs + path_index;
+    sorted_subdirs = ctx->trunk_id_info_ctx->subdir_array.subdirs + path_index;
     if (sorted_subdirs->all.skiplist == NULL) {
         return ENOENT;
     }
@@ -300,13 +321,14 @@ int da_trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info)
                 sorted_subdirs->all.skiplist, &target);
         if (subdir != NULL) {
             subdir->file_count++;
-            if (subdir->file_count >= DA_STORE_CFG.max_trunk_files_per_subdir) {
+            if (subdir->file_count >= ctx->storage.cfg.
+                    max_trunk_files_per_subdir)
+            {
                 uniq_skiplist_delete(sorted_subdirs->
                         freelist.skiplist, subdir);
             }
         } else {
-            subdir = (StoreSubdirInfo *)fast_mblock_alloc_object(
-                    &id_info_context.subdir_allocator);
+            subdir = fast_mblock_alloc_object(subdir_allocator);
             if (subdir == NULL) {
                 result = ENOMEM;
                 break;
@@ -317,7 +339,9 @@ int da_trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info)
             {
                 break;
             }
-            if (subdir->file_count < DA_STORE_CFG.max_trunk_files_per_subdir) {
+            if (subdir->file_count < ctx->storage.cfg.
+                    max_trunk_files_per_subdir)
+            {
                 result = uniq_skiplist_insert(sorted_subdirs->
                         freelist.skiplist, subdir);
             }
@@ -328,7 +352,8 @@ int da_trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info)
     return result;
 }
 
-int da_trunk_id_info_delete(const int path_index, const DATrunkIdInfo *id_info)
+int da_trunk_id_info_delete(DAContext *ctx, const int path_index,
+        const DATrunkIdInfo *id_info)
 {
     SortedSubdirs *sorted_subdirs;
     StoreSubdirInfo target;
@@ -338,7 +363,7 @@ int da_trunk_id_info_delete(const int path_index, const DATrunkIdInfo *id_info)
     target.subdir = id_info->subdir;
     target.file_count = 1;
     result = 0;
-    sorted_subdirs = id_info_context.subdir_array.subdirs + path_index;
+    sorted_subdirs = ctx->trunk_id_info_ctx->subdir_array.subdirs + path_index;
     if (sorted_subdirs->all.skiplist == NULL) {
         return ENOENT;
     }
@@ -348,7 +373,9 @@ int da_trunk_id_info_delete(const int path_index, const DATrunkIdInfo *id_info)
         subdir = (StoreSubdirInfo *)uniq_skiplist_find(
                 sorted_subdirs->all.skiplist, &target);
         if (subdir != NULL) {
-            if (subdir->file_count >= DA_STORE_CFG.max_trunk_files_per_subdir) {
+            if (subdir->file_count >= ctx->storage.cfg.
+                    max_trunk_files_per_subdir)
+            {
                 uniq_skiplist_insert(sorted_subdirs->
                         freelist.skiplist, subdir);
             }
@@ -360,12 +387,13 @@ int da_trunk_id_info_delete(const int path_index, const DATrunkIdInfo *id_info)
     return result;
 }
 
-int da_trunk_id_info_generate(const int path_index, DATrunkIdInfo *id_info)
+int da_trunk_id_info_generate(DAContext *ctx,
+        const int path_index, DATrunkIdInfo *id_info)
 {
     SortedSubdirs *sorted_subdirs;
     StoreSubdirInfo *sd_info;
 
-    sorted_subdirs = id_info_context.subdir_array.subdirs + path_index;
+    sorted_subdirs = ctx->trunk_id_info_ctx->subdir_array.subdirs + path_index;
     if (sorted_subdirs->all.skiplist == NULL) {
         return ENOENT;
     }
@@ -378,11 +406,11 @@ int da_trunk_id_info_generate(const int path_index, DATrunkIdInfo *id_info)
     if (sd_info != NULL) {
         id_info->subdir = sd_info->subdir;
     } else {
-        id_info->subdir = __sync_add_and_fetch(
-                &id_info_context.current_subdir_id, 1);
+        id_info->subdir = __sync_add_and_fetch(&ctx->
+                trunk_id_info_ctx->current_subdir_id, 1);
     }
-    id_info->id = __sync_add_and_fetch(
-            &id_info_context.current_trunk_id, 1);
+    id_info->id = __sync_add_and_fetch(&ctx->
+            trunk_id_info_ctx->current_trunk_id, 1);
 
     return 0;
 }

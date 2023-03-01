@@ -35,8 +35,6 @@ typedef struct {
 #define DA_BASE64_CTX          g_disk_allocator_vars.base64_ctx
 #define DA_TRUNK_ALLOCATOR     g_disk_allocator_vars.trunk_allocator
 
-#define READ_DIRECT_IO_PATHS g_disk_allocator_vars.storage.read_direct_io_paths
-
 #ifdef __cplusplus
 extern "C" {
 #endif

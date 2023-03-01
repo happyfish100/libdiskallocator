@@ -23,15 +23,18 @@
 extern "C" {
 #endif
 
-    int da_trunk_id_info_init();
+    int da_trunk_id_info_init(DAContext *ctx);
 
-    void da_trunk_id_info_destroy();
+    void da_trunk_id_info_destroy(DAContext *ctx);
 
-    int da_trunk_id_info_add(const int path_index, const DATrunkIdInfo *id_info);
+    int da_trunk_id_info_add(DAContext *ctx, const int path_index,
+        const DATrunkIdInfo *id_info);
 
-    int da_trunk_id_info_delete(const int path_index, const DATrunkIdInfo *id_info);
+    int da_trunk_id_info_delete(DAContext *ctx, const int path_index,
+        const DATrunkIdInfo *id_info);
 
-    int da_trunk_id_info_generate(const int path_index, DATrunkIdInfo *id_info);
+    int da_trunk_id_info_generate(DAContext *ctx,
+        const int path_index, DATrunkIdInfo *id_info);
 
 #ifdef __cplusplus
 }

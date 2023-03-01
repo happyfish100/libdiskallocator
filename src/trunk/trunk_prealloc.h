@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-    int da_trunk_prealloc_init();
+    int da_trunk_prealloc_init(DAContext *ctx);
 
 #ifdef __cplusplus
 }

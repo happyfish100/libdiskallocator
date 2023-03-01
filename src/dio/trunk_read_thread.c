@@ -257,7 +257,7 @@ static int init_path_contexts(DAContext *ctx, DAStoragePathArray *parray)
 }
 
 #ifdef OS_LINUX
-static int rbpool_init_start()
+static int rbpool_init_start(DAContext *ctx)
 {
     SFMemoryWatermark memory_watermark;
     DAStoragePathInfo **pp;
@@ -270,8 +270,8 @@ static int rbpool_init_start()
         memory_watermark_low.value / path_count;
     memory_watermark.high = ctx->storage.cfg.aio_read_buffer.
         memory_watermark_high.value / path_count;
-    if ((result=da_read_buffer_pool_init(ctx->storage.cfg.paths_by_index.count,
-                    &memory_watermark)) != 0)
+    if ((result=da_read_buffer_pool_init(ctx->storage.cfg.
+                    paths_by_index.count, &memory_watermark)) != 0)
     {
         return result;
     }
@@ -288,8 +288,8 @@ static int rbpool_init_start()
         }
     }
 
-    return da_read_buffer_pool_start(ctx->storage.cfg.aio_read_buffer.max_idle_time,
-            ctx->storage.cfg.aio_read_buffer.reclaim_interval);
+    return da_read_buffer_pool_start(ctx->storage.cfg.aio_read_buffer.
+            max_idle_time, ctx->storage.cfg.aio_read_buffer.reclaim_interval);
 }
 #endif
 
@@ -298,8 +298,8 @@ int da_trunk_read_thread_init(DAContext *ctx)
     int result;
 
 #ifdef OS_LINUX
-    if (READ_DIRECT_IO_PATHS > 0) {
-        if ((result=rbpool_init_start()) != 0) {
+    if (ctx->storage.read_direct_io_paths > 0) {
+        if ((result=rbpool_init_start(ctx)) != 0) {
             return result;
         }
     }

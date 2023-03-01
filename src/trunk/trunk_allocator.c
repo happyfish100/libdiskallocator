@@ -208,17 +208,19 @@ int da_trunk_allocator_deal_space_changes(DAContext *ctx,
 DATrunkFreelistType da_trunk_allocator_add_to_freelist(
         DATrunkAllocator *allocator, DATrunkFileInfo *trunk_info)
 {
+    struct da_storage_allocator_manager *allocator_mgr;
     DATrunkFreelist *freelist;
 
-    PTHREAD_MUTEX_LOCK(&g_da_allocator_mgr->reclaim_freelist.lcp.lock);
-    if (g_da_allocator_mgr->reclaim_freelist.count < g_da_allocator_mgr->
+    allocator_mgr = allocator->path_info->ctx->store_allocator_mgr;
+    PTHREAD_MUTEX_LOCK(&allocator_mgr->reclaim_freelist.lcp.lock);
+    if (allocator_mgr->reclaim_freelist.count < allocator_mgr->
             reclaim_freelist.water_mark_trunks)
     {
-        freelist = &g_da_allocator_mgr->reclaim_freelist;
+        freelist = &allocator_mgr->reclaim_freelist;
     } else {
         freelist = &allocator->freelist;
     }
-    PTHREAD_MUTEX_UNLOCK(&g_da_allocator_mgr->reclaim_freelist.lcp.lock);
+    PTHREAD_MUTEX_UNLOCK(&allocator_mgr->reclaim_freelist.lcp.lock);
 
     da_trunk_freelist_add(freelist, trunk_info);
     return (freelist == &allocator->freelist) ? da_freelist_type_normal :

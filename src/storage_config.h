@@ -24,12 +24,12 @@
 extern "C" {
 #endif
 
-    int da_storage_config_load(DAStorageConfig *storage_cfg,
+    int da_storage_config_load(DAContext *ctx, DAStorageConfig *storage_cfg,
             const char *storage_filename);
 
     int da_storage_config_calc_path_avail_space(DAStoragePathInfo *path_info);
 
-    void da_storage_config_stat_path_spaces(SFSpaceStat *ss);
+    void da_storage_config_stat_path_spaces(DAContext *ctx, SFSpaceStat *ss);
 
     void da_storage_config_to_log(DAStorageConfig *storage_cfg);
 

@@ -45,7 +45,7 @@ static void space_log_record_free_func(void *ptr, const int delay_seconds)
     fast_mblock_free_object(((DATrunkSpaceLogRecord *)ptr)->allocator, ptr);
 }
 
-int da_space_log_reader_init(DASpaceLogReader *reader,
+int da_space_log_reader_init(DASpaceLogReader *reader, DAContext *ctx,
         const int alloc_skiplist_once, const bool use_lock)
 {
     const int min_alloc_elements_once = 4;
@@ -53,6 +53,7 @@ int da_space_log_reader_init(DASpaceLogReader *reader,
     const bool bidirection = false;
     int result;
 
+    reader->ctx = ctx;
     if ((result=fast_mblock_init_ex1(&reader->record_allocator,
                     "space-log-record", sizeof(DATrunkSpaceLogRecord),
                     8 * 1024, 0, space_log_record_alloc_init,
@@ -140,7 +141,7 @@ static int parse_to_skiplist(DASpaceLogReader *reader,
     return 0;
 }
 
-int da_space_log_reader_load_ex(DAContext *ctx,
+int da_space_log_reader_load_ex(DASpaceLogReader *reader,
         const uint32_t trunk_id, UniqSkiplist **skiplist,
         const bool ignore_enoent)
 {
@@ -151,13 +152,13 @@ int da_space_log_reader_load_ex(DAContext *ctx,
     char buff[64 * 1024];
     char error_info[256];
 
-    *skiplist = uniq_skiplist_new(&ctx->space_log_ctx.reader.
-            factory, DA_SPACE_SKPLIST_INIT_LEVEL_COUNT);
+    *skiplist = uniq_skiplist_new(&reader->factory,
+            DA_SPACE_SKPLIST_INIT_LEVEL_COUNT);
     if (*skiplist == NULL) {
         return ENOMEM;
     }
 
-    dio_get_space_log_filename(ctx, trunk_id, space_log_filename,
+    dio_get_space_log_filename(reader->ctx, trunk_id, space_log_filename,
             sizeof(space_log_filename));
     if ((fd=open(space_log_filename, O_RDONLY | O_CLOEXEC)) < 0) {
         result = errno != 0 ? errno : EACCES;
@@ -177,8 +178,8 @@ int da_space_log_reader_load_ex(DAContext *ctx,
     *error_info = '\0';
     content.str = buff;
     while ((content.len=fc_read_lines(fd, buff, sizeof(buff))) > 0) {
-        if ((result=parse_to_skiplist(&ctx->space_log_ctx.reader,
-                        *skiplist, &content, error_info)) != 0)
+        if ((result=parse_to_skiplist(reader, *skiplist,
+                        &content, error_info)) != 0)
         {
             logError("file: "__FILE__", line: %d, "
                     "parse file: %s fail, errno: %d, error info: %s",
