@@ -236,6 +236,7 @@ static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
     ini_ctx->section_name = section_name;
     for (i=0; i<count; i++) {
         sprintf(section_name, "%s-%d", section_name_prefix, i + 1);
+        parray->paths[i].ctx = ctx;
         if ((result=load_one_path(ctx, storage_cfg, ini_ctx,
                         &parray->paths[i].store.path)) != 0)
         {
