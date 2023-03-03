@@ -644,7 +644,7 @@ static int do_read_slice(TrunkReadThreadContext *ctx, DATrunkReadIOBuffer *iob)
             dio_get_trunk_filename(&iob->space, trunk_filename,
                     sizeof(trunk_filename));
             logError("file: "__FILE__", line: %d, "
-                    "read trunk file: %s fail, offset: %u, "
+                    "read trunk file: %s fail, offset: %"PRId64", "
                     "errno: %d, error info: %s", __LINE__, trunk_filename,
                     iob->space.offset + iob->rb->buffer.length,
                     result, STRERROR(result));

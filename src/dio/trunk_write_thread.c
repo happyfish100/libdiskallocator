@@ -122,8 +122,8 @@ static TrunkWriteThreadContext *alloc_thread_contexts(const int count)
 
 static int compare_by_version(const void *p1, const void *p2)
 {
-    return (int64_t)((TrunkWriteIOBuffer *)p1)->version -
-        (int64_t)((TrunkWriteIOBuffer *)p2)->version;
+    return fc_compare_int64(((TrunkWriteIOBuffer *)p1)->version,
+            ((TrunkWriteIOBuffer *)p2)->version);
 }
 
 static int init_write_context(TrunkWriteThreadContext *ctx)
@@ -495,7 +495,7 @@ static int do_write_slices(TrunkWriteThreadContext *ctx)
                     sizeof(trunk_filename));
             result = errno != 0 ? errno : EIO;
             logError("file: "__FILE__", line: %d, "
-                    "lseek file: %s fail, offset: %u, "
+                    "lseek file: %s fail, offset: %"PRId64", "
                     "errno: %d, error info: %s", __LINE__, trunk_filename,
                     first->space.offset, result, STRERROR(result));
             clear_write_fd(ctx);
@@ -552,7 +552,7 @@ static int do_write_slices(TrunkWriteThreadContext *ctx)
         dio_get_trunk_filename(&first->space, trunk_filename,
                 sizeof(trunk_filename));
         logError("file: "__FILE__", line: %d, "
-                "write to trunk file: %s fail, offset: %u, "
+                "write to trunk file: %s fail, offset: %"PRId64", "
                 "errno: %d, error info: %s", __LINE__, trunk_filename,
                 first->space.offset + (ctx->iovec_bytes -
                     remain_bytes), result, STRERROR(result));

@@ -141,7 +141,7 @@ int da_trunk_allocator_add(DATrunkAllocator *allocator,
 
     if (result != 0) {
         logError("file: "__FILE__", line: %d, "
-                "add trunk fail, trunk id: %u, "
+                "add trunk fail, trunk id: %"PRId64", "
                 "errno: %d, error info: %s", __LINE__,
                 id_info->id, result, STRERROR(result));
         fast_mblock_free_object(&DA_TRUNK_ALLOCATOR, trunk_info);
@@ -302,8 +302,8 @@ void da_trunk_allocator_deal_on_ready(DATrunkAllocator *allocator)
 
 void da_trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info)
 {
-    logInfo("trunk id: %u, subdir: %u, status: %d, slice count: %d, "
-            "used bytes: %u, trunk size: %u, free start: %u, "
+    logInfo("trunk id: %"PRId64", subdir: %"PRId64", status: %d, slice "
+            "count: %d, used bytes: %u, trunk size: %u, free start: %u, "
             "remain bytes: %u", trunk_info->id_info.id,
             trunk_info->id_info.subdir, trunk_info->status,
             trunk_info->used.count, trunk_info->used.bytes,

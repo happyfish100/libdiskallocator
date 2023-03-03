@@ -67,16 +67,21 @@ typedef struct {
 } DAStorePath;
 
 typedef struct {
-    uint32_t id;
-    uint32_t subdir;     //in which subdir
+    int64_t id;
+    int64_t subdir;     //in which subdir
 } DATrunkIdInfo;
 
 typedef struct {
     DAStorePath *store;
     DATrunkIdInfo id_info;
-    uint32_t offset;  //offset of the trunk file
-    uint32_t size;    //alloced space size
+    int64_t offset;  //offset of the trunk file
+    int64_t size;    //alloced space size
 } DATrunkSpaceInfo;
+
+typedef struct {
+    DATrunkSpaceInfo space;
+    int64_t version; //for write in order
+} DATrunkSpaceWithVersion;
 
 #ifdef OS_LINUX
 typedef struct aio_buffer_ptr_array {

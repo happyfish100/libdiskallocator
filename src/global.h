@@ -24,6 +24,7 @@
 #include "storage_config.h"
 
 typedef struct {
+    bool inited;
     int my_server_id;
     struct base64_context base64_ctx;
     struct fast_mblock_man trunk_allocator;  //element: DATrunkAllocator

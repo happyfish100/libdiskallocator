@@ -114,8 +114,8 @@ int da_trunk_hashtable_add(DATrunkHTableContext *ctx,
         } else if (trunk->id_info.id == current->id_info.id) {
             result = EEXIST;
             logError("file: "__FILE__", line: %d, "
-                    "trunk id: %u already exist", __LINE__,
-                    trunk->id_info.id);
+                    "trunk id: %"PRId64" already exist",
+                    __LINE__, trunk->id_info.id);
             break;
         }
 

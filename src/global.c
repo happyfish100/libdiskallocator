@@ -30,6 +30,10 @@ int da_global_init(const int my_server_id)
 {
     int result;
 
+    if (g_disk_allocator_vars.inited) {
+        return 0;
+    }
+
     if ((result=fast_mblock_init_ex1(&DA_TRUNK_ALLOCATOR,
                     "trunk_file_info", sizeof(DATrunkFileInfo),
                     16384, 0, NULL, NULL, true)) != 0)
@@ -39,6 +43,7 @@ int da_global_init(const int my_server_id)
 
     DA_MY_SERVER_ID = my_server_id;
     base64_init_ex(&DA_BASE64_CTX, 0, '-', '_', '.');
+    g_disk_allocator_vars.inited = true;
     return 0;
 }
 

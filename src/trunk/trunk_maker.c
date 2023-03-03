@@ -294,7 +294,7 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     long_to_comma_str(time_used, time_buff);
     sprintf(time_prompt, "time used: %s ms", time_buff);
     logInfo("file: "__FILE__", line: %d, "
-            "path index: %d, reclaimed trunk id: %u, "
+            "path index: %d, reclaimed trunk id: %"PRId64", "
             "migrate block count: %d, "
             "slice counts {total: %d, skip: %d, ignore: %d}, "
             "used bytes {last: %s, current: %u}, "
