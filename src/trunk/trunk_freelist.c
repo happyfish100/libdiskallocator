@@ -60,10 +60,12 @@ static inline void push_trunk_util_event_force(DATrunkAllocator *allocator,
 
 #define TRUNK_ALLOC_SPACE(trunk, space_info, alloc_size) \
     do { \
-        space_info->store = &trunk->allocator->path_info->store; \
-        space_info->id_info = trunk->id_info;   \
-        space_info->offset = trunk->free_start; \
-        space_info->size = alloc_size;          \
+        space_info->space.store = &trunk->allocator->path_info->store; \
+        space_info->space.id_info = trunk->id_info;   \
+        space_info->space.offset = trunk->free_start; \
+        space_info->space.size = alloc_size;          \
+        space_info->version = __sync_add_and_fetch(&trunk->  \
+                allocator->allocate.current_version, 1); \
         trunk->free_start += alloc_size;  \
         __sync_sub_and_fetch(&trunk->allocator->path_info-> \
                 trunk_stat.avail, alloc_size);  \
@@ -178,12 +180,12 @@ static int waiting_avail_trunk(struct da_trunk_allocator *allocator,
 
 int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
         DATrunkFreelist *freelist, const uint64_t blk_hc, const int size,
-        DATrunkSpaceInfo *spaces, int *count, const bool is_normal)
+        DATrunkSpaceWithVersion *spaces, int *count, const bool is_normal)
 {
     int result;
     uint32_t aligned_size;
     uint32_t remain_bytes;
-    DATrunkSpaceInfo *space_info;
+    DATrunkSpaceWithVersion *space_info;
     DATrunkFileInfo *trunk_info;
 
     aligned_size = MEM_ALIGN_CEIL(size, DA_SPACE_ALIGN_SIZE);

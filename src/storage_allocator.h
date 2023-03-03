@@ -93,7 +93,7 @@ extern "C" {
 
     static inline int da_storage_allocator_normal_alloc_ex(
             DAContext *ctx, const uint64_t blk_hc,
-            const int size, DATrunkSpaceInfo *spaces,
+            const int size, DATrunkSpaceWithVersion *spaces,
             int *count, const bool is_normal)
     {
         DATrunkAllocatorPtrArray *avail_array;
@@ -120,7 +120,7 @@ extern "C" {
 
     static inline int da_storage_allocator_reclaim_alloc(DAContext *ctx,
             const uint64_t blk_hc, const int size,
-            DATrunkSpaceInfo *spaces, int *count)
+            DATrunkSpaceWithVersion *spaces, int *count)
     {
         const bool is_normal = false;
         int result;

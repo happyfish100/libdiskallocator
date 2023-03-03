@@ -42,7 +42,7 @@ extern "C" {
 
     int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
             DATrunkFreelist *freelist, const uint64_t blk_hc, const int size,
-            DATrunkSpaceInfo *spaces, int *count, const bool is_normal);
+            DATrunkSpaceWithVersion *spaces, int *count, const bool is_normal);
 
 #ifdef __cplusplus
 }

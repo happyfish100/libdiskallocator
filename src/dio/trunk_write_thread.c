@@ -826,12 +826,14 @@ static void write_io_notify_callback(struct da_trunk_write_io_buffer
 }
 
 int da_trunk_write_thread_by_buff_synchronize(DAContext *ctx,
-        DATrunkSpaceInfo *space, char *buff, SFSynchronizeContext *sctx)
+        DATrunkSpaceWithVersion *space_info, char *buff,
+        SFSynchronizeContext *sctx)
 {
     int result;
 
     sctx->result = INT16_MIN;
-    if ((result=da_trunk_write_thread_push_slice_by_buff(ctx, space,
+    if ((result=da_trunk_write_thread_push_slice_by_buff(ctx,
+                    space_info->version, &space_info->space,
                     buff, write_io_notify_callback, sctx)) != 0)
     {
         return result;

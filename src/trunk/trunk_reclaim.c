@@ -141,14 +141,15 @@ static inline void log_rw_error(DASliceOpContext *op_ctx,
 }
 
 static int slice_write(DATrunkReclaimContext *rctx,
-        const uint64_t oid, DATrunkSpaceInfo *space)
+        const uint64_t oid, DATrunkSpaceWithVersion *space_info)
 {
     int count;
     int result;
 
     count = 1;
-    if ((result=da_storage_allocator_reclaim_alloc(rctx->ctx, oid, rctx->
-                    read_ctx.op_ctx.storage->length, space, &count)) != 0)
+    if ((result=da_storage_allocator_reclaim_alloc(rctx->ctx,
+                    oid, rctx->read_ctx.op_ctx.storage->length,
+                    space_info, &count)) != 0)
     {
         logError("file: "__FILE__", line: %d, "
                 "alloc disk space %d bytes fail, "
@@ -159,7 +160,7 @@ static int slice_write(DATrunkReclaimContext *rctx,
     }
 
     return da_trunk_write_thread_by_buff_synchronize(rctx->ctx,
-            space, DA_OP_CTX_BUFFER_PTR(rctx->read_ctx.op_ctx),
+            space_info, DA_OP_CTX_BUFFER_PTR(rctx->read_ctx.op_ctx),
             &rctx->read_ctx.sctx);
 }
 
@@ -167,7 +168,7 @@ static int migrate_one_slice(DATrunkReclaimContext *rctx,
         DATrunkSpaceLogRecord *record)
 {
     int result;
-    DATrunkSpaceInfo space;
+    DATrunkSpaceWithVersion space_info;
 
     rctx->read_ctx.op_ctx.storage = &record->storage;
     if ((result=da_slice_read(rctx->ctx, &rctx->read_ctx)) != 0) {
@@ -175,15 +176,14 @@ static int migrate_one_slice(DATrunkReclaimContext *rctx,
         return result == ENOENT ? 0 : result;
     }
 
-    if ((result=slice_write(rctx, record->oid, &space)) != 0) {
+    if ((result=slice_write(rctx, record->oid, &space_info)) != 0) {
         log_rw_error(&rctx->read_ctx.op_ctx, result, 0, "write");
         return result;
     }
 
-    record->storage.trunk_id = space.id_info.id;
-    record->storage.offset = space.offset;
-    record->storage.size = space.size;
-
+    record->storage.trunk_id = space_info.space.id_info.id;
+    record->storage.offset = space_info.space.offset;
+    record->storage.size = space_info.space.size;
     return 0;
 }
 

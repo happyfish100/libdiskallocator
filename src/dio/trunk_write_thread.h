@@ -34,6 +34,7 @@ typedef void (*trunk_write_io_notify_func)(struct da_trunk_write_io_buffer
 typedef struct da_trunk_write_io_buffer {
     int type;
     DATrunkSpaceInfo space;
+
     int64_t version; //for write in order
 
     union {
@@ -72,7 +73,7 @@ extern "C" {
                 NULL, notify_func, notify_arg);
     }
 
-    static inline int da_trunk_write_thread_push_slice_by_buff_ex(
+    static inline int da_trunk_write_thread_push_slice_by_buff(
             DAContext *ctx, const int64_t version, DATrunkSpaceInfo *space,
             char *buff, trunk_write_io_notify_func notify_func,
             void *notify_arg)
@@ -81,20 +82,9 @@ extern "C" {
                 version, space, buff, notify_func, notify_arg);
     }
 
-    static inline int da_trunk_write_thread_push_slice_by_buff(
-            DAContext *ctx, DATrunkSpaceInfo *space, char *buff,
-            trunk_write_io_notify_func notify_func, void *notify_arg)
-    {
-        DATrunkAllocator *allocator;
-        allocator = ctx->store_allocator_mgr->allocator_ptr_array.
-            allocators[space->store->index];
-        return da_trunk_write_thread_push(ctx, DA_IO_TYPE_WRITE_SLICE_BY_BUFF,
-                __sync_add_and_fetch(&allocator->allocate.current_version, 1),
-                space, buff, notify_func, notify_arg);
-    }
-
     int da_trunk_write_thread_by_buff_synchronize(DAContext *ctx,
-            DATrunkSpaceInfo *space, char *buff, SFSynchronizeContext *sctx);
+            DATrunkSpaceWithVersion *space_info, char *buff,
+            SFSynchronizeContext *sctx);
 
     static inline int da_trunk_write_thread_push_slice_by_iovec(
             DAContext *ctx, const int64_t version, DATrunkSpaceInfo *space,
