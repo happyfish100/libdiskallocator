@@ -53,6 +53,7 @@
 struct da_slice_op_context;
 struct da_trunk_allocator;
 struct da_piece_field_info;
+struct da_slice_entry;
 
 typedef void (*da_rw_done_callback_func)(
         struct da_slice_op_context *op_ctx, void *arg);
@@ -60,6 +61,9 @@ typedef void (*da_rw_done_callback_func)(
 typedef int (*da_redo_queue_push_func)(const struct da_piece_field_info
         *field, struct fc_queue_info *space_chain,
         SFSynchronizeContext *sctx, int *flags);
+
+typedef int (*da_cached_slice_write_done_callback)(
+        const struct da_slice_entry *slice);
 
 typedef struct {
     int index;   //the inner index is important!
@@ -82,6 +86,12 @@ typedef struct {
     DATrunkSpaceInfo space;
     int64_t version; //for write in order
 } DATrunkSpaceWithVersion;
+
+typedef enum da_slice_type {
+    DA_SLICE_TYPE_FILE  = 'F', /* in file slice */
+    DA_SLICE_TYPE_CACHE = 'C', /* in memory cache */
+    DA_SLICE_TYPE_ALLOC = 'A'  /* allocate slice (index and space allocate only) */
+} DASliceType;
 
 #ifdef OS_LINUX
 typedef struct aio_buffer_ptr_array {
@@ -403,6 +413,7 @@ typedef struct da_context {
     struct da_trunk_maker_context *trunk_maker_ctx;
 
     da_redo_queue_push_func redo_queue_push_func;
+    da_cached_slice_write_done_callback cached_slice_write_done;
 } DAContext;
 
 #ifdef OS_LINUX

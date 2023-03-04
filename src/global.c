@@ -63,12 +63,14 @@ int da_load_config(DAContext *context, const int file_block_size,
     return result;
 }
 
-int da_init_start(DAContext *ctx, da_redo_queue_push_func
-        redo_queue_push_func)
+int da_init_start_ex(DAContext *ctx, da_redo_queue_push_func
+        redo_queue_push_func, da_cached_slice_write_done_callback
+        cached_slice_write_done)
 {
     int result;
 
     ctx->redo_queue_push_func = redo_queue_push_func;
+    ctx->cached_slice_write_done = cached_slice_write_done;
     da_trunk_index_init(ctx);
 
     if ((result=da_trunk_hashtable_init(&ctx->trunk_htable_ctx)) != 0) {

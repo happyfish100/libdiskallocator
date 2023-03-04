@@ -31,8 +31,18 @@ struct da_trunk_write_io_buffer;
 typedef void (*trunk_write_io_notify_func)(struct da_trunk_write_io_buffer
         *record, const int result);
 
+typedef struct da_slice_entry {
+    uint32_t timestamp;
+    char source;
+    SFBlockKey bkey;
+    SFSliceSize ssize;
+    uint64_t data_version;
+    uint64_t sn;
+} DASliceEntry;
+
 typedef struct da_trunk_write_io_buffer {
-    int type;
+    int op_type;
+    DASliceType slice_type;  //in file, write cache or memory as fallocate
     DATrunkSpaceInfo space;
 
     int64_t version; //for write in order
@@ -42,10 +52,15 @@ typedef struct da_trunk_write_io_buffer {
         iovec_array_t iovec_array;
     };
 
-    struct {
-        trunk_write_io_notify_func func;
-        void *arg;
-    } notify;
+    union {
+        struct {
+            trunk_write_io_notify_func func;
+            void *arg;
+        } notify;
+
+        DASliceEntry slice;
+    };
+
     struct da_trunk_write_io_buffer *next;
 } TrunkWriteIOBuffer;
 
@@ -56,22 +71,27 @@ extern "C" {
     int da_trunk_write_thread_init(DAContext *ctx);
     void da_trunk_write_thread_terminate(DAContext *ctx);
 
-    int da_trunk_write_thread_push(DAContext *ctx, const int type,
+    int da_trunk_write_thread_push(DAContext *ctx, const int op_type,
             const int64_t version, const DATrunkSpaceInfo *space,
             void *data, trunk_write_io_notify_func notify_func,
             void *notify_arg);
 
     static inline int da_trunk_write_thread_push_trunk_op(DAContext *ctx,
-            const int type, const DATrunkSpaceInfo *space,
+            const int op_type, const DATrunkSpaceInfo *space,
             trunk_write_io_notify_func notify_func, void *notify_arg)
     {
         DATrunkAllocator *allocator;
         allocator = ctx->store_allocator_mgr->allocator_ptr_array.
             allocators[space->store->index];
-        return da_trunk_write_thread_push(ctx, type, __sync_add_and_fetch(
+        return da_trunk_write_thread_push(ctx, op_type, __sync_add_and_fetch(
                     &allocator->allocate.current_version, 1), space,
                 NULL, notify_func, notify_arg);
     }
+
+    int da_trunk_write_thread_push_cached_slice(DAContext *ctx,
+            const int op_type, const int64_t version,
+            const DATrunkSpaceInfo *space, void *data,
+            const DASliceEntry *slice);
 
     static inline int da_trunk_write_thread_push_slice_by_buff(
             DAContext *ctx, const int64_t version, DATrunkSpaceInfo *space,

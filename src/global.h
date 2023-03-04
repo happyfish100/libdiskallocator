@@ -47,8 +47,12 @@ extern "C" {
     int da_load_config(DAContext *context, const int file_block_size,
             const DADataConfig *data_cfg, const char *storage_filename);
 
-    int da_init_start(DAContext *context, da_redo_queue_push_func
-            redo_queue_push_func);
+    int da_init_start_ex(DAContext *ctx, da_redo_queue_push_func
+            redo_queue_push_func, da_cached_slice_write_done_callback
+            cached_slice_write_done);
+
+#define da_init_start(ctx, redo_queue_push_func) \
+    da_init_start_ex(ctx, redo_queue_push_func, NULL)
 
 #ifdef __cplusplus
 }
