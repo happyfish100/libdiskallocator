@@ -495,7 +495,7 @@ static int do_write_slices(TrunkWriteThreadContext *ctx)
                     sizeof(trunk_filename));
             result = errno != 0 ? errno : EIO;
             logError("file: "__FILE__", line: %d, "
-                    "lseek file: %s fail, offset: %"PRId64", "
+                    "lseek file: %s fail, offset: %u, "
                     "errno: %d, error info: %s", __LINE__, trunk_filename,
                     first->space.offset, result, STRERROR(result));
             clear_write_fd(ctx);
@@ -552,7 +552,7 @@ static int do_write_slices(TrunkWriteThreadContext *ctx)
         dio_get_trunk_filename(&first->space, trunk_filename,
                 sizeof(trunk_filename));
         logError("file: "__FILE__", line: %d, "
-                "write to trunk file: %s fail, offset: %"PRId64", "
+                "write to trunk file: %s fail, offset: %u, "
                 "errno: %d, error info: %s", __LINE__, trunk_filename,
                 first->space.offset + (ctx->iovec_bytes -
                     remain_bytes), result, STRERROR(result));

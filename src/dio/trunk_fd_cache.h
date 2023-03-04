@@ -42,7 +42,7 @@ extern "C" {
     static inline void dio_get_trunk_filename(DATrunkSpaceInfo *space,
             char *trunk_filename, const int size)
     {
-        snprintf(trunk_filename, size, "%s/%04"PRId64"/%06"PRId64,
+        snprintf(trunk_filename, size, "%s/%04u/%06"PRId64,
                 space->store->path.str, space->id_info.subdir,
                 space->id_info.id);
     }
@@ -55,7 +55,7 @@ extern "C" {
         if ((trunk=da_trunk_hashtable_get(&ctx->trunk_htable_ctx,
                         trunk_id)) != NULL)
         {
-            snprintf(binlog_filename, size, "%s/%04"PRId64"/.%06"PRId64".log",
+            snprintf(binlog_filename, size, "%s/%04u/.%06"PRId64".log",
                     trunk->allocator->path_info->store.path.str,
                     trunk->id_info.subdir, trunk->id_info.id);
         } else {

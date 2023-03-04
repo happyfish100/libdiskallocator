@@ -302,7 +302,7 @@ void da_trunk_allocator_deal_on_ready(DATrunkAllocator *allocator)
 
 void da_trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info)
 {
-    logInfo("trunk id: %"PRId64", subdir: %"PRId64", status: %d, slice "
+    logInfo("trunk id: %"PRId64", subdir: %u, status: %d, slice "
             "count: %d, used bytes: %u, trunk size: %u, free start: %u, "
             "remain bytes: %u", trunk_info->id_info.id,
             trunk_info->id_info.subdir, trunk_info->status,

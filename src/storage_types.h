@@ -68,14 +68,14 @@ typedef struct {
 
 typedef struct {
     int64_t id;
-    int64_t subdir;     //in which subdir
+    uint32_t subdir;     //in which subdir
 } DATrunkIdInfo;
 
 typedef struct {
     DAStorePath *store;
     DATrunkIdInfo id_info;
-    int64_t offset;  //offset of the trunk file
-    int64_t size;    //alloced space size
+    uint32_t offset;  //offset of the trunk file
+    uint32_t size;    //alloced space size
 } DATrunkSpaceInfo;
 
 typedef struct {
