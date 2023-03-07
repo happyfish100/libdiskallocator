@@ -62,7 +62,26 @@ extern "C" {
     int da_trunk_read_thread_init(DAContext *ctx);
     void da_trunk_read_thread_terminate(DAContext *ctx);
 
-    /* MUST set rb->direct_io in Linux before call this function */
+#ifdef OS_LINUX
+    static inline DAAlignedReadBuffer *da_aligned_buffer_new(
+            DAContext *ctx, const short pindex, const int offset,
+            const int length, const int read_bytes)
+    {
+        DAAlignedReadBuffer *aligned_buffer;
+
+        aligned_buffer = da_read_buffer_pool_alloc(ctx, pindex, read_bytes);
+        if (aligned_buffer == NULL) {
+            return NULL;
+        }
+
+        aligned_buffer->offset = offset;
+        aligned_buffer->length = length;
+        aligned_buffer->read_bytes = read_bytes;
+        return aligned_buffer;
+    }
+#endif
+
+    /* MUST set rb->type in Linux before call this function */
     int da_trunk_read_thread_push(DAContext *ctx,
             const DATrunkSpaceInfo *space,
             const int read_bytes, DATrunkReadBuffer *rb,

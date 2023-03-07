@@ -411,8 +411,8 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
         }
     }
 
-    if (iob->rb->aio_buffer != NULL && iob->rb->aio_buffer->
-            size < read_bytes)
+    if (iob->rb->aio_buffer != NULL && iob->rb->
+            aio_buffer->size < read_bytes)
     {
         logWarning("file: "__FILE__", line: %d, "
                 "buffer size %d is too small, required size: %d",
@@ -736,10 +736,11 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
     int aligned_size;
 
     if (path_info->read_direct_io) {
-        op_ctx->rb.direct_io = true;
+        op_ctx->rb.type = da_buffer_type_aio;
         aligned_size = op_ctx->storage->size + path_info->block_size * 2;
-        if (op_ctx->rb.aio_buffer != NULL && op_ctx->rb.
-                aio_buffer->size < aligned_size)
+        if (op_ctx->rb.aio_buffer != NULL && (op_ctx->rb.aio_buffer->
+                    size < aligned_size || op_ctx->rb.aio_buffer->
+                    size % path_info->block_size != 0))
         {
             DAAlignedReadBuffer *new_buffer;
 
@@ -755,7 +756,7 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
 
         return 0;
     } else {
-        op_ctx->rb.direct_io = false;
+        op_ctx->rb.type = da_buffer_type_direct;
     }
 #endif
 

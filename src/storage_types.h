@@ -101,9 +101,9 @@ typedef struct aio_buffer_ptr_array {
 } AIOBufferPtrArray;
 
 typedef enum {
-    da_buffer_type_direct,  /* char *buff */
-    da_buffer_type_array    /* da_aligned_read_buffer **array */
-} DAIOBufferType;
+    da_buffer_type_direct,
+    da_buffer_type_aio
+} DABufferType;
 #endif
 
 typedef struct da_trunk_file_info {
@@ -178,13 +178,20 @@ typedef struct da_trunk_index_record {
 
 typedef struct da_trunk_read_buffer {
 #ifdef OS_LINUX
-    bool direct_io;
+    DABufferType type;
     DAAlignedReadBuffer *aio_buffer;   //NULL for alloc from pool
     BufferInfo buffer;
 #else
     BufferInfo buffer;
 #endif
+    void *arg;
 } DATrunkReadBuffer;
+
+typedef struct da_trunk_read_buffer_array {
+    int alloc;
+    int count;
+    DATrunkReadBuffer *buffers;
+} DATrunkReadBufferArray;
 
 typedef struct da_slice_op_context {
     DAPieceFieldStorage *storage;
@@ -417,10 +424,10 @@ typedef struct da_context {
 } DAContext;
 
 #ifdef OS_LINUX
-#define DA_OP_CTX_BUFFER_PTR(op_ctx) ((op_ctx).rb.direct_io ?  \
+#define DA_OP_CTX_BUFFER_PTR(op_ctx) ((op_ctx).rb.type == da_buffer_type_aio ? \
         (op_ctx).rb.aio_buffer->buff + (op_ctx).rb.aio_buffer->offset : \
         (op_ctx).rb.buffer.buff)
-#define DA_OP_CTX_BUFFER_LEN(op_ctx) ((op_ctx).rb.direct_io ?  \
+#define DA_OP_CTX_BUFFER_LEN(op_ctx) ((op_ctx).rb.type == da_buffer_type_aio ? \
         (op_ctx).rb.aio_buffer->length : (op_ctx).rb.buffer.length)
 #else
 #define DA_OP_CTX_BUFFER_PTR(op_ctx) (op_ctx).rb.buffer.buff
