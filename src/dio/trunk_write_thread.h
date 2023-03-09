@@ -34,8 +34,7 @@ typedef void (*da_trunk_write_io_notify_func)(struct da_trunk_write_io_buffer
 typedef struct da_slice_entry {
     uint32_t timestamp;
     char source;
-    SFBlockKey bkey;
-    SFSliceSize ssize;
+    SFBlockSliceKeyInfo bs_key;
     uint64_t data_version;
     uint64_t sn;
 } DASliceEntry;

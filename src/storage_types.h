@@ -54,6 +54,7 @@ struct da_slice_op_context;
 struct da_trunk_allocator;
 struct da_piece_field_info;
 struct da_slice_entry;
+struct da_trunk_space_info;
 
 typedef void (*da_rw_done_callback_func)(
         struct da_slice_op_context *op_ctx, void *arg);
@@ -63,7 +64,8 @@ typedef int (*da_redo_queue_push_func)(const struct da_piece_field_info
         SFSynchronizeContext *sctx, int *flags);
 
 typedef int (*da_cached_slice_write_done_callback)(
-        const struct da_slice_entry *slice);
+        const struct da_slice_entry *se,
+        struct da_trunk_space_info *space);
 
 typedef struct {
     int index;   //the inner index is important!
@@ -75,7 +77,7 @@ typedef struct {
     uint32_t subdir;     //in which subdir
 } DATrunkIdInfo;
 
-typedef struct {
+typedef struct da_trunk_space_info {
     DAStorePath *store;
     DATrunkIdInfo id_info;
     uint32_t offset;  //offset of the trunk file

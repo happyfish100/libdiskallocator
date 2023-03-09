@@ -618,7 +618,8 @@ static int batch_write(TrunkWriteThreadContext *thread)
         end = thread->iob_array.iobs + thread->iob_array.success;
         for (; iob < end; iob++) {
             if ((*iob)->slice_type == DA_SLICE_TYPE_CACHE) {
-                thread->ctx->cached_slice_write_done(&(*iob)->slice);
+                thread->ctx->cached_slice_write_done(
+                        &(*iob)->slice, &(*iob)->space);
             } else if ((*iob)->notify.func != NULL) {
                 (*iob)->notify.func(*iob, 0);
             }
