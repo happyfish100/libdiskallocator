@@ -40,6 +40,9 @@ extern "C" {
 
     DATrunkFileInfo *da_trunk_hashtable_next(DATrunkHashtableIterator *it);
 
+    int da_trunk_hashtable_dump_to_file(DATrunkHTableContext *ctx,
+            const char *filename, int64_t *total_trunk_count);
+
 #ifdef __cplusplus
 }
 #endif

@@ -198,12 +198,6 @@ static int trunk_binlog_load(DAContext *ctx)
     return 0;
 }
 
-int da_trunk_binlog_get_current_write_index(DAContext *ctx)
-{
-    return sf_binlog_get_current_write_index(
-            &ctx->trunk_binlog_writer.writer);
-}
-
 int da_trunk_binlog_init(DAContext *ctx)
 {
     int result;
@@ -236,9 +230,8 @@ int da_trunk_binlog_write(DAContext *ctx, const char op_type,
         return ENOMEM;
     }
 
-    wbuffer->bf.length = sprintf(wbuffer->bf.buff, "%d %c %d %"PRId64" "
-            "%u %u\n", (int)g_current_time, op_type, path_index,
-            id_info->id, id_info->subdir, file_size);
+    wbuffer->bf.length = da_trunk_binlog_log_to_buff(op_type,
+            path_index, id_info, file_size, wbuffer->bf.buff);
     sf_push_to_binlog_thread_queue(&ctx->trunk_binlog_writer.thread, wbuffer);
     return 0;
 }

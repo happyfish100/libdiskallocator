@@ -20,7 +20,10 @@
 #include "fastcommon/logger.h"
 #include "fastcommon/fc_atomic.h"
 #include "sf/sf_global.h"
+#include "sf/sf_buffered_writer.h"
 #include "../global.h"
+#include "../binlog/trunk/trunk_binlog.h"
+#include "../dio/trunk_write_thread.h"
 #include "trunk_hashtable.h"
 
 int da_trunk_hashtable_count(DATrunkHTableContext *ctx)
@@ -211,4 +214,48 @@ DATrunkFileInfo *da_trunk_hashtable_next(DATrunkHashtableIterator *it)
     } while (++(it->bucket) < it->ctx->htable.end);
 
     return trunk;
+}
+
+int da_trunk_hashtable_dump_to_file(DATrunkHTableContext *ctx,
+        const char *filename, int64_t *total_trunk_count)
+{
+    int result;
+    SFBufferedWriter writer;
+    DATrunkFileInfo **bucket;
+    DATrunkFileInfo *current;
+
+    if ((result=sf_buffered_writer_init(&writer, filename)) != 0) {
+        return result;
+    }
+
+    *total_trunk_count = 0;
+    for (bucket=ctx->htable.buckets; bucket<ctx->htable.end; bucket++) {
+        if (*bucket == NULL) {
+            continue;
+        }
+
+        current = *bucket;
+        do {
+            if (SF_BUFFERED_WRITER_REMAIN(writer) <
+                    DA_TRUNK_BINLOG_MAX_RECORD_SIZE)
+            {
+                if ((result=sf_buffered_writer_save(&writer)) != 0) {
+                    return result;
+                }
+            }
+
+            writer.buffer.current += da_trunk_binlog_log_to_buff(
+                    DA_IO_TYPE_CREATE_TRUNK, current->allocator->
+                    path_info->store.index, &current->id_info,
+                    current->size, writer.buffer.current);
+            ++(*total_trunk_count);
+        } while ((current=current->htable.next) != NULL);
+    }
+
+    if (result == 0 && SF_BUFFERED_WRITER_LENGTH(writer) > 0) {
+        result = sf_buffered_writer_save(&writer);
+    }
+
+    sf_buffered_writer_destroy(&writer);
+    return result;
 }
