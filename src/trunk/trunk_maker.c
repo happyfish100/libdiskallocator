@@ -160,7 +160,7 @@ static void create_trunk_done(struct da_trunk_write_io_buffer *record,
 {
     TrunkMakerThreadInfo *thread;
 
-    thread = (TrunkMakerThreadInfo *)record->notify.arg;
+    thread = record->notify.arg1;
     PTHREAD_MUTEX_LOCK(&thread->allocate.lcp.lock);
     thread->allocate.result = result >= 0 ? result : -1 * result;
     pthread_cond_signal(&thread->allocate.lcp.cond);

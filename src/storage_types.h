@@ -184,7 +184,7 @@ typedef struct da_trunk_read_buffer {
 #else
     BufferInfo buffer;
 #endif
-    void *arg;
+    void *arg;  //for read done callback
 } DATrunkReadBuffer;
 
 typedef struct da_trunk_read_buffer_array {

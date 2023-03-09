@@ -297,8 +297,8 @@ static inline TrunkWriteIOBuffer *alloc_init_buffer(DAContext *ctx,
 
 int da_trunk_write_thread_push(DAContext *ctx, const int op_type,
         const int64_t version, const DATrunkSpaceInfo *space,
-        void *data, trunk_write_io_notify_func notify_func,
-        void *notify_arg)
+        void *data, da_trunk_write_io_notify_func notify_func,
+        void *arg1, void *arg2)
 {
     TrunkWriteThreadContext *thread_ctx;
     TrunkWriteIOBuffer *iob;
@@ -311,7 +311,8 @@ int da_trunk_write_thread_push(DAContext *ctx, const int op_type,
 
     iob->slice_type = DA_SLICE_TYPE_FILE;
     iob->notify.func = notify_func;
-    iob->notify.arg = notify_arg;
+    iob->notify.arg1 = arg1;
+    iob->notify.arg2 = arg2;
     fc_queue_push(&thread_ctx->queue, iob);
     return 0;
 }
@@ -860,7 +861,7 @@ static void write_io_notify_callback(struct da_trunk_write_io_buffer
 {
     SFSynchronizeContext *sctx;
 
-    sctx = (SFSynchronizeContext *)buffer->notify.arg;
+    sctx = buffer->notify.arg1;
     PTHREAD_MUTEX_LOCK(&sctx->lcp.lock);
     sctx->result = result;
     pthread_cond_signal(&sctx->lcp.cond);
@@ -875,8 +876,8 @@ int da_trunk_write_thread_by_buff_synchronize(DAContext *ctx,
 
     sctx->result = INT16_MIN;
     if ((result=da_trunk_write_thread_push_slice_by_buff(ctx,
-                    space_info->version, &space_info->space,
-                    buff, write_io_notify_callback, sctx)) != 0)
+                    space_info->version, &space_info->space, buff,
+                    write_io_notify_callback, sctx, NULL)) != 0)
     {
         return result;
     }
