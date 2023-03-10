@@ -111,8 +111,8 @@ static int parse_to_skiplist(DASpaceLogReader *reader,
         ++line_end;
         line.str = line_start;
         line.len = line_end - line_start;
-        if ((result=da_trunk_space_log_unpack(&line,
-                        record, error_info)) != 0)
+        if ((result=da_trunk_space_log_unpack(&line, record, error_info,
+                        reader->ctx->storage.have_extra_field)) != 0)
         {
             return result;
         }
@@ -234,8 +234,8 @@ static int parse_to_chain(DASpaceLogReader *reader, struct fc_queue_info
         ++line_end;
         line.str = line_start;
         line.len = line_end - line_start;
-        if ((result=da_trunk_space_log_unpack(&line,
-                        record, error_info)) != 0)
+        if ((result=da_trunk_space_log_unpack(&line, record, error_info,
+                        reader->ctx->storage.have_extra_field)) != 0)
         {
             return result;
         }

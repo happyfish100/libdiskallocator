@@ -45,7 +45,8 @@ extern "C" {
     int da_global_init(const int my_server_id);
 
     int da_load_config(DAContext *context, const int file_block_size,
-            const DADataConfig *data_cfg, const char *storage_filename);
+            const DADataConfig *data_cfg, const char *storage_filename,
+            const bool have_extra_field);
 
     int da_init_start_ex(DAContext *ctx, da_redo_queue_push_func
             redo_queue_push_func, da_cached_slice_write_done_callback

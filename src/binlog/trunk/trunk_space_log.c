@@ -29,7 +29,7 @@
 #define RECORD_PTR_ARRAY  ctx->space_log_ctx.record_array
 #define FD_CACHE_CTX      ctx->space_log_ctx.fd_cache_ctx
 
-#define SPACE_LOG_FIELD_COUNT             9
+#define SPACE_LOG_MAX_FIELD_COUNT        10
 
 #define SPACE_LOG_FIELD_INDEX_TIMESTAMP   0
 #define SPACE_LOG_FIELD_INDEX_VERSION     1
@@ -40,19 +40,29 @@
 #define SPACE_LOG_FIELD_INDEX_LENGTH      6
 #define SPACE_LOG_FIELD_INDEX_OFFSET      7
 #define SPACE_LOG_FIELD_INDEX_SIZE        8
+#define SPACE_LOG_FIELD_INDEX_EXTRA       9
 
 int da_trunk_space_log_unpack(const string_t *line,
-        DATrunkSpaceLogRecord *record, char *error_info)
+        DATrunkSpaceLogRecord *record, char *error_info,
+        const bool have_extra_field)
 {
     int count;
+    int expect;
+    char size_endchr;
     char *endptr;
-    string_t cols[SPACE_LOG_FIELD_COUNT];
+    string_t cols[SPACE_LOG_MAX_FIELD_COUNT];
 
+    if (have_extra_field) {
+        size_endchr = ' ';
+        expect = SPACE_LOG_MAX_FIELD_COUNT;
+    } else {
+        size_endchr = '\n';
+        expect = SPACE_LOG_MAX_FIELD_COUNT - 1;
+    }
     count = split_string_ex(line, ' ', cols,
-            SPACE_LOG_FIELD_COUNT, false);
-    if (count != SPACE_LOG_FIELD_COUNT) {
-        sprintf(error_info, "record count: %d != %d",
-                count, SPACE_LOG_FIELD_COUNT);
+            SPACE_LOG_MAX_FIELD_COUNT, false);
+    if (count != expect) {
+        sprintf(error_info, "record count: %d != %d", count, expect);
         return EINVAL;
     }
 
@@ -77,7 +87,11 @@ int da_trunk_space_log_unpack(const string_t *line,
     SF_BINLOG_PARSE_INT_SILENCE(record->storage.offset, "offset",
             SPACE_LOG_FIELD_INDEX_OFFSET, ' ', 0);
     SF_BINLOG_PARSE_INT_SILENCE(record->storage.size, "size",
-            SPACE_LOG_FIELD_INDEX_SIZE, '\n', 0);
+            SPACE_LOG_FIELD_INDEX_SIZE, size_endchr, 0);
+    if (have_extra_field) {
+        SF_BINLOG_PARSE_INT_SILENCE(record->extra, "extra",
+                SPACE_LOG_FIELD_INDEX_EXTRA, '\n', 0);
+    }
     return 0;
 }
 
@@ -263,7 +277,8 @@ static int write_to_log_file(DAContext *ctx,
                 ctx->space_log_ctx.buffer.length = 0;
             }
 
-            da_trunk_space_log_pack(*current, &ctx->space_log_ctx.buffer);
+            da_trunk_space_log_pack(*current, &ctx->space_log_ctx.buffer,
+                    ctx->storage.have_extra_field);
         }
 
         if ((result=do_write_to_file(ctx, (*start)->storage.trunk_id,

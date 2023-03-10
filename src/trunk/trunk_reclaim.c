@@ -165,7 +165,7 @@ static int slice_write(DATrunkReclaimContext *rctx,
 }
 
 static int migrate_one_slice(DATrunkReclaimContext *rctx,
-        DATrunkSpaceLogRecord *record)
+        DATrunkSpaceLogRecord *record, DAFullTrunkIdInfo *trunk)
 {
     int result;
     DATrunkSpaceWithVersion space_info;
@@ -184,6 +184,8 @@ static int migrate_one_slice(DATrunkReclaimContext *rctx,
     record->storage.trunk_id = space_info.space.id_info.id;
     record->storage.offset = space_info.space.offset;
     record->storage.size = space_info.space.size;
+    trunk->store = space_info.space.store;
+    trunk->id_info = space_info.space.id_info;
     return 0;
 }
 
@@ -197,12 +199,13 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
     int result;
     int flags;
     uint32_t offset;
+    DAFullTrunkIdInfo trunk;
     DAPieceFieldInfo field;
     struct fc_queue_info space_chain;
 
     holder = *(block->head);
     holder.storage.length = holder.storage.size = block->total_size;
-    if ((result=migrate_one_slice(rctx, &holder)) != 0) {
+    if ((result=migrate_one_slice(rctx, &holder, &trunk)) != 0) {
         return result;
     }
 
@@ -245,8 +248,8 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
         field.source = DA_FIELD_UPDATE_SOURCE_RECLAIM;
         field.op_type = da_binlog_op_type_update;
         field.storage = new_record->storage;
-        if ((result=rctx->ctx->redo_queue_push_func(&field, &space_chain,
-                        &rctx->log_notify, &flags)) != 0)
+        if ((result=rctx->ctx->redo_queue_push_func(&trunk, &field,
+                        &space_chain, &rctx->log_notify, &flags)) != 0)
         {
             return result;
         }

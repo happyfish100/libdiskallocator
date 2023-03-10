@@ -53,14 +53,17 @@
 struct da_slice_op_context;
 struct da_trunk_allocator;
 struct da_piece_field_info;
+struct da_full_trunk_id_info;
 struct da_slice_entry;
 struct da_trunk_space_info;
 
 typedef void (*da_rw_done_callback_func)(
         struct da_slice_op_context *op_ctx, void *arg);
 
-typedef int (*da_redo_queue_push_func)(const struct da_piece_field_info
-        *field, struct fc_queue_info *space_chain,
+typedef int (*da_redo_queue_push_func)(
+        const struct da_full_trunk_id_info *trunk,
+        const struct da_piece_field_info *field,
+        struct fc_queue_info *space_chain,
         SFSynchronizeContext *sctx, int *flags);
 
 typedef int (*da_cached_slice_write_done_callback)(
@@ -88,6 +91,11 @@ typedef struct {
     DATrunkSpaceInfo space;
     int64_t version; //for write in order
 } DATrunkSpaceWithVersion;
+
+typedef struct da_full_trunk_id_info {
+    DAStorePath *store;
+    DATrunkIdInfo id_info;
+} DAFullTrunkIdInfo;
 
 typedef enum da_slice_type {
     DA_SLICE_TYPE_FILE  = 'F', /* in file slice */
@@ -149,10 +157,11 @@ typedef struct da_piece_field_storage {
 } DAPieceFieldStorage;
 
 typedef struct da_piece_field_info {
-    uint64_t oid;
+    uint64_t oid;  //object ID
     uint64_t fid;  //field ID (key)
     unsigned char source;
     DABinlogOpType op_type;
+    int extra;
     DAPieceFieldStorage storage;
 } DAPieceFieldInfo;
 
@@ -162,9 +171,10 @@ typedef struct da_piece_field_array {
 } DAPieceFieldArray;
 
 typedef struct da_trunk_space_log_record {
-    int64_t oid;    //object ID
-    int64_t fid;    //field ID (key)
+    uint64_t oid;    //object ID
+    uint64_t fid;    //field ID (key)
     char op_type;
+    int extra;
     DAPieceFieldStorage storage;
     struct fast_mblock_man *allocator;
     struct da_trunk_space_log_record *next;
@@ -403,6 +413,7 @@ typedef struct da_context {
         int file_block_size;
         DAStorageConfig cfg;
         int read_direct_io_paths;
+        bool have_extra_field;
     } storage;
 
     bool check_trunk_avail_in_progress;

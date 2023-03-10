@@ -48,12 +48,14 @@ int da_global_init(const int my_server_id)
 }
 
 int da_load_config(DAContext *context, const int file_block_size,
-        const DADataConfig *data_cfg, const char *storage_filename)
+        const DADataConfig *data_cfg, const char *storage_filename,
+        const bool have_extra_field)
 {
     int result;
 
     context->storage.file_block_size = file_block_size;
     context->data = *data_cfg;
+    context->storage.have_extra_field = have_extra_field;
     if ((result=da_storage_config_load(context, &context->
                     storage.cfg, storage_filename)) == 0)
     {

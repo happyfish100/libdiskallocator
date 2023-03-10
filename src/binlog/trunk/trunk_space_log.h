@@ -92,18 +92,25 @@ extern "C" {
             const uint32_t trunk_id);
 
     static inline void da_trunk_space_log_pack(const DATrunkSpaceLogRecord
-            *record, FastBuffer *buffer)
+            *record, FastBuffer *buffer, const bool have_extra_field)
     {
         buffer->length += sprintf(buffer->data + buffer->length,
-                "%u %"PRId64" %"PRId64" %"PRId64" %c %u %u %u %u\n",
+                "%u %"PRId64" %"PRId64" %"PRId64" %c %u %u %u %u",
                 (uint32_t)g_current_time, record->storage.version,
                 record->oid, record->fid, record->op_type,
                 record->storage.trunk_id, record->storage.length,
                 record->storage.offset, record->storage.size);
+        if (have_extra_field) {
+            buffer->length += sprintf(buffer->data + buffer->length,
+                    " %u\n", record->extra);
+        } else {
+            *(buffer->data + buffer->length++) = '\n';
+        }
     }
 
     int da_trunk_space_log_unpack(const string_t *line,
-            DATrunkSpaceLogRecord *record, char *error_info);
+            DATrunkSpaceLogRecord *record, char *error_info,
+            const bool have_extra_field);
 
     static inline void da_trunk_space_log_inc_waiting_count(
             DAContext *ctx, const int count)
