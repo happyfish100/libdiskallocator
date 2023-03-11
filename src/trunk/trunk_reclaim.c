@@ -226,11 +226,13 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
 
         old_record->oid = record->oid;
         old_record->fid = record->fid;
+        old_record->extra = record->extra;
         old_record->op_type = da_binlog_op_type_reclaim_space;
         old_record->storage = record->storage;
 
         new_record->oid = record->oid;
         new_record->fid = record->fid;
+        new_record->extra = record->extra;
         new_record->op_type = da_binlog_op_type_consume_space;
         new_record->storage.version = record->storage.version;
         new_record->storage.trunk_id = holder.storage.trunk_id;
@@ -245,6 +247,7 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
 
         field.oid = record->oid;
         field.fid = record->fid;
+        field.extra = record->extra;
         field.source = DA_FIELD_UPDATE_SOURCE_RECLAIM;
         field.op_type = da_binlog_op_type_update;
         field.storage = new_record->storage;

@@ -158,8 +158,8 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
         return ENOMEM;
     }
 
-    dio_get_space_log_filename(reader->ctx, trunk_id, space_log_filename,
-            sizeof(space_log_filename));
+    dio_get_space_log_filename(reader->ctx, trunk_id,
+            space_log_filename, sizeof(space_log_filename));
     if ((fd=open(space_log_filename, O_RDONLY | O_CLOEXEC)) < 0) {
         result = errno != 0 ? errno : EACCES;
         if (result == ENOENT && ignore_enoent) {
