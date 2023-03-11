@@ -39,9 +39,10 @@ static int load_one_path(DAContext *ctx, DAStorageConfig *storage_cfg,
     if (path_str == NULL) {
         path_str = ctx->data.path.str;
     } else if (*path_str == '\0') {
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "config file: %s, section: %s, item: path is empty",
-                __LINE__, ini_ctx->filename, ini_ctx->section_name);
+                __LINE__, ctx->module_name, ini_ctx->filename,
+                ini_ctx->section_name);
         return ENOENT;
     } else {
         if (*path_str != '/') {
@@ -55,27 +56,28 @@ static int load_one_path(DAContext *ctx, DAStorageConfig *storage_cfg,
 
     if (access(path_str, F_OK) == 0) {
         if (!isDir(path_str)) {
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "config file: %s, section: %s, item: path, "
-                    "%s is NOT a path", __LINE__, ini_ctx->filename,
-                    ini_ctx->section_name, path_str);
+                    "%s is NOT a path", __LINE__, ctx->module_name,
+                    ini_ctx->filename, ini_ctx->section_name, path_str);
             return EINVAL;
         }
     } else {
         result = errno != 0 ? errno : EPERM;
         if (result != ENOENT) {
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "config file: %s, section: %s, access path %s fail, "
-                    "errno: %d, error info: %s", __LINE__, ini_ctx->filename,
-                    ini_ctx->section_name, path_str, result, STRERROR(result));
+                    "errno: %d, error info: %s", __LINE__, ctx->module_name,
+                    ini_ctx->filename, ini_ctx->section_name, path_str,
+                    result, STRERROR(result));
             return result;
         }
 
         if (mkdir(path_str, 0775) != 0) {
             result = errno != 0 ? errno : EPERM;
-            logError("file: "__FILE__", line: %d, "
-                    "mkdir %s fail, errno: %d, error info: %s",
-                    __LINE__, path_str, result, STRERROR(result));
+            logError("file: "__FILE__", line: %d, %s "
+                    "mkdir %s fail, errno: %d, error info: %s", __LINE__,
+                    ctx->module_name, path_str, result, STRERROR(result));
             return result;
         }
         
@@ -98,9 +100,10 @@ static int da_storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
     struct statvfs sbuf;
 
     if (statvfs(path_info->store.path.str, &sbuf) != 0) {
-        logError("file: "__FILE__", line: %d, "
-                "statvfs path %s fail, errno: %d, error info: %s.",
-                __LINE__, path_info->store.path.str, errno, STRERROR(errno));
+        logError("file: "__FILE__", line: %d, %s "
+                "statvfs path %s fail, errno: %d, error info: %s",
+                __LINE__, path_info->ctx->module_name, path_info->
+                store.path.str, errno, STRERROR(errno));
         return errno != 0 ? errno : EPERM;
     }
 
@@ -119,9 +122,9 @@ static int da_storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
     }
 
     /*
-    logInfo("used ratio: %.2f%%, prealloc_space.trunk_count: %d",
-            100 * path_info->space_stat.used_ratio,
-            path_info->prealloc_space.trunk_count);
+    logInfo("%s used ratio: %.2f%%, prealloc_space.trunk_count: %d",
+            path_info->ctx->module_name, 100 * path_info->space_stat.
+            used_ratio, path_info->prealloc_space.trunk_count);
             */
 
     __sync_bool_compare_and_swap(&path_info->space_stat.
@@ -143,9 +146,10 @@ int da_storage_config_calc_path_avail_space(DAStoragePathInfo *path_info)
             last_stat_time, last_stat_time, g_current_time);
 
     if (statvfs(path_info->store.path.str, &sbuf) != 0) {
-        logError("file: "__FILE__", line: %d, "
-                "statvfs path %s fail, errno: %d, error info: %s.",
-                __LINE__, path_info->store.path.str, errno, STRERROR(errno));
+        logError("file: "__FILE__", line: %d, %s "
+                "statvfs path %s fail, errno: %d, error info: %s",
+                __LINE__, path_info->ctx->module_name, path_info->
+                store.path.str, errno, STRERROR(errno));
         return errno != 0 ? errno : EPERM;
     }
 
@@ -183,11 +187,11 @@ void da_storage_config_stat_path_spaces(DAContext *ctx, SFSpaceStat *ss)
         stat.used += (*pp)->trunk_stat.used;
 
         /*
-        logInfo("trunk {total: %"PRId64" MB, avail: %"PRId64" MB, "
+        logInfo("%s trunk {total: %"PRId64" MB, avail: %"PRId64" MB, "
                 "used: %"PRId64" MB, reserved: %"PRId64" MB}, "
                 "disk_avail: %"PRId64" MB, sum {total: %"PRId64" MB, "
                 "avail: %"PRId64" MB, used: %"PRId64" MB}",
-                (*pp)->trunk_stat.total / (1024 * 1024),
+                ctx->module_name, (*pp)->trunk_stat.total / (1024 * 1024),
                 (*pp)->trunk_stat.avail / (1024 * 1024),
                 (*pp)->trunk_stat.used / (1024 * 1024),
                 (*pp)->reserved_space.value / (1024 * 1024),
@@ -214,9 +218,9 @@ static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
     count = iniGetIntValue(NULL, item_name, ini_ctx->context, 0);
     if (count <= 0) {
         if (required) {
-            logError("file: "__FILE__", line: %d, "
-                    "config file: %s, item \"%s\" "
-                    "not exist or invalid", __LINE__,
+            logError("file: "__FILE__", line: %d, %s "
+                    "config file: %s, item \"%s\" not exist "
+                    "or invalid", __LINE__, ctx->module_name,
                     ini_ctx->filename, item_name);
             return ENOENT;
         } else {
@@ -437,10 +441,10 @@ static int load_global_items(DAContext *ctx,
             "trunk_file_size", DA_DEFAULT_TRUNK_FILE_SIZE,
             DA_TRUNK_FILE_MIN_SIZE, DA_TRUNK_FILE_MAX_SIZE);
     if (storage_cfg->trunk_file_size <= ctx->storage.file_block_size) {
-        logError("file: "__FILE__", line: %d, "
-                "trunk_file_size: %u is too small, "
-                "<= block size %d", __LINE__, storage_cfg->
-                trunk_file_size, ctx->storage.file_block_size);
+        logError("file: "__FILE__", line: %d, %s "
+                "trunk_file_size: %u is too small, <= block size %d",
+                __LINE__, ctx->module_name, storage_cfg->trunk_file_size,
+                ctx->storage.file_block_size);
         return EINVAL;
     }
 
@@ -537,7 +541,9 @@ static int load_path_indexes(DAContext *ctx, DAStoragePathArray *parray,
         pentry = da_store_path_index_get(ctx, p->store.path.str);
         if (pentry != NULL) {
             p->store.index = pentry->index;
-            if ((result=store_path_check_mark(pentry, &regenerated)) != 0) {
+            if ((result=store_path_check_mark(ctx, pentry,
+                            &regenerated)) != 0)
+            {
                 return result;
             }
             if (regenerated) {
@@ -651,9 +657,9 @@ int da_storage_config_load(DAContext *ctx, DAStorageConfig *storage_cfg,
 
     memset(storage_cfg, 0, sizeof(DAStorageConfig));
     if ((result=iniLoadFromFile(storage_filename, &ini_context)) != 0) {
-        logError("file: "__FILE__", line: %d, "
-                "load conf file \"%s\" fail, ret code: %d",
-                __LINE__, storage_filename, result);
+        logError("file: "__FILE__", line: %d, %s "
+                "load conf file \"%s\" fail, ret code: %d", __LINE__,
+                ctx->module_name, storage_filename, result);
         return result;
     }
 
@@ -666,7 +672,8 @@ int da_storage_config_load(DAContext *ctx, DAStorageConfig *storage_cfg,
     return result;
 }
 
-static void log_paths(DAStoragePathArray *parray, const char *caption)
+static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
+        const char *caption)
 {
     DAStoragePathInfo *p;
     DAStoragePathInfo *end;
@@ -678,7 +685,7 @@ static void log_paths(DAStoragePathArray *parray, const char *caption)
         return;
     }
 
-    logInfo("%s count: %d", caption, parray->count);
+    logInfo("%s %s count: %d", ctx->module_name, caption, parray->count);
     end = parray->paths + parray->count;
     for (p=parray->paths; p<end; p++) {
         long_to_comma_str(p->space_stat.avail /
@@ -716,9 +723,9 @@ static void log_paths(DAStoragePathArray *parray, const char *caption)
     }
 }
 
-void da_storage_config_to_log(DAStorageConfig *storage_cfg)
+void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
 {
-    logInfo("storage config, write_threads_per_path: %d, "
+    logInfo("%s storage config, write_threads_per_path: %d, "
             "read_threads_per_path: %d, "
             "io_depth_per_read_thread: %d, read_direct_io: %d, "
             "fsync_every_n_writes: %d, "
@@ -745,6 +752,7 @@ void da_storage_config_to_log(DAStorageConfig *storage_cfg)
 #else
             "never_reclaim_on_trunk_usage: %.2f%%",
 #endif
+            ctx->module_name,
             storage_cfg->write_threads_per_path,
             storage_cfg->read_threads_per_path,
             storage_cfg->io_depth_per_read_thread,
@@ -781,6 +789,6 @@ void da_storage_config_to_log(DAStorageConfig *storage_cfg)
 #endif
             );
 
-    log_paths(&storage_cfg->write_cache, "write cache paths");
-    log_paths(&storage_cfg->store_path, "store paths");
+    log_paths(ctx, &storage_cfg->write_cache, "write cache paths");
+    log_paths(ctx, &storage_cfg->store_path, "store paths");
 }

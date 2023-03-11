@@ -115,10 +115,12 @@ int da_trunk_hashtable_add(DATrunkHTableContext *ctx,
         if (trunk->id_info.id < current->id_info.id) {
             break;
         } else if (trunk->id_info.id == current->id_info.id) {
+            DAContext *da_ctx;
+            da_ctx = fc_list_entry(ctx, DAContext, trunk_htable_ctx);
             result = EEXIST;
-            logError("file: "__FILE__", line: %d, "
-                    "trunk id: %"PRId64" already exist",
-                    __LINE__, trunk->id_info.id);
+            logError("file: "__FILE__", line: %d, %s "
+                    "trunk id: %"PRId64" already exist", __LINE__,
+                    da_ctx->module_name, trunk->id_info.id);
             break;
         }
 
@@ -168,9 +170,11 @@ DATrunkFileInfo *da_trunk_hashtable_get(DATrunkHTableContext *ctx,
     if (result == 0) {
         return current;
     } else {
-        logError("file: "__FILE__", line: %d, "
-                "trunk id: %u NOT exist",
-                __LINE__, trunk_id);
+        DAContext *da_ctx;
+        da_ctx = fc_list_entry(ctx, DAContext, trunk_htable_ctx);
+        logError("file: "__FILE__", line: %d, %s "
+                "trunk id: %u NOT exist", __LINE__,
+                da_ctx->module_name, trunk_id);
         return NULL;
     }
 }

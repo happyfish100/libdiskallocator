@@ -126,7 +126,8 @@ int da_storage_allocator_init(DAContext *ctx)
     return da_trunk_id_info_init(ctx);
 }
 
-static int deal_allocator_on_ready(DAStorageAllocatorContext *allocator_ctx)
+static int deal_allocator_on_ready(DAContext *ctx,
+        DAStorageAllocatorContext *allocator_ctx)
 {
     DATrunkAllocator *allocator;
     DATrunkAllocator *end;
@@ -135,8 +136,9 @@ static int deal_allocator_on_ready(DAStorageAllocatorContext *allocator_ctx)
     for (allocator=allocator_ctx->all.allocators; allocator<end; allocator++) {
         da_trunk_allocator_deal_on_ready(allocator);
 
-        logInfo("path index: %d, total: %"PRId64" MB, used: %"PRId64" MB, "
-                "avail: %"PRId64" MB", allocator->path_info->store.index,
+        logInfo("%s path index: %d, total: %"PRId64" MB, used: %"PRId64" MB, "
+                "avail: %"PRId64" MB", ctx->module_name,
+                allocator->path_info->store.index,
                 allocator->path_info->trunk_stat.total / (1024 * 1024),
                 allocator->path_info->trunk_stat.used / (1024 * 1024),
                 allocator->path_info->trunk_stat.avail / (1024 * 1024));
@@ -174,15 +176,17 @@ static void wait_allocator_available(DAContext *ctx)
     }
 
     i = 0;
-    while (ctx->store_allocator_mgr->store_path.avail->count == 0 && i++ < 10) {
+    while (ctx->store_allocator_mgr->store_path.
+            avail->count == 0 && i++ < 10)
+    {
         fc_sleep_ms(100);
     }
 
-    logInfo("file: "__FILE__", line: %d, "
+    logInfo("file: "__FILE__", line: %d, %s "
             "waiting count: %d, path stat {avail count: %d, "
             "full count: %d}, reclaim freelist count: %d", __LINE__,
-            i, ctx->store_allocator_mgr->store_path.avail->count,
-            ctx->store_allocator_mgr->store_path.full->count,
+            ctx->module_name, i, ctx->store_allocator_mgr->store_path.
+            avail->count, ctx->store_allocator_mgr->store_path.full->count,
             ctx->store_allocator_mgr->reclaim_freelist.count);
 
     count = ctx->store_allocator_mgr->reclaim_freelist.water_mark_trunks -
@@ -300,8 +304,8 @@ int init_allocator_ptr_array(DAContext *ctx,
         add_to_aptr_array(aptr_array, allocator);
 
         /*
-        logInfo("path index: %d, avail count: %d, full count: %d",
-                allocator->path_info->store.index,
+        logInfo("%s path index: %d, avail count: %d, full count: %d",
+                ctx->module_name, allocator->path_info->store.index,
                 allocator_ctx->avail->count,
                 allocator_ctx->full->count);
                 */
@@ -364,8 +368,8 @@ static int check_trunk_avail_func(void *args)
 
     ctx->check_trunk_avail_in_progress = true;
     if (ctx->store_allocator_mgr->store_path.full->count > 0) {
-        logInfo("store_path full count: %d", ctx->store_allocator_mgr->
-                store_path.full->count);
+        logInfo("%s store_path full count: %d", ctx->module_name,
+                ctx->store_allocator_mgr->store_path.full->count);
         result = check_trunk_avail(ctx, &ctx->store_allocator_mgr->store_path);
     } else {
         result = 0;
@@ -391,14 +395,14 @@ int da_storage_allocator_prealloc_trunk_freelists(DAContext *ctx)
 {
     int result;
 
-    if ((result=deal_allocator_on_ready(&ctx->store_allocator_mgr->
-                    write_cache)) != 0)
+    if ((result=deal_allocator_on_ready(ctx, &ctx->
+                    store_allocator_mgr->write_cache)) != 0)
     {
         return result;
     }
 
-    if ((result=deal_allocator_on_ready(&ctx->store_allocator_mgr->
-                    store_path)) != 0)
+    if ((result=deal_allocator_on_ready(ctx, &ctx->
+                    store_allocator_mgr->store_path)) != 0)
     {
         return result;
     }

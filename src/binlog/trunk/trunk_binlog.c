@@ -148,9 +148,10 @@ static int load_one_binlog(DAContext *ctx, const int binlog_index)
 
     if ((fd=open(full_filename, O_RDONLY | O_CLOEXEC)) < 0) {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "open file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, full_filename, result, STRERROR(result));
+                __LINE__, ctx->module_name, full_filename,
+                result, STRERROR(result));
         return result;
     }
 
@@ -162,9 +163,9 @@ static int load_one_binlog(DAContext *ctx, const int binlog_index)
         if ((result=trunk_parse_content(ctx, &content,
                         &line_count, error_info)) != 0)
         {
-            logError("file: "__FILE__", line: %d, "
-                    "parse file: %s fail, line no: %d, "
-                    "errno: %d, error info: %s", __LINE__,
+            logError("file: "__FILE__", line: %d, %s "
+                    "parse file: %s fail, line no: %d, errno: %d, "
+                    "error info: %s", __LINE__, ctx->module_name,
                     full_filename, line_count, result, error_info);
             break;
         }
@@ -172,9 +173,10 @@ static int load_one_binlog(DAContext *ctx, const int binlog_index)
 
     if (content.len < 0) {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "read from file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, full_filename, result, STRERROR(result));
+                __LINE__, ctx->module_name, full_filename,
+                result, STRERROR(result));
     }
     close(fd);
 

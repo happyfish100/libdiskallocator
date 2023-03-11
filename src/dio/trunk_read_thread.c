@@ -190,9 +190,9 @@ static int init_thread_context(DAContext *ctx,
         thread->aio.ctx = 0;
         if (io_setup(thread->aio.max_event, &thread->aio.ctx) != 0) {
             result = errno != 0 ? errno : ENOMEM;
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "io_setup fail, errno: %d, error info: %s",
-                    __LINE__, result, STRERROR(result));
+                    __LINE__, ctx->module_name, result, STRERROR(result));
             return result;
         }
         thread->aio.doing_count = 0;
@@ -317,8 +317,8 @@ int da_trunk_read_thread_init(DAContext *ctx)
     }
 
     /*
-       logInfo("ctx->trunk_read_ctx->path_ctx_array.count: %d",
-               ctx->trunk_read_ctx->path_ctx_array.count);
+       logInfo("%s ctx->trunk_read_ctx->path_ctx_array.count: %d",
+               ctx->module_name, ctx->trunk_read_ctx->path_ctx_array.count);
      */
     return 0;
 }
@@ -354,13 +354,13 @@ int da_trunk_read_thread_push(DAContext *ctx, const DATrunkSpaceInfo *space,
     return 0;
 }
 
-static int get_read_fd(TrunkReadThreadContext *ctx,
+static int get_read_fd(TrunkReadThreadContext *thread,
         DATrunkSpaceInfo *space, int *fd)
 {
     char trunk_filename[PATH_MAX];
     int result;
 
-    if ((*fd=da_trunk_fd_cache_get(&ctx->fd_cache,
+    if ((*fd=da_trunk_fd_cache_get(&thread->fd_cache,
                     space->id_info.id)) >= 0)
     {
         return 0;
@@ -368,7 +368,7 @@ static int get_read_fd(TrunkReadThreadContext *ctx,
 
     dio_get_trunk_filename(space, trunk_filename, sizeof(trunk_filename));
 #ifdef OS_LINUX
-    if (ctx->path_info->read_direct_io) {
+    if (thread->path_info->read_direct_io) {
         *fd = open(trunk_filename, O_RDONLY | O_DIRECT | O_CLOEXEC);
     } else {
         *fd = open(trunk_filename, O_RDONLY | O_CLOEXEC);
@@ -378,19 +378,20 @@ static int get_read_fd(TrunkReadThreadContext *ctx,
 #endif
     if (*fd < 0) {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "open file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, trunk_filename, result, STRERROR(result));
+                __LINE__, thread->path_info->ctx->module_name,
+                trunk_filename, result, STRERROR(result));
         return result;
     }
 
-    da_trunk_fd_cache_add(&ctx->fd_cache, space->id_info.id, *fd);
+    da_trunk_fd_cache_add(&thread->fd_cache, space->id_info.id, *fd);
     return 0;
 }
 
 #ifdef OS_LINUX
 
-static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
+static inline int prepare_read_slice(TrunkReadThreadContext *thread,
         DATrunkReadIOBuffer *iob)
 {
     int64_t new_offset;
@@ -400,23 +401,23 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
     int fd;
     bool new_alloced;
 
-    new_offset = MEM_ALIGN_FLOOR(iob->space.offset, ctx->block_size);
-    read_bytes = MEM_ALIGN_CEIL(iob->read_bytes, ctx->block_size);
+    new_offset = MEM_ALIGN_FLOOR(iob->space.offset, thread->block_size);
+    read_bytes = MEM_ALIGN_CEIL(iob->read_bytes, thread->block_size);
     offset = iob->space.offset - new_offset;
     if (offset > 0) {
         if (new_offset + read_bytes < iob->space.offset +
                 iob->read_bytes)
         {
-            read_bytes += ctx->block_size;
+            read_bytes += thread->block_size;
         }
     }
 
     if (iob->rb->aio_buffer != NULL && iob->rb->
             aio_buffer->size < read_bytes)
     {
-        logWarning("file: "__FILE__", line: %d, "
-                "buffer size %d is too small, required size: %d",
-                __LINE__, iob->rb->aio_buffer->size, read_bytes);
+        logWarning("file: "__FILE__", line: %d, %s "
+                "buffer size %d is too small, required size: %d", __LINE__,
+                ctx->module_name, iob->rb->aio_buffer->size, read_bytes);
 
         da_read_buffer_pool_free(iob->rb->aio_buffer);
         iob->rb->aio_buffer = NULL;
@@ -424,7 +425,7 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
 
     if (iob->rb->aio_buffer == NULL) {
         iob->rb->aio_buffer = da_read_buffer_pool_alloc(
-                ctx->indexes.path, read_bytes);
+                thread->indexes.path, read_bytes);
         if (iob->rb->aio_buffer == NULL) {
             return ENOMEM;
         }
@@ -438,12 +439,13 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
     iob->rb->aio_buffer->read_bytes = read_bytes;
 
     /*
-    logInfo("space.offset: %"PRId64", new_offset: %"PRId64", "
-            "offset: %d, read_bytes: %d, size: %d", iob->space.offset,
-            new_offset, offset, read_bytes, iob->rb->aio_buffer->size);
+    logInfo("%s space.offset: %"PRId64", new_offset: %"PRId64", "
+            "offset: %d, read_bytes: %d, size: %d", ctx->module_name,
+            iob->space.offset, new_offset, offset, read_bytes,
+            iob->rb->aio_buffer->size);
             */
 
-    if ((result=get_read_fd(ctx, &iob->space, &fd)) != 0) {
+    if ((result=get_read_fd(thread, &iob->space, &fd)) != 0) {
         if (new_alloced) {
             da_read_buffer_pool_free(iob->rb->aio_buffer);
             iob->rb->aio_buffer = NULL;
@@ -454,11 +456,11 @@ static inline int prepare_read_slice(TrunkReadThreadContext *ctx,
     io_prep_pread(&iob->iocb, fd, iob->rb->aio_buffer->buff,
             iob->rb->aio_buffer->read_bytes, new_offset);
     iob->iocb.data = iob;
-    ctx->iocbs.pp[ctx->iocbs.count++] = &iob->iocb;
+    thread->iocbs.pp[thread->iocbs.count++] = &iob->iocb;
     return 0;
 }
 
-static int consume_queue(TrunkReadThreadContext *ctx)
+static int consume_queue(TrunkReadThreadContext *thread)
 {
     struct fc_queue_info qinfo;
     DATrunkReadIOBuffer *iob;
@@ -468,36 +470,36 @@ static int consume_queue(TrunkReadThreadContext *ctx)
     int n;
     int result;
 
-    fc_queue_pop_to_queue_ex(&ctx->queue, &qinfo, ctx->aio.doing_count == 0);
+    fc_queue_pop_to_queue_ex(&thread->queue, &qinfo, thread->aio.doing_count == 0);
     if (qinfo.head == NULL) {
         return 0;
     }
 
-    target_count = ctx->aio.max_event - ctx->aio.doing_count;
-    ctx->iocbs.count = 0;
+    target_count = thread->aio.max_event - thread->aio.doing_count;
+    thread->iocbs.count = 0;
     iob = (DATrunkReadIOBuffer *)qinfo.head;
     do {
-        if ((result=prepare_read_slice(ctx, iob)) != 0) {
+        if ((result=prepare_read_slice(thread, iob)) != 0) {
             return result;
         }
 
         iob = iob->next;
-    } while (iob != NULL && ctx->iocbs.count < target_count);
+    } while (iob != NULL && thread->iocbs.count < target_count);
 
     count = 0;
-    while ((remain=ctx->iocbs.count - count) > 0) {
-        if ((n=io_submit(ctx->aio.ctx, remain,
-                        ctx->iocbs.pp + count)) <= 0)
+    while ((remain=thread->iocbs.count - count) > 0) {
+        if ((n=io_submit(thread->aio.ctx, remain,
+                        thread->iocbs.pp + count)) <= 0)
         {
             result = errno != 0 ? errno : ENOMEM;
             if (result == EINTR) {
                 continue;
             }
 
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "io_submiti return %d != %d, "
-                    "errno: %d, error info: %s",
-                    __LINE__, count, ctx->iocbs.count,
+                    "errno: %d, error info: %s", __LINE__,
+                    ctx->module_name, count, thread->iocbs.count,
                     result, STRERROR(result));
             return result;
         }
@@ -505,15 +507,15 @@ static int consume_queue(TrunkReadThreadContext *ctx)
         count += n;
     }
 
-    ctx->aio.doing_count += ctx->iocbs.count;
+    thread->aio.doing_count += thread->iocbs.count;
     if (iob != NULL) {
         qinfo.head = iob;
-        fc_queue_push_queue_to_head_silence(&ctx->queue, &qinfo);
+        fc_queue_push_queue_to_head_silence(&thread->queue, &qinfo);
     }
     return 0;
 }
 
-static int process_aio(TrunkReadThreadContext *ctx)
+static int process_aio(TrunkReadThreadContext *thread)
 {
     struct timespec tms;
     DATrunkReadIOBuffer *iob;
@@ -524,21 +526,21 @@ static int process_aio(TrunkReadThreadContext *ctx)
     int count;
     int result;
 
-    full = ctx->aio.doing_count >= ctx->aio.max_event;
+    full = thread->aio.doing_count >= thread->aio.max_event;
     while (1) {
         if (full) {
             tms.tv_sec = 1;
             tms.tv_nsec = 0;
         } else {
             tms.tv_sec = 0;
-            if (ctx->aio.doing_count < 10) {
-                tms.tv_nsec = ctx->aio.doing_count * 1000 * 1000;
+            if (thread->aio.doing_count < 10) {
+                tms.tv_nsec = thread->aio.doing_count * 1000 * 1000;
             } else {
                 tms.tv_nsec = 10 * 1000 * 1000;
             }
         }
-        count = io_getevents(ctx->aio.ctx, 1, ctx->aio.
-                max_event, ctx->aio.events, &tms);
+        count = io_getevents(thread->aio.ctx, 1, thread->aio.
+                max_event, thread->aio.events, &tms);
         if (count > 0) {
             break;
         } else if (count == 0) {  //timeout
@@ -557,20 +559,21 @@ static int process_aio(TrunkReadThreadContext *ctx)
                 }
             }
 
-            logCrit("file: "__FILE__", line: %d, "
+            logCrit("file: "__FILE__", line: %d, %s "
                     "io_getevents fail, errno: %d, error info: %s",
-                    __LINE__, result, STRERROR(result));
+                    __LINE__, thread->path_info->ctx->module_name,
+                    result, STRERROR(result));
             return result;
         }
     }
 
-    end = ctx->aio.events + count;
-    for (event=ctx->aio.events; event<end; event++) {
+    end = thread->aio.events + count;
+    for (event=thread->aio.events; event<end; event++) {
         iob = (DATrunkReadIOBuffer *)event->data;
         if (event->res == iob->rb->aio_buffer->read_bytes) {
             result = 0;
         } else {
-            da_trunk_fd_cache_delete(&ctx->fd_cache,
+            da_trunk_fd_cache_delete(&thread->fd_cache,
                     iob->space.id_info.id);
 
             if ((int)event->res < 0) {
@@ -580,48 +583,48 @@ static int process_aio(TrunkReadThreadContext *ctx)
             }
             dio_get_trunk_filename(&iob->space, trunk_filename,
                     sizeof(trunk_filename));
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "read trunk file: %s fail, offset: %u, "
                     "expect length: %d, read return: %d, errno: %d, "
-                    "error info: %s", __LINE__, trunk_filename,
-                    iob->space.offset - iob->rb->aio_buffer->offset,
-                    iob->rb->aio_buffer->read_bytes, (int)event->res,
-                    result, STRERROR(result));
+                    "error info: %s", __LINE__, ctx->module_name,
+                    trunk_filename, iob->space.offset - iob->rb->
+                    aio_buffer->offset, iob->rb->aio_buffer->read_bytes,
+                    (int)event->res, result, STRERROR(result));
         }
 
         iob->notify.func(iob, result);
-        fast_mblock_free_object(&ctx->mblock, iob);
+        fast_mblock_free_object(&thread->mblock, iob);
     }
-    ctx->aio.doing_count -= count;
+    thread->aio.doing_count -= count;
 
     return 0;
 }
 
-static inline int process(TrunkReadThreadContext *ctx)
+static inline int process(TrunkReadThreadContext *thread)
 {
     int result;
 
-    if ((result=consume_queue(ctx)) != 0) {
+    if ((result=consume_queue(thread)) != 0) {
         return result;
     }
 
-    if (ctx->aio.doing_count <= 0) {
+    if (thread->aio.doing_count <= 0) {
         return 0;
     }
 
-    return process_aio(ctx);
+    return process_aio(thread);
 }
 
 #endif
 
-static int do_read_slice(TrunkReadThreadContext *ctx, DATrunkReadIOBuffer *iob)
+static int do_read_slice(TrunkReadThreadContext *thread, DATrunkReadIOBuffer *iob)
 {
     int fd;
     int remain;
     int bytes;
     int result;
 
-    if ((result=get_read_fd(ctx, &iob->space, &fd)) != 0) {
+    if ((result=get_read_fd(thread, &iob->space, &fd)) != 0) {
         return result;
     }
 
@@ -638,16 +641,16 @@ static int do_read_slice(TrunkReadThreadContext *ctx, DATrunkReadIOBuffer *iob)
                 continue;
             }
 
-            da_trunk_fd_cache_delete(&ctx->fd_cache,
+            da_trunk_fd_cache_delete(&thread->fd_cache,
                     iob->space.id_info.id);
 
             dio_get_trunk_filename(&iob->space, trunk_filename,
                     sizeof(trunk_filename));
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "read trunk file: %s fail, offset: %u, "
-                    "errno: %d, error info: %s", __LINE__, trunk_filename,
-                    iob->space.offset + iob->rb->buffer.length,
-                    result, STRERROR(result));
+                    "errno: %d, error info: %s", __LINE__, thread->path_info->
+                    ctx->module_name, trunk_filename, iob->space.offset +
+                    iob->rb->buffer.length, result, STRERROR(result));
             return result;
         }
 
@@ -658,60 +661,60 @@ static int do_read_slice(TrunkReadThreadContext *ctx, DATrunkReadIOBuffer *iob)
     return 0;
 }
 
-static void normal_read_loop(TrunkReadThreadContext *ctx)
+static void normal_read_loop(TrunkReadThreadContext *thread)
 {
     int result;
     DATrunkReadIOBuffer *iob;
 
     while (SF_G_CONTINUE_FLAG) {
-        if ((iob=(DATrunkReadIOBuffer *)fc_queue_pop(&ctx->queue)) == NULL) {
+        if ((iob=(DATrunkReadIOBuffer *)fc_queue_pop(&thread->queue)) == NULL) {
             continue;
         }
 
-        if ((result=do_read_slice(ctx, iob)) != 0) {
-            logError("file: "__FILE__", line: %d, "
-                    "slice read fail, result: %d",
-                    __LINE__, result);
+        if ((result=do_read_slice(thread, iob)) != 0) {
+            logError("file: "__FILE__", line: %d, %s "
+                    "slice read fail, result: %d", __LINE__,
+                    thread->path_info->ctx->module_name, result);
         }
 
         if (iob->notify.func != NULL) {
             iob->notify.func(iob, result);
         }
-        fast_mblock_free_object(&ctx->mblock, iob);
+        fast_mblock_free_object(&thread->mblock, iob);
     }
 }
 
 static void *da_trunk_read_thread_func(void *arg)
 {
-    TrunkReadThreadContext *ctx;
+    TrunkReadThreadContext *thread;
 #ifdef OS_LINUX
     int len;
     char thread_name[16];
 #endif
 
-    ctx = (TrunkReadThreadContext *)arg;
+    thread = (TrunkReadThreadContext *)arg;
 
 #ifdef OS_LINUX
     len = snprintf(thread_name, sizeof(thread_name),
-            "dio-p%02d-r", ctx->indexes.path);
-    if (ctx->indexes.thread >= 0) {
+            "dio-p%02d-r", thread->indexes.path);
+    if (thread->indexes.thread >= 0) {
         snprintf(thread_name + len, sizeof(thread_name) - len,
-                "[%d]", ctx->indexes.thread);
+                "[%d]", thread->indexes.thread);
     }
     prctl(PR_SET_NAME, thread_name);
 
-    if (ctx->path_info->read_direct_io) {
+    if (thread->path_info->read_direct_io) {
         while (SF_G_CONTINUE_FLAG) {
-            if (process(ctx) != 0) {
+            if (process(thread) != 0) {
                 sf_terminate_myself();
                 break;
             }
         }
     } else {
-        normal_read_loop(ctx);
+        normal_read_loop(thread);
     }
 #else
-    normal_read_loop(ctx);
+    normal_read_loop(thread);
 #endif
 
     return NULL;

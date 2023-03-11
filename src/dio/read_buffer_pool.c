@@ -31,6 +31,7 @@ typedef struct {
 } ReadBufferAllocator;
 
 typedef struct {
+    DAContext *ctx;
     int block_size;
     short path_index;
 
@@ -164,6 +165,7 @@ int da_read_buffer_pool_create(DAContext *ctx, const short path_index,
     int result;
 
     pool = ctx->rbpool_ctx->array.pools + path_index;
+    pool->ctx = ctx;
     pool->path_index = path_index;
     pool->block_size = block_size;
     pool->memory.alloc = 0;
@@ -202,9 +204,9 @@ static inline ReadBufferAllocator *get_allocator(
         }
     }
 
-    logError("file: "__FILE__", line: %d, "
-            "alloc size: %d is too large, exceed: %d",
-            __LINE__, size, (end-1)->size);
+    logError("file: "__FILE__", line: %d, %s "
+            "alloc size: %d is too large, exceed: %d", __LINE__,
+            pool->ctx->module_name, size, (end-1)->size);
     return NULL;
 }
 
@@ -286,9 +288,9 @@ static inline DAAlignedReadBuffer *do_aligned_alloc(ReadBufferPool *pool,
     if ((result=posix_memalign((void **)&buffer->buff,
                     pool->block_size, allocator->size)) != 0)
     {
-        logError("file: "__FILE__", line: %d, "
-                "posix_memalign %d bytes fail, "
-                "errno: %d, error info: %s", __LINE__,
+        logError("file: "__FILE__", line: %d, %s "
+                "posix_memalign %d bytes fail, errno: %d, "
+                "error info: %s", __LINE__, pool->ctx->module_name,
                 allocator->size, result, STRERROR(result));
         fast_mblock_free_object(&pool->mblock, buffer);
         return NULL;
@@ -330,14 +332,14 @@ DAAlignedReadBuffer *da_read_buffer_pool_alloc(DAContext *ctx,
                     ctx->storage.file_block_size)
             {
                 reclaim(pool, ctx->storage.file_block_size, &reclaim_bytes);
-                logInfo("file: "__FILE__", line: %d, "
+                logInfo("file: "__FILE__", line: %d, %s "
                         "reach max memory limit, reclaim %d bytes",
-                        __LINE__, reclaim_bytes);
+                        __LINE__, ctx->module_name, reclaim_bytes);
             } else {
-                logWarning("file: "__FILE__", line: %d, "
+                logWarning("file: "__FILE__", line: %d, %s "
                         "reach max memory limit of pool: %"PRId64 " MB",
-                        __LINE__, ctx->rbpool_ctx->watermark.high /
-                        (1024 * 1024));
+                        __LINE__, ctx->module_name, ctx->rbpool_ctx->
+                        watermark.high / (1024 * 1024));
             }
         }
 
@@ -389,8 +391,9 @@ static void pool_reclaim(DAContext *ctx, ReadBufferPool *pool)
     ReadBufferAllocator *allocator;
 
     /*
-    logInfo("memory alloc: %"PRId64", watermark {low: %"PRId64", high: %"PRId64"}",
-            FC_ATOMIC_GET(pool->memory.alloc), ctx->rbpool_ctx->watermark.low,
+    logInfo("%s memory alloc: %"PRId64", watermark {low: %"PRId64", "
+            "high: %"PRId64"}", ctx->module_name, FC_ATOMIC_GET(pool->
+                memory.alloc), ctx->rbpool_ctx->watermark.low,
             ctx->rbpool_ctx->watermark.high);
             */
 
@@ -441,8 +444,9 @@ int da_read_buffer_pool_start(DAContext *ctx, const int max_idle_time,
     }
 
     if (allocator_count == 0) {
-        logError("file: "__FILE__", line: %d, "
-                "pool array is empty!", __LINE__);
+        logError("file: "__FILE__", line: %d, %s "
+                "pool array is empty!", __LINE__,
+                ctx->module_name);
         return EINVAL;
     }
 

@@ -79,19 +79,21 @@ void da_trunk_freelist_keep_water_mark(struct da_trunk_allocator
 
     count = allocator->freelist.water_mark_trunks - allocator->freelist.count;
     if (count <= 0) {
-        logInfo("file: "__FILE__", line: %d, "
+        logInfo("file: "__FILE__", line: %d, %s "
                 "path: %s, freelist count: %d, water_mark count: %d",
-                __LINE__, allocator->path_info->store.path.str,
+                __LINE__, allocator->path_info->ctx->module_name,
+                allocator->path_info->store.path.str,
                 allocator->freelist.count,
                 allocator->freelist.water_mark_trunks);
         return;
     }
 
-    logInfo("file: "__FILE__", line: %d, "
+    logInfo("file: "__FILE__", line: %d, %s "
             "path: %s, freelist count: %d, water_mark count: %d, "
-            "should allocate: %d trunks", __LINE__, allocator->
-            path_info->store.path.str, allocator->freelist.count,
-            allocator->freelist.water_mark_trunks, count);
+            "should allocate: %d trunks", __LINE__, allocator->path_info->
+            ctx->module_name, allocator->path_info->store.path.str,
+            allocator->freelist.count, allocator->freelist.
+            water_mark_trunks, count);
     for (i=0; i<count; i++) {
         da_trunk_maker_allocate(allocator);
     }
@@ -203,9 +205,11 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
                 }
                 
                 if (remain_bytes <= 0) {
-                    logInfo("allocator: %p, trunk_info: %p, "
+                    logInfo("%s allocator: %p, trunk_info: %p, "
                             "trunk size: %u, free start: %u, "
-                            "remain_bytes: %u", trunk_info->allocator,
+                            "remain_bytes: %u", trunk_info->allocator->
+                            path_info->ctx->module_name,
+                            trunk_info->allocator,
                             trunk_info, trunk_info->size,
                             trunk_info->free_start, remain_bytes);
                     abort();

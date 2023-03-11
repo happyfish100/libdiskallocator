@@ -256,8 +256,8 @@ int da_trunk_write_thread_init(DAContext *ctx)
     }
 
     /*
-       logInfo("ctx->trunk_write_ctx->path_ctx_array.count: %d",
-               ctx->trunk_write_ctx->path_ctx_array.count);
+       logInfo("%s ctx->trunk_write_ctx->path_ctx_array.count: %d",
+               ctx->module_name, ctx->trunk_write_ctx->path_ctx_array.count);
      */
     return 0;
 }
@@ -357,14 +357,14 @@ static inline void clear_write_fd(TrunkWriteThreadContext *ctx)
     }
 }
 
-static int get_write_fd(TrunkWriteThreadContext *ctx,
+static int get_write_fd(TrunkWriteThreadContext *thread,
         DATrunkSpaceInfo *space, int *fd)
 {
     char trunk_filename[PATH_MAX];
     int result;
 
-    if (space->id_info.id == ctx->file_handle.trunk_id) {
-        *fd = ctx->file_handle.fd;
+    if (space->id_info.id == thread->file_handle.trunk_id) {
+        *fd = thread->file_handle.fd;
         return 0;
     }
 
@@ -372,19 +372,20 @@ static int get_write_fd(TrunkWriteThreadContext *ctx,
     *fd = open(trunk_filename, O_WRONLY | O_CLOEXEC, 0644);
     if (*fd < 0) {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "open file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, trunk_filename, result, STRERROR(result));
+                __LINE__, thread->path_info->ctx->module_name,
+                trunk_filename, result, STRERROR(result));
         return result;
     }
 
-    if (ctx->file_handle.fd >= 0) {
-        close_write_fd(ctx);
+    if (thread->file_handle.fd >= 0) {
+        close_write_fd(thread);
     }
 
-    ctx->file_handle.trunk_id = space->id_info.id;
-    ctx->file_handle.fd = *fd;
-    ctx->file_handle.offset = 0;
+    thread->file_handle.trunk_id = space->id_info.id;
+    thread->file_handle.fd = *fd;
+    thread->file_handle.offset = 0;
     return 0;
 }
 
@@ -409,9 +410,10 @@ static int do_create_trunk(TrunkWriteThreadContext *thread,
             *(filepath + len) = '\0';
             if (mkdir(filepath, 0755) < 0) {
                 result = errno != 0 ? errno : EACCES;
-                logError("file: "__FILE__", line: %d, "
+                logError("file: "__FILE__", line: %d, %s "
                         "mkdir \"%s\" fail, errno: %d, error info: %s",
-                        __LINE__, filepath, result, STRERROR(result));
+                        __LINE__, thread->path_info->ctx->module_name,
+                        filepath, result, STRERROR(result));
                 return result;
             }
             fd = open(trunk_filename, O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
@@ -420,9 +422,10 @@ static int do_create_trunk(TrunkWriteThreadContext *thread,
 
     if (fd < 0) {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "open file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, trunk_filename, result, STRERROR(result));
+                __LINE__, thread->path_info->ctx->module_name,
+                trunk_filename, result, STRERROR(result));
         return result;
     }
 
@@ -432,9 +435,10 @@ static int do_create_trunk(TrunkWriteThreadContext *thread,
                 iob->space.size);
     } else {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "ftruncate file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, trunk_filename, result, STRERROR(result));
+                __LINE__, thread->path_info->ctx->module_name,
+                trunk_filename, result, STRERROR(result));
     }
 
     close(fd);
@@ -454,9 +458,10 @@ static int do_delete_trunk(TrunkWriteThreadContext *thread,
                 iob->space.size);
     } else {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "trunk_filename file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, trunk_filename, result, STRERROR(result));
+                __LINE__, thread->path_info->ctx->module_name,
+                trunk_filename, result, STRERROR(result));
     }
 
     return result;
@@ -511,7 +516,7 @@ static int write_iovec(int fd, struct iovec *iovec,
     return 0;
 }
 
-static int do_write_slices(TrunkWriteThreadContext *ctx)
+static int do_write_slices(TrunkWriteThreadContext *thread)
 {
     char trunk_filename[PATH_MAX];
     TrunkWriteIOBuffer *first;
@@ -522,41 +527,43 @@ static int do_write_slices(TrunkWriteThreadContext *ctx)
     int remain_bytes;
     int result;
 
-    first = ctx->iob_array.iobs[0];
-    if ((result=get_write_fd(ctx, &first->space, &fd)) != 0) {
-        ctx->iob_array.success = 0;
+    first = thread->iob_array.iobs[0];
+    if ((result=get_write_fd(thread, &first->space, &fd)) != 0) {
+        thread->iob_array.success = 0;
         return result;
     }
 
-    if (ctx->file_handle.offset != first->space.offset) {
+    if (thread->file_handle.offset != first->space.offset) {
         if (lseek(fd, first->space.offset, SEEK_SET) < 0) {
             dio_get_trunk_filename(&first->space, trunk_filename,
                     sizeof(trunk_filename));
             result = errno != 0 ? errno : EIO;
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "lseek file: %s fail, offset: %u, "
-                    "errno: %d, error info: %s", __LINE__, trunk_filename,
+                    "errno: %d, error info: %s", __LINE__, thread->
+                    path_info->ctx->module_name, trunk_filename,
                     first->space.offset, result, STRERROR(result));
-            clear_write_fd(ctx);
-            ctx->iob_array.success = 0;
+            clear_write_fd(thread);
+            thread->iob_array.success = 0;
             return result;
         }
 
         /*
         dio_get_trunk_filename(&first->space, trunk_filename,
                 sizeof(trunk_filename));
-        logInfo("trunk file: %s, lseek to offset: %"PRId64,
+        logInfo("%s trunk file: %s, lseek to offset: %u",
+                thread->path_info->ctx->module_name,
                 trunk_filename, first->space.offset);
                 */
     }
 
-    remain_bytes = ctx->iovec_bytes;
-    if (ctx->iovec_array.count <= IOV_MAX) {
-        result = write_iovec(fd, ctx->iovec_array.iovs,
-                ctx->iovec_array.count, &remain_bytes);
+    remain_bytes = thread->iovec_bytes;
+    if (thread->iovec_array.count <= IOV_MAX) {
+        result = write_iovec(fd, thread->iovec_array.iovs,
+                thread->iovec_array.count, &remain_bytes);
     } else {
-        iovec = ctx->iovec_array.iovs;
-        remain_count = ctx->iovec_array.count;
+        iovec = thread->iovec_array.iovs;
+        remain_count = thread->iovec_array.count;
         while (remain_count > 0) {
             iovcnt = (remain_count < IOV_MAX ? remain_count : IOV_MAX);
             if ((result=write_iovec(fd, iovec, iovcnt,
@@ -570,39 +577,42 @@ static int do_write_slices(TrunkWriteThreadContext *ctx)
         }
     }
 
-    ctx->written_count++;
+    thread->written_count++;
     if (result == 0) {
-        if (ctx->path_info->fsync_every_n_writes > 0 && ctx->written_count %
-                ctx->path_info->fsync_every_n_writes == 0)
+        if (thread->path_info->fsync_every_n_writes > 0 &&
+                thread->written_count % thread->path_info->
+                fsync_every_n_writes == 0)
         {
             if (fsync(fd) != 0) {
                 result = errno != 0 ? errno : EIO;
-                logError("file: "__FILE__", line: %d, "
+                logError("file: "__FILE__", line: %d, %s "
                         "sync to trunk file: %s fail, "
                         "errno: %d, error info: %s", __LINE__,
+                        thread->path_info->ctx->module_name,
                         trunk_filename, result, STRERROR(result));
             }
         }
     }
 
     if (result != 0) {
-        clear_write_fd(ctx);
+        clear_write_fd(thread);
 
         dio_get_trunk_filename(&first->space, trunk_filename,
                 sizeof(trunk_filename));
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "write to trunk file: %s fail, offset: %u, "
-                "errno: %d, error info: %s", __LINE__, trunk_filename,
-                first->space.offset + (ctx->iovec_bytes -
+                "errno: %d, error info: %s", __LINE__,
+                thread->path_info->ctx->module_name, trunk_filename,
+                first->space.offset + (thread->iovec_bytes -
                     remain_bytes), result, STRERROR(result));
-        ctx->file_handle.offset = -1;
-        ctx->iob_array.success = 0;
+        thread->file_handle.offset = -1;
+        thread->iob_array.success = 0;
         return result;
     }
 
-    ctx->iob_array.success = ctx->iob_array.count;
-    ctx->file_handle.offset = first->space.offset +
-        ctx->iovec_bytes;
+    thread->iob_array.success = thread->iob_array.count;
+    thread->file_handle.offset = first->space.offset +
+        thread->iovec_bytes;
     return 0;
 }
 
@@ -643,7 +653,8 @@ static int batch_write(TrunkWriteThreadContext *thread)
 
     /*
     if (thread->iob_array.count > 1) {
-        logInfo("batch_write count: %d, success: %d, bytes: %d",
+        logInfo("%s batch_write count: %d, success: %d, bytes: %d",
+                thread->path_info->ctx->module_name,
                 thread->iob_array.count, thread->iob_array.success,
                 thread->iovec_bytes);
     }
@@ -655,7 +666,7 @@ static int batch_write(TrunkWriteThreadContext *thread)
     return result;
 }
 
-static inline int pop_to_request_skiplist(TrunkWriteThreadContext *ctx,
+static inline int pop_to_request_skiplist(TrunkWriteThreadContext *thread,
         const bool blocked)
 {
     TrunkWriteIOBuffer *head;
@@ -663,7 +674,7 @@ static inline int pop_to_request_skiplist(TrunkWriteThreadContext *ctx,
     int result;
 
     if ((head=(TrunkWriteIOBuffer *)fc_queue_pop_all_ex(
-                    &ctx->queue, blocked)) == NULL)
+                    &thread->queue, blocked)) == NULL)
     {
         return 0;
     }
@@ -671,12 +682,12 @@ static inline int pop_to_request_skiplist(TrunkWriteThreadContext *ctx,
     count = 0;
     do {
         ++count;
-        if ((result=uniq_skiplist_insert(ctx->sl_pair->
+        if ((result=uniq_skiplist_insert(thread->sl_pair->
                         skiplist, head)) != 0)
         {
-            logCrit("file: "__FILE__", line: %d, "
-                    "uniq_skiplist_insert fail, result: %d",
-                    __LINE__, result);
+            logCrit("file: "__FILE__", line: %d, %s "
+                    "uniq_skiplist_insert fail, result: %d", __LINE__,
+                    thread->path_info->ctx->module_name, result);
             sf_terminate_myself();
             return -1;
         }
@@ -786,8 +797,9 @@ static void deal_request_skiplist(TrunkWriteThreadContext *thread)
                 thread->iovec_bytes += iob->space.size;
                 break;
             default:
-                logError("file: "__FILE__", line: %d, "
-                        "invalid op_type: %d", __LINE__, iob->op_type);
+                logError("file: "__FILE__", line: %d, %s "
+                        "invalid op_type: %d", __LINE__, thread->
+                        path_info->ctx->module_name, iob->op_type);
                 sf_terminate_myself();
                 return;
         }
@@ -795,9 +807,9 @@ static void deal_request_skiplist(TrunkWriteThreadContext *thread)
         if ((result=uniq_skiplist_delete(thread->sl_pair->
                         skiplist, iob)) != 0)
         {
-            logCrit("file: "__FILE__", line: %d, "
-                    "uniq_skiplist_delete fail, result: %d",
-                    __LINE__, result);
+            logCrit("file: "__FILE__", line: %d, %s "
+                    "uniq_skiplist_delete fail, result: %d", __LINE__,
+                    thread->path_info->ctx->module_name, result);
             sf_terminate_myself();
             return;
         }

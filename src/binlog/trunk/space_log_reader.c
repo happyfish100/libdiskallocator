@@ -165,9 +165,10 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
         if (result == ENOENT && ignore_enoent) {
             return 0;
         } else {
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "open file \"%s\" fail, errno: %d, error info: %s",
-                    __LINE__, space_log_filename, result, STRERROR(result));
+                    __LINE__, reader->ctx->module_name, space_log_filename,
+                    result, STRERROR(result));
             uniq_skiplist_free(*skiplist);
             *skiplist = NULL;
             return result;
@@ -181,18 +182,20 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
         if ((result=parse_to_skiplist(reader, *skiplist,
                         &content, error_info)) != 0)
         {
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "parse file: %s fail, errno: %d, error info: %s",
-                    __LINE__, space_log_filename, result, error_info);
+                    __LINE__, reader->ctx->module_name, space_log_filename,
+                    result, error_info);
             break;
         }
     }
 
     if (content.len < 0) {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "read from file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, space_log_filename, result, STRERROR(result));
+                __LINE__, reader->ctx->module_name, space_log_filename,
+                result, STRERROR(result));
     }
     close(fd);
 
@@ -269,9 +272,10 @@ int da_space_log_reader_load_to_chain(DASpaceLogReader *reader,
             return 0;
         }
 
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "open file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, space_log_filename, result, STRERROR(result));
+                __LINE__, reader->ctx->module_name, space_log_filename,
+                result, STRERROR(result));
         return result;
     }
 
@@ -282,18 +286,20 @@ int da_space_log_reader_load_to_chain(DASpaceLogReader *reader,
         if ((result=parse_to_chain(reader, chain,
                         &content, error_info)) != 0)
         {
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "parse file: %s fail, errno: %d, error info: %s",
-                    __LINE__, space_log_filename, result, error_info);
+                    __LINE__, reader->ctx->module_name, space_log_filename,
+                    result, error_info);
             break;
         }
     }
 
     if (content.len < 0) {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "read from file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, space_log_filename, result, STRERROR(result));
+                __LINE__, reader->ctx->module_name, space_log_filename,
+                result, STRERROR(result));
     }
     close(fd);
 

@@ -179,9 +179,10 @@ int da_trunk_space_log_calc_version(DAContext *ctx,
             return 0;
         }
 
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "stat file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, space_log_filename, result, STRERROR(result));
+                __LINE__, ctx->module_name, space_log_filename,
+                result, STRERROR(result));
         return result;
     }
 
@@ -203,9 +204,10 @@ static int get_write_fd(DAContext *ctx, const uint32_t trunk_id, int *fd)
             sizeof(space_log_filename));
     if ((*fd=open(space_log_filename, flags, 0644)) < 0) {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "open file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, space_log_filename, result, STRERROR(result));
+                __LINE__, ctx->module_name, space_log_filename,
+                result, STRERROR(result));
         return result;
     }
 
@@ -223,11 +225,10 @@ static int do_write_to_file(DAContext *ctx, const uint32_t trunk_id,
         result = errno != 0 ? errno : EIO;
         dio_get_space_log_filename(ctx, trunk_id, space_log_filename,
                 sizeof(space_log_filename));
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "write to space log file \"%s\" fail, "
-                "errno: %d, error info: %s",
-                __LINE__, space_log_filename,
-                result, STRERROR(result));
+                "errno: %d, error info: %s", __LINE__, ctx->module_name,
+                space_log_filename, result, STRERROR(result));
         return result;
     }
 
@@ -235,11 +236,10 @@ static int do_write_to_file(DAContext *ctx, const uint32_t trunk_id,
         result = errno != 0 ? errno : EIO;
         dio_get_space_log_filename(ctx, trunk_id, space_log_filename,
                 sizeof(space_log_filename));
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "fsync to space log file \"%s\" fail, "
-                "errno: %d, error info: %s",
-                __LINE__, space_log_filename,
-                result, STRERROR(result));
+                "errno: %d, error info: %s", __LINE__, ctx->module_name,
+                space_log_filename, result, STRERROR(result));
         return result;
     }
 
@@ -557,10 +557,10 @@ static int load_trunk_indexes(DAContext *ctx)
         trunk->status = DA_TRUNK_STATUS_LOADED;
 
         /*
-        logInfo("trunk id: %u, path index: %d, version: %"PRId64", "
+        logInfo("%s trunk id: %"PRId64", path index: %d, version: %"PRId64", "
                 "calc: %d, used count: %u, used bytes: %u, "
-                "free start: %u", trunk->id_info.id, trunk->
-                allocator->path_info->store.index, version,
+                "free start: %u", ctx->module_name, trunk->id_info.id,
+                trunk->allocator->path_info->store.index, version,
                 index->version != version, trunk->used.count,
                 trunk->used.bytes, trunk->free_start);
                 */
@@ -575,10 +575,10 @@ static int load_trunk_indexes(DAContext *ctx)
             trunk->status = DA_TRUNK_STATUS_LOADED;
 
             /*
-            logInfo("trunk id: %u, path index: %d, used_count: %u, "
-                    "used_bytes: %u, free_start: %u", trunk->id_info.id,
-                    trunk->allocator->path_info->store.index, trunk->
-                    used.count, trunk->used.bytes, trunk->free_start);
+            logInfo("%s trunk id: %"PRId64", path index: %d, used_count: %u, "
+                    "used_bytes: %u, free_start: %u", ctx->module_name,
+                    trunk->id_info.id, trunk->allocator->path_info->store.index,
+                    trunk->used.count, trunk->used.bytes, trunk->free_start);
                     */
         }
     }
@@ -602,9 +602,9 @@ static void *trunk_space_log_func(void *arg)
         }
 
         if (deal_records(ctx, head) != 0) {
-            logCrit("file: "__FILE__", line: %d, "
+            logCrit("file: "__FILE__", line: %d, %s "
                     "deal records fail, program exit!",
-                    __LINE__);
+                    __LINE__, ctx->module_name);
             sf_terminate_myself();
             break;
         }
@@ -618,9 +618,9 @@ static void *trunk_space_log_func(void *arg)
 static int binlog_index_dump(void *args)
 {
     if (dump_trunk_indexes(args) != 0) {
-        logCrit("file: "__FILE__", line: %d, "
-                "dump trunk index fail, program exit!",
-                __LINE__);
+        logCrit("file: "__FILE__", line: %d, %s "
+                "dump trunk index fail, program exit!", __LINE__,
+                ((DAContext *)args)->module_name);
         sf_terminate_myself();
     }
 

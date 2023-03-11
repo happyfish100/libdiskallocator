@@ -126,16 +126,16 @@ static int combine_to_rb_array(DATrunkReclaimContext *rctx,
     return 0;
 }
 
-static inline void log_rw_error(DASliceOpContext *op_ctx,
+static inline void log_rw_error(DAContext *ctx, DASliceOpContext *op_ctx,
         const int result, const int ignore_errno, const char *caption)
 {
     int log_level;
     log_level = (result == ignore_errno) ? LOG_DEBUG : LOG_ERR;
     log_it_ex(&g_log_context, log_level,
-            "file: "__FILE__", line: %d, %s slice fail, "
+            "file: "__FILE__", line: %d, %s %s slice fail, "
             "trunk id: %u, offset: %u, length: %u, size: %u, "
-            "errno: %d, error info: %s", __LINE__, caption,
-            op_ctx->storage->trunk_id, op_ctx->storage->offset,
+            "errno: %d, error info: %s", __LINE__, ctx->module_name,
+            caption, op_ctx->storage->trunk_id, op_ctx->storage->offset,
             op_ctx->storage->length, op_ctx->storage->size,
             result, STRERROR(result));
 }
@@ -151,9 +151,9 @@ static int slice_write(DATrunkReclaimContext *rctx,
                     oid, rctx->read_ctx.op_ctx.storage->length,
                     space_info, &count)) != 0)
     {
-        logError("file: "__FILE__", line: %d, "
-                "alloc disk space %d bytes fail, "
-                "errno: %d, error info: %s", __LINE__,
+        logError("file: "__FILE__", line: %d, %s "
+                "alloc disk space %d bytes fail, errno: %d, "
+                "error info: %s", __LINE__, rctx->ctx->module_name,
                 rctx->read_ctx.op_ctx.storage->length,
                 result, STRERROR(result));
         return result;
@@ -172,12 +172,14 @@ static int migrate_one_slice(DATrunkReclaimContext *rctx,
 
     rctx->read_ctx.op_ctx.storage = &record->storage;
     if ((result=da_slice_read(rctx->ctx, &rctx->read_ctx)) != 0) {
-        log_rw_error(&rctx->read_ctx.op_ctx, result, ENOENT, "read");
+        log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
+                result, ENOENT, "read");
         return result == ENOENT ? 0 : result;
     }
 
     if ((result=slice_write(rctx, record->oid, &space_info)) != 0) {
-        log_rw_error(&rctx->read_ctx.op_ctx, result, 0, "write");
+        log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
+                result, 0, "write");
         return result;
     }
 
@@ -251,7 +253,7 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
         field.source = DA_FIELD_UPDATE_SOURCE_RECLAIM;
         field.op_type = da_binlog_op_type_update;
         field.storage = new_record->storage;
-        if ((result=rctx->ctx->redo_queue_push_func(&trunk, &field,
+        if ((result=rctx->ctx->slice_migrate_done_callback(&trunk, &field,
                         &space_chain, &rctx->log_notify, &flags)) != 0)
         {
             return result;

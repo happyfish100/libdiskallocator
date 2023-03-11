@@ -32,7 +32,8 @@ extern "C" {
 
     int da_store_path_index_max(DAContext *ctx);
 
-    int store_path_check_mark(DAStorePathEntry *pentry, bool *regenerated);
+    int store_path_check_mark(DAContext *ctx, DAStorePathEntry *pentry,
+            bool *regenerated);
 
     DAStorePathEntry *da_store_path_index_get(
             DAContext *ctx, const char *path);

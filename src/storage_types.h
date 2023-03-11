@@ -60,14 +60,14 @@ struct da_trunk_space_info;
 typedef void (*da_rw_done_callback_func)(
         struct da_slice_op_context *op_ctx, void *arg);
 
-typedef int (*da_redo_queue_push_func)(
+typedef int (*da_slice_migrate_done_callback)(
         const struct da_full_trunk_id_info *trunk,
         const struct da_piece_field_info *field,
         struct fc_queue_info *space_chain,
         SFSynchronizeContext *sctx, int *flags);
 
 typedef int (*da_cached_slice_write_done_callback)(
-        const struct da_slice_entry *se,
+        const struct da_slice_entry *se, const
         struct da_trunk_space_info *space);
 
 typedef struct {
@@ -407,6 +407,7 @@ typedef struct da_trunk_space_log_context {
 } DATrunkSpaceLogContext;
 
 typedef struct da_context {
+    const char *module_name;
     DADataConfig data;
 
     struct {
@@ -432,7 +433,7 @@ typedef struct da_context {
     struct da_trunk_prealloc_context *trunk_prealloc_ctx;
     struct da_trunk_maker_context *trunk_maker_ctx;
 
-    da_redo_queue_push_func redo_queue_push_func;
+    da_slice_migrate_done_callback slice_migrate_done_callback;
     da_cached_slice_write_done_callback cached_slice_write_done;
 } DAContext;
 

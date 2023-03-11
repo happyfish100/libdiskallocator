@@ -47,31 +47,32 @@ int da_global_init(const int my_server_id)
     return 0;
 }
 
-int da_load_config(DAContext *context, const int file_block_size,
-        const DADataConfig *data_cfg, const char *storage_filename,
-        const bool have_extra_field)
+int da_load_config(DAContext *context, const char *module_name,
+        const int file_block_size, const DADataConfig *data_cfg,
+        const char *storage_filename, const bool have_extra_field)
 {
     int result;
 
+    context->module_name = module_name;
     context->storage.file_block_size = file_block_size;
     context->data = *data_cfg;
     context->storage.have_extra_field = have_extra_field;
     if ((result=da_storage_config_load(context, &context->
                     storage.cfg, storage_filename)) == 0)
     {
-        da_storage_config_to_log(&context->storage.cfg);
+        da_storage_config_to_log(context, &context->storage.cfg);
     }
 
     return result;
 }
 
-int da_init_start_ex(DAContext *ctx, da_redo_queue_push_func
-        redo_queue_push_func, da_cached_slice_write_done_callback
+int da_init_start_ex(DAContext *ctx, da_slice_migrate_done_callback
+        slice_migrate_done_callback, da_cached_slice_write_done_callback
         cached_slice_write_done)
 {
     int result;
 
-    ctx->redo_queue_push_func = redo_queue_push_func;
+    ctx->slice_migrate_done_callback = slice_migrate_done_callback;
     ctx->cached_slice_write_done = cached_slice_write_done;
     da_trunk_index_init(ctx);
 

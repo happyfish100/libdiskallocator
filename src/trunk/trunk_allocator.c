@@ -140,9 +140,10 @@ int da_trunk_allocator_add(DATrunkAllocator *allocator,
     } 
 
     if (result != 0) {
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "add trunk fail, trunk id: %"PRId64", "
                 "errno: %d, error info: %s", __LINE__,
+                allocator->path_info->ctx->module_name,
                 id_info->id, result, STRERROR(result));
         fast_mblock_free_object(&DA_TRUNK_ALLOCATOR, trunk_info);
         trunk_info = NULL;
@@ -233,10 +234,11 @@ static bool can_add_to_freelist(DATrunkFileInfo *trunk_info)
     double ratio_thredhold;
 
     /*
-    logInfo("file: "__FILE__", line: %d, "
+    logInfo("file: "__FILE__", line: %d, %s"
             "path index: %d, trunk id: %"PRId64", "
-            "used bytes: %"PRId64", free start: %"PRId64,
-            __LINE__, trunk_info->allocator->path_info->store.index,
+            "used bytes: %u, free start: %u", __LINE__,
+            trunk_info->allocator->path_info->ctx->module_name,
+            trunk_info->allocator->path_info->store.index,
             trunk_info->id_info.id, trunk_info->used.bytes,
             trunk_info->free_start);
             */
@@ -302,9 +304,10 @@ void da_trunk_allocator_deal_on_ready(DATrunkAllocator *allocator)
 
 void da_trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info)
 {
-    logInfo("trunk id: %"PRId64", subdir: %u, status: %d, slice "
+    logInfo("%s trunk id: %"PRId64", subdir: %u, status: %d, slice "
             "count: %d, used bytes: %u, trunk size: %u, free start: %u, "
-            "remain bytes: %u", trunk_info->id_info.id,
+            "remain bytes: %u", trunk_info->allocator->path_info->
+            ctx->module_name, trunk_info->id_info.id,
             trunk_info->id_info.subdir, trunk_info->status,
             trunk_info->used.count, trunk_info->used.bytes,
             trunk_info->size, trunk_info->free_start,

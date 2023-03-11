@@ -153,14 +153,15 @@ extern "C" {
                         (DATrunkAllocatorPtrArray **)&allocator_ctx->avail,
                         allocator)) == 0)
         {
-            logInfo("file: "__FILE__", line: %d, "
-                    "path: %s is available", __LINE__,
+            logInfo("file: "__FILE__", line: %d, %s "
+                    "path: %s is available", __LINE__, ctx->module_name,
                     allocator->path_info->store.path.str);
         } else {
-            logWarning("file: "__FILE__", line: %d, "
+            logWarning("file: "__FILE__", line: %d, %s "
                     "path: %s set available fail, errno: %d, "
-                    "error info: %s", __LINE__, allocator->path_info->
-                    store.path.str,  result, STRERROR(result));
+                    "error info: %s", __LINE__, ctx->module_name,
+                    allocator->path_info->store.path.str,
+                    result, STRERROR(result));
         }
 
         return result;
@@ -178,14 +179,15 @@ extern "C" {
         {
             allocator->path_info->trunk_stat.last_used = __sync_add_and_fetch(
                     &allocator->path_info->trunk_stat.used, 0);
-            logWarning("file: "__FILE__", line: %d, "
-                    "path: %s is full", __LINE__,
+            logWarning("file: "__FILE__", line: %d, %s "
+                    "path: %s is full", __LINE__, ctx->module_name,
                     allocator->path_info->store.path.str);
         } else {
-            logWarning("file: "__FILE__", line: %d, "
+            logWarning("file: "__FILE__", line: %d, %s "
                     "path: %s set full fail, errno: %d, "
-                    "error info: %s", __LINE__, allocator->path_info->
-                    store.path.str,  result, STRERROR(result));
+                    "error info: %s", __LINE__, ctx->module_name,
+                    allocator->path_info->store.path.str,
+                    result, STRERROR(result));
         }
 
         return result;

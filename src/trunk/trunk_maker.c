@@ -131,9 +131,10 @@ static int deal_trunk_util_change_event(DATrunkAllocator *allocator,
     }
 
     /*
-    logInfo("event: %c, id: %"PRId64", status: %d, last_used_bytes: %"PRId64", "
-            "current used: %"PRId64", result: %d", event, trunk->id_info.id,
-            trunk->status, trunk->util.last_used_bytes, trunk->used.bytes, result);
+    logInfo("%s event: %c, id: %"PRId64", status: %d, last_used_bytes: "
+            "%u, current used: %u, result: %d", allocator->path_info->
+            ctx->module_name, event, trunk->id_info.id, trunk->status,
+            trunk->util.last_used_bytes, trunk->used.bytes, result);
             */
 
     __sync_bool_compare_and_swap(&trunk->util.event,
@@ -293,12 +294,13 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     long_to_comma_str(used_bytes, bytes_buff);
     long_to_comma_str(time_used, time_buff);
     sprintf(time_prompt, "time used: %s ms", time_buff);
-    logInfo("file: "__FILE__", line: %d, "
+    logInfo("file: "__FILE__", line: %d, %s "
             "path index: %d, reclaimed trunk id: %"PRId64", "
             "migrate block count: %d, "
             "slice counts {total: %d, skip: %d, ignore: %d}, "
             "used bytes {last: %s, current: %u}, "
             "last usage ratio: %.2f%%, result: %d, %s", __LINE__,
+            task->allocator->path_info->ctx->module_name,
             task->allocator->path_info->store.index, trunk->id_info.id,
             thread->reclaim_ctx.barray.count,
             thread->reclaim_ctx.slice_counts.total,

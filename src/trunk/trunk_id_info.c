@@ -84,10 +84,9 @@ static int save_current_trunk_id_ex(DAContext *ctx,
                 ITEM_NAME_NORMAL_EXIT);
     }
     if ((result=safeWriteToFile(full_filename, buff, len)) != 0) {
-        logError("file: "__FILE__", line: %d, "
-                "write to file \"%s\" fail, "
-                "errno: %d, error info: %s",
-                __LINE__, full_filename,
+        logError("file: "__FILE__", line: %d, %s "
+                "write to file \"%s\" fail, errno: %d, error info: %s",
+                __LINE__, ctx->module_name, full_filename,
                 result, STRERROR(result));
     }
 
@@ -108,9 +107,9 @@ static int load_current_trunk_id(DAContext *ctx)
     }
 
     if ((result=iniLoadFromFile(full_filename, &ini_context)) != 0) {
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "load from file \"%s\" fail, error code: %d",
-                __LINE__, full_filename, result);
+                __LINE__, ctx->module_name, full_filename, result);
         return result;
     }
 
@@ -192,9 +191,9 @@ static int init_sorted_subdirs(DAContext *ctx, DAStoragePathArray *parray)
         }
 
         if ((result=init_pthread_lock(&sorted_subdirs->lock)) != 0) {
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "init_pthread_lock fail, errno: %d, error info: %s",
-                    __LINE__, result, STRERROR(result));
+                    __LINE__, ctx->module_name, result, STRERROR(result));
             return result;
         }
     }

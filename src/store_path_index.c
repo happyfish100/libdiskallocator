@@ -65,7 +65,7 @@ static int store_path_generate_mark(const char *store_path,
     return safeWriteToFile(filename, buff, buff_len);
 }
 
-static int store_path_get_mark(const char *filename,
+static int store_path_get_mark(DAContext *ctx, const char *filename,
         char *mark, const int size)
 {
     IniContext ini_ctx;
@@ -79,9 +79,9 @@ static int store_path_get_mark(const char *filename,
     }
 
     if ((result=iniLoadFromFile(filename, &ini_ctx)) != 0) {
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "load from file \"%s\" fail, error code: %d",
-                __LINE__, filename, result);
+                __LINE__, ctx->module_name, filename, result);
         return result;
     }
 
@@ -91,10 +91,10 @@ static int store_path_get_mark(const char *filename,
         if (len < size) {
             strcpy(mark, value);
         } else {
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "mark file: %s, mark length: %d "
-                    "is too long exceeds %d",
-                    __LINE__, filename, len, size);
+                    "is too long exceeds %d", __LINE__,
+                    ctx->module_name, filename, len, size);
             result = EOVERFLOW;
         }
     } else {
@@ -105,7 +105,8 @@ static int store_path_get_mark(const char *filename,
     return result;
 }
 
-int store_path_check_mark(DAStorePathEntry *pentry, bool *regenerated)
+int store_path_check_mark(DAContext *ctx, DAStorePathEntry *pentry,
+        bool *regenerated)
 {
     StorePathMarkInfo mark_info;
     char filename[PATH_MAX];
@@ -117,7 +118,9 @@ int store_path_check_mark(DAStorePathEntry *pentry, bool *regenerated)
     *regenerated = false;
     snprintf(filename, sizeof(filename), "%s/%s",
             pentry->path, STORE_PATH_MARK_FILENAME);
-    if ((result=store_path_get_mark(filename, mark, sizeof(mark))) != 0) {
+    if ((result=store_path_get_mark(ctx, filename,
+                    mark, sizeof(mark))) != 0)
+    {
         if (result == ENOENT) {
             if ((result=store_path_generate_mark(pentry->path,
                             pentry->index, pentry->mark)) == 0)
@@ -135,18 +138,18 @@ int store_path_check_mark(DAStorePathEntry *pentry, bool *regenerated)
     mark_len = strlen(mark);
     dest_len = (sizeof(StorePathMarkInfo) * 4 + 2) / 3;
     if (mark_len > dest_len) {
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "the mark length: %d is too long exceed %d, "
-                "the mark file: %s, the mark string: %s",
-                __LINE__, mark_len, dest_len, filename, mark);
+                "the mark file: %s, the mark string: %s", __LINE__,
+                ctx->module_name, mark_len, dest_len, filename, mark);
         memset(&mark_info, 0, sizeof(StorePathMarkInfo));
     } else if (base64_decode_auto(&DA_BASE64_CTX, mark, mark_len,
                 (char *)&mark_info, &dest_len) == NULL)
     {
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "the mark string is not base64 encoded, "
                 "the mark file: %s, the mark string: %s",
-                __LINE__, filename, mark);
+                __LINE__, ctx->module_name, filename, mark);
         memset(&mark_info, 0, sizeof(StorePathMarkInfo));
     }
 
@@ -156,22 +159,22 @@ int store_path_check_mark(DAStorePathEntry *pentry, bool *regenerated)
         formatDatetime(mark_info.create_time,
                 "%Y-%m-%d %H:%M:%S",
                 time_str, sizeof(time_str));
-        logCrit("file: "__FILE__", line: %d, "
+        logCrit("file: "__FILE__", line: %d, %s "
                 "the store path %s maybe used by other "
                 "store server. fields in the mark file: "
                 "{ server_id: %d, path_index: %d, crc32: %d,"
                 " create_time: %s }, if you confirm that it is NOT "
-                "used by other store server, you can delete "
-                "the mark file %s then try again.", __LINE__,
+                "used by other store server, you can delete the mark "
+                "file %s then try again.", __LINE__, ctx->module_name,
                 pentry->path, mark_info.server_id, mark_info.index,
                 mark_info.crc32, time_str, filename);
     } else {
-        logCrit("file: "__FILE__", line: %d, "
+        logCrit("file: "__FILE__", line: %d, %s "
                 "the store path %s maybe used by other "
                 "store server. if you confirm that it is NOT "
                 "used by other storage server, you can delete "
                 "the mark file %s then try again", __LINE__,
-                pentry->path, filename);
+                ctx->module_name, pentry->path, filename);
     }
 
     return EINVAL;
@@ -224,8 +227,8 @@ static int check_alloc_store_paths(DAContext *ctx, const int inc_count)
     return 0;
 }
 
-static int load_one_store_path_index(IniContext *ini_ctx, char *full_filename,
-        IniSectionInfo *section, DAStorePathEntry *pentry)
+static int load_one_store_path_index(DAContext *ctx, IniContext *ini_ctx,
+        char *full_filename, IniSectionInfo *section, DAStorePathEntry *pentry)
 {
     char *index_str;
     char *path;
@@ -235,25 +238,27 @@ static int load_one_store_path_index(IniContext *ini_ctx, char *full_filename,
     index_str = section->section_name + STORE_PATH_INDEX_SECTION_PREFIX_LEN;
     pentry->index = strtol(index_str, &endptr, 10);
     if (*endptr != '\0') {
-        logError("file: "__FILE__", line: %d, "
-                "data file: %s, section: %s, index is invalid",
-                __LINE__, full_filename, section->section_name);
+        logError("file: "__FILE__", line: %d, %s "
+                "data file: %s, section: %s, index is invalid", __LINE__,
+                ctx->module_name, full_filename, section->section_name);
         return EINVAL;
     }
 
     path = iniGetStrValue(section->section_name, "path", ini_ctx);
     if (path == NULL) {
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "data file: %s, section: %s, item \"path\" not exist",
-                __LINE__, full_filename, section->section_name);
+                __LINE__, ctx->module_name, full_filename,
+                section->section_name);
         return ENOENT;
     }
 
     mark = iniGetStrValue(section->section_name, "mark", ini_ctx);
     if (mark == NULL) {
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "data file: %s, section: %s, item \"mark\" not exist",
-                __LINE__, full_filename, section->section_name);
+                __LINE__, ctx->module_name, full_filename,
+                section->section_name);
         return ENOENT;
     }
 
@@ -312,8 +317,8 @@ static int load_store_path_index(DAContext *ctx,
     pentry = ctx->store_path_array.entries;
     end = sections + count;
     for (section=sections; section<end; section++,pentry++) {
-        if ((result=load_one_store_path_index(ini_ctx, full_filename,
-                        section, pentry)) != 0)
+        if ((result=load_one_store_path_index(ctx, ini_ctx,
+                        full_filename, section, pentry)) != 0)
         {
             return result;
         }
@@ -359,16 +364,17 @@ int da_store_path_index_init(DAContext *ctx)
         }
 
         result = errno != 0 ? errno : EPERM;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "access file %s fail, errno: %d, error info: %s",
-                __LINE__, full_filename, result, STRERROR(result));
+                __LINE__, ctx->module_name, full_filename,
+                result, STRERROR(result));
         return result;
     }
 
     if ((result=iniLoadFromFile(full_filename, &ini_ctx)) != 0) {
-        logError("file: "__FILE__", line: %d, "
-                "load conf file \"%s\" fail, ret code: %d",
-                __LINE__, full_filename, result);
+        logError("file: "__FILE__", line: %d, %s "
+                "load conf file \"%s\" fail, ret code: %d", __LINE__,
+                ctx->module_name, full_filename, result);
         return result;
     }
 
@@ -427,14 +433,14 @@ int da_store_path_index_add(DAContext *ctx,
     pentry = ctx->store_path_array.entries + ctx->store_path_array.count;
     snprintf(filename, sizeof(filename), "%s/%s",
             path, STORE_PATH_MARK_FILENAME);
-    result = store_path_get_mark(filename, mark, sizeof(mark));
+    result = store_path_get_mark(ctx, filename, mark, sizeof(mark));
     if (result != ENOENT) {
         if (result == 0) {
-            logCrit("file: "__FILE__", line: %d, "
+            logCrit("file: "__FILE__", line: %d, %s "
                     "store path: %s, the mark file %s already exist, "
-                    "if you confirm that it is NOT used by other "
-                    "store server, you can delete this mark file "
-                    "then try again.", __LINE__, path, filename);
+                    "if you confirm that it is NOT used by other store "
+                    "server, you can delete this mark file then try again.",
+                    __LINE__, ctx->module_name, path, filename);
             return EEXIST;
         }
         return result;

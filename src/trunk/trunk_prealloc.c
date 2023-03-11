@@ -97,8 +97,9 @@ static void prealloc_thread_pool_run(void *arg, void *thread_data)
         }
 
         /*
-        logInfo("prealloc task: %p, store path: %s", task,
-                task->preallocator->allocator->path_info->store.path.str);
+        logInfo("%s prealloc task: %p, store path: %s", task->preallocator->
+                allocator->path_info->ctx->module_name, task, task->
+                preallocator->allocator->path_info->store.path.str);
                 */
 
         thread_arg->is_new_trunk = false;
@@ -121,8 +122,10 @@ static void prealloc_thread_pool_run(void *arg, void *thread_data)
         }
 
         /*
-        logInfo("task: %p, store path: %s, prealloc result: %d", task,
-                task->preallocator->allocator->path_info->store.path.str, result);
+        logInfo("%s task: %p, store path: %s, prealloc result: %d", task->
+                preallocator->allocator->path_info->ctx->module_name, task,
+                task->preallocator->allocator->path_info->store.path.str,
+                result);
                 */
 
         if (thread_arg->is_new_trunk) {
@@ -172,7 +175,10 @@ static int init_preallocator_array(DAContext *ctx,
     preallocator_array->count = preallocator -
         preallocator_array->preallocators;
 
-    //logInfo("preallocator_array->count: %d", preallocator_array->count);
+    /*
+    logInfo("%s preallocator_array->count: %d", ctx->module_name,
+            preallocator_array->count);
+            */
     return 0;
 }
 
@@ -212,7 +218,7 @@ static TrunkPreallocatorInfo *make_preallocator_chain(
     return head;
 }
 
-static void log_and_reset_preallocators(
+static void log_and_reset_preallocators(DAContext *ctx,
         TrunkPreallocatorArray *preallocator_array)
 {
     TrunkPreallocatorInfo *p;
@@ -221,12 +227,12 @@ static void log_and_reset_preallocators(
     end = preallocator_array->preallocators + preallocator_array->count;
     for (p=preallocator_array->preallocators; p<end; p++) {
         if (p->stat.total > 0) {
-            logInfo("file: "__FILE__", line: %d, "
+            logInfo("file: "__FILE__", line: %d, %s "
                     "store path: %s, prealloc trunk result => "
                     "{total : %d, success: %d}, trunk type => "
-                    "{create: %d, reclaim: %d}", __LINE__,
-                    p->allocator->path_info->store.path.str,
-                    p->stat.total, p->stat.success, p->stat.create,
+                    "{create: %d, reclaim: %d}", __LINE__, ctx->module_name,
+                    p->allocator->path_info->store.path.str, p->stat.total,
+                    p->stat.success, p->stat.create,
                     p->stat.total - p->stat.create);
         }
     }
@@ -309,9 +315,9 @@ static int do_prealloc_trunks(DATrunkPreallocContext *prealloc_ctx)
         cfg.prealloc_space.end_time.minute;
     prealloc_ctx->prealloc_end_time = mktime(&tm_end);
     if (g_current_time > prealloc_ctx->prealloc_end_time) {
-        logWarning("file: "__FILE__", line: %d, "
+        logWarning("file: "__FILE__", line: %d, %s "
                 "current time: %ld > end time: %ld, skip prealloc trunks!",
-                __LINE__, (long)g_current_time,
+                __LINE__, prealloc_ctx->ctx->module_name, (long)g_current_time,
                 (long)prealloc_ctx->prealloc_end_time);
         return 0;
     }
@@ -319,9 +325,10 @@ static int do_prealloc_trunks(DATrunkPreallocContext *prealloc_ctx)
     if ((head=make_preallocator_chain(&prealloc_ctx->
                     preallocator_array, &count)) == NULL)
     {
-        logInfo("file: "__FILE__", line: %d, "
+        logInfo("file: "__FILE__", line: %d, %s "
                 "do NOT need prealloc trunks because "
-                "all freelists are enough", __LINE__);
+                "all freelists are enough", __LINE__,
+                prealloc_ctx->ctx->module_name);
         return 0;
     }
 
@@ -353,7 +360,8 @@ static int do_prealloc_trunks(DATrunkPreallocContext *prealloc_ctx)
         sleep(1);
     }
 
-    log_and_reset_preallocators(&prealloc_ctx->preallocator_array);
+    log_and_reset_preallocators(prealloc_ctx->ctx,
+            &prealloc_ctx->preallocator_array);
     return 0;
 }
 
@@ -364,8 +372,9 @@ static int prealloc_trunks_func(void *args)
 
     prealloc_ctx = args;
     if (prealloc_ctx->in_progress) {
-        logWarning("file: "__FILE__", line: %d, "
-                "prealloc trunks in progress!", __LINE__);
+        logWarning("file: "__FILE__", line: %d, %s "
+                "prealloc trunks in progress!", __LINE__,
+                prealloc_ctx->ctx->module_name);
         return EINPROGRESS;
     }
 

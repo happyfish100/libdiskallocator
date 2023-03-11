@@ -31,7 +31,7 @@ extern "C" {
 
     void da_storage_config_stat_path_spaces(DAContext *ctx, SFSpaceStat *ss);
 
-    void da_storage_config_to_log(DAStorageConfig *storage_cfg);
+    void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg);
 
     static inline int da_storage_config_path_count(DAStorageConfig *storage_cfg)
     {
