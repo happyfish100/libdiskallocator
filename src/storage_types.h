@@ -171,6 +171,7 @@ typedef struct da_piece_field_array {
 } DAPieceFieldArray;
 
 typedef struct da_trunk_space_log_record {
+    int64_t version; //for stable sort
     uint64_t oid;    //object ID
     uint64_t fid;    //field ID (key)
     char op_type;
@@ -398,6 +399,7 @@ typedef struct {
 } DATrunkFDCacheContext;
 
 typedef struct da_trunk_space_log_context {
+    volatile int64_t current_version; //generate version for DATrunkSpaceLogRecord
     struct fc_queue queue;
     SFSynchronizeContext notify;
     DASpaceLogReader reader;

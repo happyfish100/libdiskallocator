@@ -26,6 +26,17 @@
 #define DA_SPACE_LOG_RECORD_ALLOCATOR(ctx)   \
     ctx->space_log_ctx.reader.record_allocator
 
+#define DA_SPACE_LOG_ADD_TO_CHAIN(space_chain, record) \
+    do {  \
+        if (space_chain->head == NULL) { \
+            space_chain->head = record;  \
+        } else { \
+            FC_SET_CHAIN_TAIL_NEXT(*space_chain,    \
+                    DATrunkSpaceLogRecord, record); \
+        } \
+        space_chain->tail = record; \
+    } while (0)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -40,8 +51,16 @@ extern "C" {
     static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_record(
             DAContext *ctx)
     {
-        return (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &DA_SPACE_LOG_RECORD_ALLOCATOR(ctx));
+        DATrunkSpaceLogRecord *record;
+
+        if ((record=(DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
+                        &DA_SPACE_LOG_RECORD_ALLOCATOR(ctx))) != NULL)
+        {
+            record->version = __sync_add_and_fetch(&ctx->
+                    space_log_ctx.current_version, 1);
+        }
+
+        return record;
     }
 
     static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_fill_record1(
@@ -74,13 +93,6 @@ extern "C" {
         const int extra = 0;
         return da_trunk_space_log_alloc_fill_record1(ctx,
                 version, oid, fid, op_type, storage, extra);
-    }
-
-    static inline int da_trunk_space_log_alloc_chain(DAContext *ctx,
-            const int count, struct fc_queue_info *chain)
-    {
-        return fc_queue_alloc_chain(&ctx->space_log_ctx.queue,
-                &DA_SPACE_LOG_RECORD_ALLOCATOR(ctx), count, chain);
     }
 
     static inline void da_trunk_space_log_free_chain(

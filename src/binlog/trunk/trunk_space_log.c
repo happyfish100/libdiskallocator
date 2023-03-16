@@ -130,8 +130,7 @@ static int record_ptr_compare(const DATrunkSpaceLogRecord **record1,
         return sub;
     }
 
-    return fc_compare_int64((*record1)->storage.version,
-            (*record2)->storage.version);
+    return fc_compare_int64((*record1)->version, (*record2)->version);
 }
 
 static int chain_to_array(DAContext *ctx, DATrunkSpaceLogRecord *head)
