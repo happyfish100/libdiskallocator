@@ -66,9 +66,9 @@ typedef int (*da_slice_migrate_done_callback)(
         struct fc_queue_info *space_chain,
         SFSynchronizeContext *sctx, int *flags);
 
-typedef int (*da_cached_slice_write_done_callback)(
-        const struct da_slice_entry *se, const
-        struct da_trunk_space_info *space);
+typedef int (*da_cached_slice_write_done_callback)(const
+        struct da_slice_entry *se, const struct da_trunk_space_info
+        *space, void *arg1, void *arg2);
 
 typedef struct {
     int index;   //the inner index is important!
@@ -161,7 +161,7 @@ typedef struct da_piece_field_info {
     uint64_t fid;  //field ID (key)
     unsigned char source;
     DABinlogOpType op_type;
-    int extra;
+    int extra;     //such as slice offset
     DAPieceFieldStorage storage;
 } DAPieceFieldInfo;
 
@@ -174,7 +174,7 @@ typedef struct da_trunk_space_log_record {
     uint64_t oid;    //object ID
     uint64_t fid;    //field ID (key)
     char op_type;
-    int extra;
+    int extra;       //such as slice offset
     DAPieceFieldStorage storage;
     struct fast_mblock_man *allocator;
     struct da_trunk_space_log_record *next;

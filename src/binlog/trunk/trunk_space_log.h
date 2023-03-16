@@ -44,10 +44,10 @@ extern "C" {
                 &DA_SPACE_LOG_RECORD_ALLOCATOR(ctx));
     }
 
-    static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_fill_record(
+    static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_fill_record1(
             DAContext *ctx, const int64_t version, const int64_t oid,
-            const int64_t fid, const char op_type,
-            const DAPieceFieldStorage *storage)
+            const int64_t fid, const char op_type, const DAPieceFieldStorage
+            *storage, const int extra)
     {
         DATrunkSpaceLogRecord *record;
         if ((record=da_trunk_space_log_alloc_record(ctx)) == NULL) {
@@ -56,6 +56,7 @@ extern "C" {
 
         record->oid = oid;
         record->fid = fid;
+        record->extra = extra;
         record->op_type = op_type;
         record->storage.version = version;
         record->storage.trunk_id = storage->trunk_id;
@@ -63,6 +64,16 @@ extern "C" {
         record->storage.offset = storage->offset;
         record->storage.size = storage->size;
         return record;
+    }
+
+    static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_fill_record(
+            DAContext *ctx, const int64_t version, const int64_t oid,
+            const int64_t fid, const char op_type,
+            const DAPieceFieldStorage *storage)
+    {
+        const int extra = 0;
+        return da_trunk_space_log_alloc_fill_record1(ctx,
+                version, oid, fid, op_type, storage, extra);
     }
 
     static inline int da_trunk_space_log_alloc_chain(DAContext *ctx,
