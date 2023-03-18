@@ -442,13 +442,13 @@ static int load_global_items(DAContext *ctx,
             DA_TRUNK_FILE_MIN_SIZE, DA_TRUNK_FILE_MAX_SIZE);
     if (storage_cfg->trunk_file_size <= ctx->storage.file_block_size) {
         logError("file: "__FILE__", line: %d, %s "
-                "trunk_file_size: %u is too small, <= block size %d",
+                "trunk_file_size: %u is too small, which <= block size %d",
                 __LINE__, ctx->module_name, storage_cfg->trunk_file_size,
                 ctx->storage.file_block_size);
         return EINVAL;
     }
 
-    storage_cfg->discard_remain_space_size = iniGetInt64CorrectValue(
+    storage_cfg->discard_remain_space_size = iniGetByteCorrectValue(
             ini_ctx, "discard_remain_space_size",
             DA_DEFAULT_DISCARD_REMAIN_SPACE_SIZE,
             DA_DISCARD_REMAIN_SPACE_MIN_SIZE,
