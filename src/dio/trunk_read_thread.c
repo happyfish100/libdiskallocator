@@ -270,7 +270,7 @@ static int rbpool_init_start(DAContext *ctx)
         memory_watermark_low.value / path_count;
     memory_watermark.high = ctx->storage.cfg.aio_read_buffer.
         memory_watermark_high.value / path_count;
-    if ((result=da_read_buffer_pool_init(ctx->storage.cfg.
+    if ((result=da_read_buffer_pool_init(ctx, ctx->storage.cfg.
                     paths_by_index.count, &memory_watermark)) != 0)
     {
         return result;
@@ -280,7 +280,7 @@ static int rbpool_init_start(DAContext *ctx)
         ctx->storage.cfg.paths_by_index.count;
     for (pp=ctx->storage.cfg.paths_by_index.paths; pp<end; pp++) {
         if (*pp != NULL) {
-            if ((result=da_read_buffer_pool_create((*pp)->store.index,
+            if ((result=da_read_buffer_pool_create(ctx, (*pp)->store.index,
                             (*pp)->block_size)) != 0)
             {
                 return result;
@@ -288,7 +288,7 @@ static int rbpool_init_start(DAContext *ctx)
         }
     }
 
-    return da_read_buffer_pool_start(ctx->storage.cfg.aio_read_buffer.
+    return da_read_buffer_pool_start(ctx, ctx->storage.cfg.aio_read_buffer.
             max_idle_time, ctx->storage.cfg.aio_read_buffer.reclaim_interval);
 }
 #endif
@@ -416,16 +416,17 @@ static inline int prepare_read_slice(TrunkReadThreadContext *thread,
             aio_buffer->size < read_bytes)
     {
         logWarning("file: "__FILE__", line: %d, %s "
-                "buffer size %d is too small, required size: %d", __LINE__,
-                ctx->module_name, iob->rb->aio_buffer->size, read_bytes);
+                "buffer size %d is too small, required size: %d",
+                __LINE__, thread->path_info->ctx->module_name,
+                iob->rb->aio_buffer->size, read_bytes);
 
-        da_read_buffer_pool_free(iob->rb->aio_buffer);
+        da_read_buffer_pool_free(thread->path_info->ctx, iob->rb->aio_buffer);
         iob->rb->aio_buffer = NULL;
     }
 
     if (iob->rb->aio_buffer == NULL) {
-        iob->rb->aio_buffer = da_read_buffer_pool_alloc(
-                thread->indexes.path, read_bytes);
+        iob->rb->aio_buffer = da_read_buffer_pool_alloc(thread->
+                path_info->ctx, thread->indexes.path, read_bytes);
         if (iob->rb->aio_buffer == NULL) {
             return ENOMEM;
         }
@@ -440,14 +441,14 @@ static inline int prepare_read_slice(TrunkReadThreadContext *thread,
 
     /*
     logInfo("%s space.offset: %"PRId64", new_offset: %"PRId64", "
-            "offset: %d, read_bytes: %d, size: %d", ctx->module_name,
-            iob->space.offset, new_offset, offset, read_bytes,
-            iob->rb->aio_buffer->size);
+            "offset: %d, read_bytes: %d, size: %d", thread->path_info->
+            ctx->module_name, iob->space.offset, new_offset, offset,
+            read_bytes, iob->rb->aio_buffer->size);
             */
 
     if ((result=get_read_fd(thread, &iob->space, &fd)) != 0) {
         if (new_alloced) {
-            da_read_buffer_pool_free(iob->rb->aio_buffer);
+            da_read_buffer_pool_free(thread->path_info->ctx, iob->rb->aio_buffer);
             iob->rb->aio_buffer = NULL;
         }
         return result;
@@ -499,8 +500,8 @@ static int consume_queue(TrunkReadThreadContext *thread)
             logError("file: "__FILE__", line: %d, %s "
                     "io_submiti return %d != %d, "
                     "errno: %d, error info: %s", __LINE__,
-                    ctx->module_name, count, thread->iocbs.count,
-                    result, STRERROR(result));
+                    thread->path_info->ctx->module_name, count,
+                    thread->iocbs.count, result, STRERROR(result));
             return result;
         }
 
@@ -586,9 +587,9 @@ static int process_aio(TrunkReadThreadContext *thread)
             logError("file: "__FILE__", line: %d, %s "
                     "read trunk file: %s fail, offset: %u, "
                     "expect length: %d, read return: %d, errno: %d, "
-                    "error info: %s", __LINE__, ctx->module_name,
-                    trunk_filename, iob->space.offset - iob->rb->
-                    aio_buffer->offset, iob->rb->aio_buffer->read_bytes,
+                    "error info: %s", __LINE__, thread->path_info->ctx->
+                    module_name, trunk_filename, iob->space.offset - iob->
+                    rb->aio_buffer->offset, iob->rb->aio_buffer->read_bytes,
                     (int)event->res, result, STRERROR(result));
         }
 
@@ -747,13 +748,13 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
         {
             DAAlignedReadBuffer *new_buffer;
 
-            new_buffer = da_read_buffer_pool_alloc(path_info->
-                    store.index, aligned_size);
+            new_buffer = da_read_buffer_pool_alloc(path_info->ctx,
+                    path_info->store.index, aligned_size);
             if (new_buffer == NULL) {
                 return ENOMEM;
             }
 
-            da_read_buffer_pool_free(op_ctx->rb.aio_buffer);
+            da_read_buffer_pool_free(path_info->ctx, op_ctx->rb.aio_buffer);
             op_ctx->rb.aio_buffer = new_buffer;
         }
 
