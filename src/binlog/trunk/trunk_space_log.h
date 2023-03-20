@@ -28,6 +28,7 @@
 
 #define DA_SPACE_LOG_ADD_TO_CHAIN(space_chain, record) \
     do {  \
+        record->next = NULL;  \
         if (space_chain->head == NULL) { \
             space_chain->head = record;  \
         } else { \

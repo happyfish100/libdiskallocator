@@ -171,11 +171,11 @@ typedef struct da_piece_field_array {
 } DAPieceFieldArray;
 
 typedef struct da_trunk_space_log_record {
-    int64_t version; //for stable sort
+    int64_t version; //for stable sort only
     uint64_t oid;    //object ID
     uint64_t fid;    //field ID (key)
-    char op_type;
     int extra;       //such as slice offset
+    char op_type;
     DAPieceFieldStorage storage;
     struct fast_mblock_man *allocator;
     struct da_trunk_space_log_record *next;
