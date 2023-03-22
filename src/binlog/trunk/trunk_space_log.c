@@ -444,7 +444,27 @@ static int redo_by_array(DAContext *ctx, DATrunkSpaceLogRecordArray *array)
     return 0;
 }
 
-int da_trunk_space_log_redo(DAContext *ctx, const char *space_log_filename)
+int da_trunk_space_log_redo_by_chain(DAContext *ctx,
+        struct fc_queue_info *chain)
+{
+    int result;
+
+    if (chain->head == NULL) {
+        return 0;
+    }
+
+    if ((result=chain_to_array(ctx, chain->head)) != 0) {
+        return result;
+    }
+
+    result = redo_by_array(ctx, &RECORD_PTR_ARRAY);
+    fast_mblock_free_objects(&DA_SPACE_LOG_RECORD_ALLOCATOR(ctx),
+            (void **)RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count);
+    return result;
+}
+
+int da_trunk_space_log_redo_by_file(DAContext *ctx,
+        const char *space_log_filename)
 {
     struct fc_queue_info chain;
     int result;
@@ -454,19 +474,8 @@ int da_trunk_space_log_redo(DAContext *ctx, const char *space_log_filename)
     {
         return result;
     }
-    if (chain.head == NULL) {
-        return 0;
-    }
 
-    if ((result=chain_to_array(ctx, chain.head)) != 0) {
-        return result;
-    }
-
-    result = redo_by_array(ctx, &RECORD_PTR_ARRAY);
-
-    fast_mblock_free_objects(&DA_SPACE_LOG_RECORD_ALLOCATOR(ctx),
-            (void **)RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count);
-    return result;
+    return da_trunk_space_log_redo_by_chain(ctx, &chain);
 }
 
 static int dump_trunk_indexes(DAContext *ctx)

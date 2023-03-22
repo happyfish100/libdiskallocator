@@ -109,7 +109,9 @@ extern "C" {
         fc_queue_push_queue_to_tail(&ctx->space_log_ctx.queue, qinfo);
     }
 
-    int da_trunk_space_log_redo(DAContext *ctx,
+    int da_trunk_space_log_redo_by_chain(DAContext *ctx,
+            struct fc_queue_info *chain);
+    int da_trunk_space_log_redo_by_file(DAContext *ctx,
             const char *space_log_filename);
 
     int da_trunk_space_log_unlink(DAContext *ctx,
