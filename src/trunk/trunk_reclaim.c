@@ -214,14 +214,12 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
     offset = holder.storage.offset;
     record = block->head;
     while (record != NULL) {
-        old_record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &rctx->reader.record_allocator);
+        old_record = da_trunk_space_log_alloc_record(rctx->ctx);
         if (old_record == NULL) {
             return ENOMEM;
         }
 
-        new_record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &rctx->reader.record_allocator);
+        new_record = da_trunk_space_log_alloc_record(rctx->ctx);
         if (new_record == NULL) {
             return ENOMEM;
         }

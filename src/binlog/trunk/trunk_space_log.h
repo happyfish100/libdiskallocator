@@ -23,9 +23,6 @@
 #include "../../dio/trunk_fd_cache.h"
 #include "space_log_reader.h"
 
-#define DA_SPACE_LOG_RECORD_ALLOCATOR(ctx)   \
-    ctx->space_log_ctx.reader.record_allocator
-
 #define DA_SPACE_LOG_ADD_TO_CHAIN(space_chain, record) \
     do {  \
         record->next = NULL;  \
@@ -55,7 +52,7 @@ extern "C" {
         DATrunkSpaceLogRecord *record;
 
         if ((record=(DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                        &DA_SPACE_LOG_RECORD_ALLOCATOR(ctx))) != NULL)
+                        &ctx->space_log_ctx.record_allocator)) != NULL)
         {
             record->version = __sync_add_and_fetch(&ctx->
                     space_log_ctx.current_version, 1);
@@ -96,11 +93,17 @@ extern "C" {
                 version, oid, fid, op_type, storage, extra);
     }
 
+    static inline void da_trunk_space_log_free_record(
+            DAContext *ctx, DATrunkSpaceLogRecord *record)
+    {
+        fast_mblock_free_object(&ctx->space_log_ctx.record_allocator, record);
+    }
+
     static inline void da_trunk_space_log_free_chain(
             DAContext *ctx, struct fc_queue_info *chain)
     {
-        fc_queue_free_chain(&ctx->space_log_ctx.queue,
-                &DA_SPACE_LOG_RECORD_ALLOCATOR(ctx), chain);
+        fc_queue_free_chain(&ctx->space_log_ctx.queue, &ctx->
+                space_log_ctx.record_allocator, chain);
     }
 
     static inline void da_trunk_space_log_push_chain(

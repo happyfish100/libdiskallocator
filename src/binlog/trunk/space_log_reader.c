@@ -27,13 +27,6 @@
 #define DA_SPACE_SKPLIST_INIT_LEVEL_COUNT  4
 #define DA_SPACE_SKPLIST_MAX_LEVEL_COUNT  12
 
-static int space_log_record_alloc_init(void *element, void *args)
-{
-    ((DATrunkSpaceLogRecord *)element)->allocator =
-        (struct fast_mblock_man *)args;
-    return 0;
-}
-
 static int compare_by_trunk_offset(const DATrunkSpaceLogRecord *s1,
         const DATrunkSpaceLogRecord *s2)
 {
@@ -54,14 +47,6 @@ int da_space_log_reader_init(DASpaceLogReader *reader, DAContext *ctx,
     int result;
 
     reader->ctx = ctx;
-    if ((result=fast_mblock_init_ex1(&reader->record_allocator,
-                    "space-log-record", sizeof(DATrunkSpaceLogRecord),
-                    8 * 1024, 0, space_log_record_alloc_init,
-                    &reader->record_allocator, true)) != 0)
-    {
-        return result;
-    }
-
     if ((result=uniq_skiplist_init_ex2(&reader->factory,
                     DA_SPACE_SKPLIST_MAX_LEVEL_COUNT, (skiplist_compare_func)
                     compare_by_trunk_offset, space_log_record_free_func,
@@ -76,7 +61,6 @@ int da_space_log_reader_init(DASpaceLogReader *reader, DAContext *ctx,
 
 void da_space_log_reader_destroy(DASpaceLogReader *reader)
 {
-    fast_mblock_destroy(&reader->record_allocator);
     uniq_skiplist_destroy(&reader->factory);
 }
 
@@ -100,8 +84,7 @@ static int parse_to_skiplist(DASpaceLogReader *reader,
             break;
         }
 
-        record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &reader->record_allocator);
+        record = da_trunk_space_log_alloc_record(reader->ctx);
         if (record == NULL) {
             sprintf(error_info, "alloc record object fail "
                     "because out of memory");
@@ -126,7 +109,7 @@ static int parse_to_skiplist(DASpaceLogReader *reader,
         }
 
         if (need_free) {
-            fast_mblock_free_object(&reader->record_allocator, record);
+            da_trunk_space_log_free_record(reader->ctx, record);
         }
 
         if (result == ENOMEM) {
@@ -226,8 +209,7 @@ static int parse_to_chain(DASpaceLogReader *reader, struct fc_queue_info
             break;
         }
 
-        record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &reader->record_allocator);
+        record = da_trunk_space_log_alloc_record(reader->ctx);
         if (record == NULL) {
             sprintf(error_info, "alloc record object fail "
                     "because out of memory");

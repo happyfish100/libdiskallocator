@@ -366,7 +366,6 @@ typedef struct da_trunk_space_log_record_array {
 } DATrunkSpaceLogRecordArray;
 
 typedef struct da_space_log_reader {
-    struct fast_mblock_man record_allocator;
     UniqSkiplistFactory factory;
     struct da_context *ctx;
 } DASpaceLogReader;
@@ -400,6 +399,7 @@ typedef struct {
 
 typedef struct da_trunk_space_log_context {
     volatile int64_t current_version; //generate version for DATrunkSpaceLogRecord
+    struct fast_mblock_man record_allocator;
     struct fc_queue queue;
     SFSynchronizeContext notify;
     DASpaceLogReader reader;

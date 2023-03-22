@@ -18,6 +18,7 @@
 #define _SPACE_LOG_READER_H
 
 #include "fastcommon/uniq_skiplist.h"
+#include "../../storage_types.h"
 
 #ifdef __cplusplus
 extern "C" {
