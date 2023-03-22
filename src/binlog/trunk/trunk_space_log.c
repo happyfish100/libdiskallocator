@@ -342,7 +342,7 @@ static int deal_records(DAContext *ctx, DATrunkSpaceLogRecord *head)
     sf_synchronize_counter_notify(&ctx->space_log_ctx.notify,
             RECORD_PTR_ARRAY.count);
 
-    fast_mblock_free_objects(&ctx->space_log_ctx.record_allocator,
+    fast_mblock_free_objects(&ctx->space_log_ctx.reader.record_allocator,
             (void **)RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count);
     return result;
 }
@@ -458,7 +458,7 @@ int da_trunk_space_log_redo_by_chain(DAContext *ctx,
     }
 
     result = redo_by_array(ctx, &RECORD_PTR_ARRAY);
-    fast_mblock_free_objects(&ctx->space_log_ctx.record_allocator,
+    fast_mblock_free_objects(&ctx->space_log_ctx.reader.record_allocator,
             (void **)RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count);
     return result;
 }
@@ -635,26 +635,11 @@ static int binlog_index_dump(void *args)
     return 0;
 }
 
-static int space_log_record_alloc_init(void *element, void *args)
-{
-    ((DATrunkSpaceLogRecord *)element)->allocator =
-        (struct fast_mblock_man *)args;
-    return 0;
-}
-
 int da_trunk_space_log_init(DAContext *ctx)
 {
     const int alloc_skiplist_once = 256;
     const bool allocator_use_lock = true;
     int result;
-
-    if ((result=fast_mblock_init_ex1(&ctx->space_log_ctx.record_allocator,
-                    "space-log-record", sizeof(DATrunkSpaceLogRecord),
-                    8 * 1024, 0, space_log_record_alloc_init, &ctx->
-                    space_log_ctx.record_allocator, true)) != 0)
-    {
-        return result;
-    }
 
     if ((result=da_space_log_reader_init(&ctx->space_log_ctx.reader, ctx,
                     alloc_skiplist_once, allocator_use_lock)) != 0)
