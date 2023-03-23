@@ -26,13 +26,13 @@
 #define DA_SPACE_LOG_ADD_TO_CHAIN(space_chain, record) \
     do {  \
         record->next = NULL;  \
-        if (space_chain->head == NULL) { \
-            space_chain->head = record;  \
+        if ((space_chain)->head == NULL) { \
+            (space_chain)->head = record;  \
         } else { \
-            FC_SET_CHAIN_TAIL_NEXT(*space_chain,    \
+            FC_SET_CHAIN_TAIL_NEXT(*(space_chain),  \
                     DATrunkSpaceLogRecord, record); \
         } \
-        space_chain->tail = record; \
+        (space_chain)->tail = record; \
     } while (0)
 
 #ifdef __cplusplus
