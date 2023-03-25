@@ -44,9 +44,21 @@ extern "C" {
 
     int da_global_init(const int my_server_id);
 
-    int da_load_config(DAContext *context, const char *module_name,
+    int da_load_config_ex(DAContext *context, const char *module_name,
             const int file_block_size, const DADataConfig *data_cfg,
-            const char *storage_filename, const bool have_extra_field);
+            const char *storage_filename, const bool have_extra_field,
+            const bool migrate_path_mark_filename);
+
+    static inline int da_load_config(DAContext *context,
+            const char *module_name, const int file_block_size,
+            const DADataConfig *data_cfg, const char *storage_filename)
+    {
+        const bool have_extra_field = false;
+        const bool migrate_path_mark_filename = false;
+        return da_load_config_ex(context, module_name, file_block_size,
+                data_cfg, storage_filename, have_extra_field,
+                migrate_path_mark_filename);
+    }
 
     int da_init_start_ex(DAContext *ctx, da_slice_migrate_done_callback
             slice_migrate_done_callback, da_cached_slice_write_done_callback

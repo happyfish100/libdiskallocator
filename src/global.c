@@ -47,9 +47,10 @@ int da_global_init(const int my_server_id)
     return 0;
 }
 
-int da_load_config(DAContext *context, const char *module_name,
+int da_load_config_ex(DAContext *context, const char *module_name,
         const int file_block_size, const DADataConfig *data_cfg,
-        const char *storage_filename, const bool have_extra_field)
+        const char *storage_filename, const bool have_extra_field,
+        const bool migrate_path_mark_filename)
 {
     int result;
 
@@ -57,6 +58,7 @@ int da_load_config(DAContext *context, const char *module_name,
     context->storage.file_block_size = file_block_size;
     context->data = *data_cfg;
     context->storage.have_extra_field = have_extra_field;
+    context->storage.migrate_path_mark_filename = migrate_path_mark_filename;
     if ((result=da_storage_config_load(context, &context->
                     storage.cfg, storage_filename)) == 0)
     {

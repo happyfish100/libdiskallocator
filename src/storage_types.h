@@ -417,6 +417,7 @@ typedef struct da_context {
         DAStorageConfig cfg;
         int read_direct_io_paths;
         bool have_extra_field;
+        bool migrate_path_mark_filename; //for faststore
     } storage;
 
     bool check_trunk_avail_in_progress;

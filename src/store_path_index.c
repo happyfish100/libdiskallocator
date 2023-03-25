@@ -110,6 +110,7 @@ int store_path_check_mark(DAContext *ctx, DAStorePathEntry *pentry,
 {
     StorePathMarkInfo mark_info;
     char filename[PATH_MAX];
+    char fs_filename[PATH_MAX];
     char mark[64];
     int mark_len;
     int dest_len;
@@ -122,13 +123,46 @@ int store_path_check_mark(DAContext *ctx, DAStorePathEntry *pentry,
                     mark, sizeof(mark))) != 0)
     {
         if (result == ENOENT) {
-            if ((result=store_path_generate_mark(pentry->path,
-                            pentry->index, pentry->mark)) == 0)
-            {
-                *regenerated = true;
+            if (ctx->storage.migrate_path_mark_filename) {
+                snprintf(fs_filename, sizeof(fs_filename),
+                        "%s/.fs_vars", pentry->path);
+                if (access(fs_filename, F_OK) == 0) {
+                    if (rename(fs_filename, filename) != 0) {
+                        result = errno != 0 ? errno : EPERM;
+                        logError("file: "__FILE__", line: %d, %s "
+                                "rename file %s to %s fail, errno: %d, "
+                                "error info: %s", __LINE__, ctx->module_name,
+                                fs_filename, filename, result, STRERROR(result));
+                        return result;
+                    }
+                    if ((result=store_path_get_mark(ctx, filename,
+                                    mark, sizeof(mark))) != 0)
+                    {
+                        return result;
+                    }
+                } else {
+                    result = errno != 0 ? errno : EPERM;
+                    if (result != ENOENT) {
+                        logError("file: "__FILE__", line: %d, %s "
+                                "access file %s fail, errno: %d, error "
+                                "info: %s", __LINE__, ctx->module_name,
+                                fs_filename, result, STRERROR(result));
+                        return result;
+                    }
+                }
             }
+
+            if (result == ENOENT) {
+                if ((result=store_path_generate_mark(pentry->path,
+                                pentry->index, pentry->mark)) == 0)
+                {
+                    *regenerated = true;
+                }
+                return result;
+            }
+        } else {
+            return result;
         }
-        return result;
     }
 
     if (strcmp(mark, pentry->mark) == 0) {
