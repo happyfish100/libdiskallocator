@@ -283,8 +283,8 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
         int64_t start_time_us;
         start_time_us = get_current_time_us();
         da_set_trunk_status(trunk, DA_TRUNK_STATUS_RECLAIMING);
-        result = da_trunk_reclaim(task->allocator, trunk,
-                &thread->reclaim_ctx);
+        result = da_trunk_reclaim(&thread->reclaim_ctx,
+                task->allocator, trunk);
         time_used = (get_current_time_us() - start_time_us) / 1000;
     } else {
         time_used = 0;

@@ -61,11 +61,12 @@ extern "C" {
     }
 
     int da_init_start_ex(DAContext *ctx, da_slice_migrate_done_callback
-            slice_migrate_done_callback, da_cached_slice_write_done_callback
+            slice_migrate_done_callback, da_trunk_migrate_done_callback
+            trunk_migrate_done_callback, da_cached_slice_write_done_callback
             cached_slice_write_done);
 
 #define da_init_start(ctx, slice_migrate_done_callback) \
-    da_init_start_ex(ctx, slice_migrate_done_callback, NULL)
+    da_init_start_ex(ctx, slice_migrate_done_callback, NULL, NULL)
 
 #ifdef __cplusplus
 }

@@ -538,7 +538,7 @@ int da_binlog_writer_clear_fd_cache()
     stask->id = 0;
     stask->type = BINLOG_WRITER_TASK_TYPE_CLEAR_FD_CACHE;
     fc_queue_push(&WRITER_SHRINK_QUEUE, stask);
-    pthread_cond_signal(&WRITER_NORMAL_QUEUE.lc_pair.cond);
+    pthread_cond_signal(&WRITER_NORMAL_QUEUE.lcp.cond);
     return 0;
 }
 

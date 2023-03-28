@@ -54,6 +54,7 @@ struct da_slice_op_context;
 struct da_trunk_allocator;
 struct da_piece_field_info;
 struct da_full_trunk_id_info;
+struct da_trunk_file_info;
 struct da_slice_entry;
 struct da_trunk_space_info;
 
@@ -66,6 +67,9 @@ typedef int (*da_slice_migrate_done_callback)(
         struct fc_queue_info *space_chain,
         SFSynchronizeContext *sctx, int *flags);
 
+typedef void (*da_trunk_migrate_done_callback)(
+        const struct da_trunk_file_info *trunk);
+
 typedef int (*da_cached_slice_write_done_callback)(const
         struct da_slice_entry *se, const struct da_trunk_space_info
         *space, void *arg1, void *arg2);
@@ -75,7 +79,7 @@ typedef struct {
     string_t path;
 } DAStorePath;
 
-typedef struct {
+typedef struct da_trunk_id_info {
     int64_t id;
     uint32_t subdir;     //in which subdir
 } DATrunkIdInfo;
@@ -437,6 +441,7 @@ typedef struct da_context {
     struct da_trunk_maker_context *trunk_maker_ctx;
 
     da_slice_migrate_done_callback slice_migrate_done_callback;
+    da_trunk_migrate_done_callback trunk_migrate_done_callback;
     da_cached_slice_write_done_callback cached_slice_write_done;
 } DAContext;
 

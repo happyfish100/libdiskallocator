@@ -54,8 +54,8 @@ extern "C" {
 #endif
     int da_trunk_reclaim_init_ctx(DATrunkReclaimContext *rctx, DAContext *ctx);
 
-    int da_trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
-            DATrunkReclaimContext *rctx);
+    int da_trunk_reclaim(DATrunkReclaimContext *rctx, DATrunkAllocator
+            *allocator, DATrunkFileInfo *trunk);
 
 #ifdef __cplusplus
 }

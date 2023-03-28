@@ -270,7 +270,7 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
     return 0;
 }
 
-static int migrate_blocks(DATrunkReclaimContext *rctx)
+static int migrate_blocks(DATrunkReclaimContext *rctx, DATrunkFileInfo *trunk)
 {
     DATrunkReclaimBlockInfo *block;
     DATrunkReclaimBlockInfo *bend;
@@ -286,12 +286,16 @@ static int migrate_blocks(DATrunkReclaimContext *rctx)
         }
     }
 
+    if (rctx->ctx->trunk_migrate_done_callback != NULL) {
+        rctx->ctx->trunk_migrate_done_callback(trunk);
+    }
+
     sf_synchronize_counter_wait(&rctx->log_notify);
     return 0;
 }
 
-int da_trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
-        DATrunkReclaimContext *rctx)
+int da_trunk_reclaim(DATrunkReclaimContext *rctx, DATrunkAllocator
+        *allocator, DATrunkFileInfo *trunk)
 {
     int result;
 
@@ -307,7 +311,7 @@ int da_trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
             break;
         }
 
-        if ((result=migrate_blocks(rctx)) != 0) {
+        if ((result=migrate_blocks(rctx, trunk)) != 0) {
             break;
         }
     } while (0);
