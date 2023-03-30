@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
     int da_storage_config_load(DAContext *ctx, DAStorageConfig *storage_cfg,
-            const char *storage_filename);
+            const char *storage_filename, const bool destroy_store_path_index);
 
     int da_storage_config_calc_path_avail_space(DAStoragePathInfo *path_info);
 

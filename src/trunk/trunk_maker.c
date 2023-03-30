@@ -118,7 +118,6 @@ static int deal_trunk_util_change_event(DATrunkAllocator *allocator,
                 {
                     uniq_skiplist_delete_node(allocator->trunks.
                             by_size.skiplist, prev, node);
-
                     trunk->util.last_used_bytes = last_used_bytes;
                     result = uniq_skiplist_insert(allocator->trunks.
                             by_size.skiplist, trunk);
@@ -176,7 +175,7 @@ static int prealloc_trunk_finish(DATrunkAllocator *allocator,
     DATrunkFileInfo *trunk_info;
 
     result = da_storage_allocator_add_trunk_ex(allocator->path_info->ctx,
-            space->store->index,&space->id_info, space->size, &trunk_info);
+            space->store->index, &space->id_info, space->size, &trunk_info);
     if (result == 0) {
         *freelist_type = da_trunk_allocator_add_to_freelist(allocator, trunk_info);
     }

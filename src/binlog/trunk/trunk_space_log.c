@@ -359,8 +359,23 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
     DATrunkSpaceLogRecord *fixed[FIXED_RECORD_COUNT];
     DATrunkSpaceLogRecord **current;
     UniqSkiplist *skiplist;
+    DATrunkFileInfo *trunk;
     DATrunkSpaceLogRecord target;
     DATrunkSpaceLogRecordArray array;
+
+    if (ctx->storage.skip_path_index >= 0) {
+        if ((trunk=da_trunk_hashtable_get_ex(&ctx->trunk_htable_ctx,
+                        (*start)->storage.trunk_id, LOG_NOTHING)) == NULL)
+        {
+            return 0;
+        }
+
+        if (trunk->allocator->path_info->store.index ==
+                ctx->storage.skip_path_index)
+        {
+            return 0;
+        }
+    }
 
     if ((result=da_space_log_reader_load_ex(&ctx->space_log_ctx.reader,
                     (*start)->storage.trunk_id, &skiplist, ignore_enoent)) != 0)
@@ -534,11 +549,18 @@ static int load_trunk_indexes(DAContext *ctx)
 {
     int result;
     int64_t version;
+    char filename[PATH_MAX];
     DATrunkFileInfo *trunk;
     DATrunkIndexRecord *index;
     DATrunkIndexRecord *end;
     DATrunkHashtableIterator it;
 
+    if (ctx->storage.skip_path_index >= 0) {
+        da_trunk_index_get_filename(ctx, filename, sizeof(filename));
+        if ((result=fc_delete_file_ex(filename, "trunk index")) != 0) {
+            return result;
+        }
+    }
     if ((result=da_trunk_index_load(ctx)) != 0) {
         return result;
     }

@@ -26,6 +26,9 @@ extern "C" {
 
 void da_trunk_index_init(DAContext *ctx);
 
+const char *da_trunk_index_get_filename(DAContext *ctx,
+        char *filename, const int size);
+
 static inline int da_trunk_index_load(DAContext *ctx)
 {
     return sf_binlog_index_load(&ctx->trunk_index_ctx);

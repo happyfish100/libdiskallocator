@@ -50,6 +50,7 @@ int da_global_init(const int my_server_id)
 int da_load_config_ex(DAContext *context, const char *module_name,
         const int file_block_size, const DADataConfig *data_cfg,
         const char *storage_filename, const bool have_extra_field,
+        const bool destroy_store_path_index,
         const bool migrate_path_mark_filename)
 {
     int result;
@@ -59,8 +60,8 @@ int da_load_config_ex(DAContext *context, const char *module_name,
     context->data = *data_cfg;
     context->storage.have_extra_field = have_extra_field;
     context->storage.migrate_path_mark_filename = migrate_path_mark_filename;
-    if ((result=da_storage_config_load(context, &context->
-                    storage.cfg, storage_filename)) == 0)
+    if ((result=da_storage_config_load(context, &context->storage.cfg,
+                    storage_filename, destroy_store_path_index)) == 0)
     {
         da_storage_config_to_log(context, &context->storage.cfg);
     }
@@ -71,13 +72,14 @@ int da_load_config_ex(DAContext *context, const char *module_name,
 int da_init_start_ex(DAContext *ctx, da_slice_migrate_done_callback
         slice_migrate_done_callback, da_trunk_migrate_done_callback
         trunk_migrate_done_callback, da_cached_slice_write_done_callback
-        cached_slice_write_done)
+        cached_slice_write_done, const int skip_path_index)
 {
     int result;
 
     ctx->slice_migrate_done_callback = slice_migrate_done_callback;
     ctx->trunk_migrate_done_callback = trunk_migrate_done_callback;
     ctx->cached_slice_write_done = cached_slice_write_done;
+    ctx->storage.skip_path_index = skip_path_index;
     da_trunk_index_init(ctx);
 
     if ((result=da_trunk_hashtable_init(&ctx->trunk_htable_ctx)) != 0) {

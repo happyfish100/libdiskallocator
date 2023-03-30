@@ -32,8 +32,11 @@ extern "C" {
     int da_trunk_hashtable_add(DATrunkHTableContext *ctx,
             DATrunkFileInfo *trunk);
 
-    DATrunkFileInfo *da_trunk_hashtable_get(DATrunkHTableContext *ctx,
-            const uint32_t trunk_id);
+    DATrunkFileInfo *da_trunk_hashtable_get_ex(DATrunkHTableContext *ctx,
+            const uint32_t trunk_id, const int log_level);
+
+#define da_trunk_hashtable_get(ctx, trunk_id) \
+    da_trunk_hashtable_get_ex(ctx, trunk_id, LOG_ERR)
 
     void da_trunk_hashtable_iterator(DATrunkHTableContext *ctx,
             DATrunkHashtableIterator *it, const bool need_lock);

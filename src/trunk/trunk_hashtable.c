@@ -144,8 +144,8 @@ int da_trunk_hashtable_add(DATrunkHTableContext *ctx,
     return result;
 }
 
-DATrunkFileInfo *da_trunk_hashtable_get(DATrunkHTableContext *ctx,
-        const uint32_t trunk_id)
+DATrunkFileInfo *da_trunk_hashtable_get_ex(DATrunkHTableContext *ctx,
+        const uint32_t trunk_id, const int log_level)
 {
     DATrunkFileInfo *current;
     int result;
@@ -170,11 +170,14 @@ DATrunkFileInfo *da_trunk_hashtable_get(DATrunkHTableContext *ctx,
     if (result == 0) {
         return current;
     } else {
-        DAContext *da_ctx;
-        da_ctx = fc_list_entry(ctx, DAContext, trunk_htable_ctx);
-        logError("file: "__FILE__", line: %d, %s "
-                "trunk id: %u NOT exist", __LINE__,
-                da_ctx->module_name, trunk_id);
+        if (FC_LOG_BY_LEVEL(log_level)) {
+            DAContext *da_ctx;
+            da_ctx = fc_list_entry(ctx, DAContext, trunk_htable_ctx);
+            log_it_ex(&g_log_context, log_level,
+                    "file: "__FILE__", line: %d, %s "
+                    "trunk id: %u NOT exist", __LINE__,
+                    da_ctx->module_name, trunk_id);
+        }
         return NULL;
     }
 }

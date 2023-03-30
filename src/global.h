@@ -47,6 +47,7 @@ extern "C" {
     int da_load_config_ex(DAContext *context, const char *module_name,
             const int file_block_size, const DADataConfig *data_cfg,
             const char *storage_filename, const bool have_extra_field,
+            const bool destroy_store_path_index,
             const bool migrate_path_mark_filename);
 
     static inline int da_load_config(DAContext *context,
@@ -54,19 +55,20 @@ extern "C" {
             const DADataConfig *data_cfg, const char *storage_filename)
     {
         const bool have_extra_field = false;
+        const bool destroy_store_path_index = true;
         const bool migrate_path_mark_filename = false;
         return da_load_config_ex(context, module_name, file_block_size,
                 data_cfg, storage_filename, have_extra_field,
-                migrate_path_mark_filename);
+                destroy_store_path_index, migrate_path_mark_filename);
     }
 
     int da_init_start_ex(DAContext *ctx, da_slice_migrate_done_callback
             slice_migrate_done_callback, da_trunk_migrate_done_callback
             trunk_migrate_done_callback, da_cached_slice_write_done_callback
-            cached_slice_write_done);
+            cached_slice_write_done, const int skip_path_index);
 
 #define da_init_start(ctx, slice_migrate_done_callback) \
-    da_init_start_ex(ctx, slice_migrate_done_callback, NULL, NULL)
+    da_init_start_ex(ctx, slice_migrate_done_callback, NULL, NULL, -1)
 
 #ifdef __cplusplus
 }

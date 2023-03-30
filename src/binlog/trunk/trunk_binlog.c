@@ -77,6 +77,10 @@ static int trunk_parse_line(DAContext *ctx,
         return EINVAL;
     }
 
+    if (path_index == ctx->storage.skip_path_index) {
+        return 0;
+    }
+
     if (op_type == DA_IO_TYPE_CREATE_TRUNK) {
         if ((result=da_storage_allocator_add_trunk(ctx, path_index,
                        &id_info, trunk_size)) != 0)

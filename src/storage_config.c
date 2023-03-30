@@ -599,9 +599,8 @@ static int set_paths_by_index(DAStorageConfig *storage_cfg)
     return 0;
 }
 
-static int load_store_path_indexes(DAContext *ctx,
-        DAStorageConfig *storage_cfg,
-        const char *storage_filename)
+static int load_store_path_indexes(DAContext *ctx, DAStorageConfig *storage_cfg,
+        const char *storage_filename, const bool destroy_store_path_index)
 {
     int result;
     int old_count;
@@ -644,12 +643,14 @@ static int load_store_path_indexes(DAContext *ctx,
             da_store_path_index_count(ctx), change_count,
             storage_cfg->max_store_path_index);
 
-    da_store_path_index_destroy(ctx);
+    if (destroy_store_path_index) {
+        da_store_path_index_destroy(ctx);
+    }
     return result;
 }
 
 int da_storage_config_load(DAContext *ctx, DAStorageConfig *storage_cfg,
-        const char *storage_filename)
+        const char *storage_filename, const bool destroy_store_path_index)
 {
     IniContext ini_context;
     IniFullContext ini_ctx;
@@ -667,7 +668,8 @@ int da_storage_config_load(DAContext *ctx, DAStorageConfig *storage_cfg,
     result = load_from_config_file(ctx, storage_cfg, &ini_ctx);
     iniFreeContext(&ini_context);
     if (result == 0) {
-        result = load_store_path_indexes(ctx, storage_cfg, storage_filename);
+        result = load_store_path_indexes(ctx, storage_cfg,
+                storage_filename, destroy_store_path_index);
     }
     return result;
 }

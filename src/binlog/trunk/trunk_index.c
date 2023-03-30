@@ -63,12 +63,19 @@ static int unpack_record(const string_t *line,
     return 0;
 }
 
+const char *da_trunk_index_get_filename(DAContext *ctx,
+        char *filename, const int size)
+{
+    snprintf(filename, size, "%s/%s", ctx->data.path.str,
+            TRUNK_INDEX_FILENAME);
+    return filename;
+}
+
 void da_trunk_index_init(DAContext *ctx)
 {
     char filename[PATH_MAX];
 
-    snprintf(filename, sizeof(filename), "%s/%s",
-            ctx->data.path.str, TRUNK_INDEX_FILENAME);
+    da_trunk_index_get_filename(ctx, filename, sizeof(filename));
     sf_binlog_index_init(&ctx->trunk_index_ctx, "trunk", filename,
             TRUNK_INDEX_RECORD_MAX_SIZE, sizeof(DATrunkIndexRecord),
             (pack_record_func)pack_record, (unpack_record_func)unpack_record);

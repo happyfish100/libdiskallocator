@@ -417,11 +417,12 @@ typedef struct da_context {
     DADataConfig data;
 
     struct {
-        int file_block_size;
         DAStorageConfig cfg;
+        int file_block_size;
         int read_direct_io_paths;
         bool have_extra_field;
         bool migrate_path_mark_filename; //for faststore
+        int skip_path_index;  //for faststore path rebuild
     } storage;
 
     bool check_trunk_avail_in_progress;

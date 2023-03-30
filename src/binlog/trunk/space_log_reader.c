@@ -207,8 +207,9 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
     return result;
 }
 
-static int parse_to_chain(DASpaceLogReader *reader, struct fc_queue_info
-        *chain, string_t *content, char *error_info)
+static int parse_to_chain(DASpaceLogReader *reader,
+        struct fc_queue_info *chain, string_t *content,
+        char *error_info)
 {
     int result;
     string_t line;
