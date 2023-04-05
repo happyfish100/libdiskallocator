@@ -21,6 +21,7 @@
 #include "fastcommon/fast_mblock.h"
 #include "fastcommon/uniq_skiplist.h"
 #include "sf/sf_global.h"
+#include "../binlog/trunk/trunk_binlog.h"
 #include "../global.h"
 #include "trunk_id_info.h"
 
@@ -97,6 +98,8 @@ static int load_current_trunk_id(DAContext *ctx)
 {
     char full_filename[PATH_MAX];
     IniContext ini_context;
+    DATrunkIdInfo id_info;
+    bool changed;
     int result;
 
     get_trunk_id_dat_filename(ctx, full_filename, sizeof(full_filename));
@@ -118,12 +121,29 @@ static int load_current_trunk_id(DAContext *ctx)
     ctx->trunk_id_info_ctx->current_subdir_id  = iniGetInt64Value(NULL,
             ITEM_NAME_SUBDIR_ID, &ini_context, 0);
 
-    /*
     if (!iniGetBoolValue(NULL, ITEM_NAME_NORMAL_EXIT, &ini_context, false)) {
-        ctx->trunk_id_info_ctx->current_trunk_id += 10000;
-        ctx->trunk_id_info_ctx->current_subdir_id += 100;
+        if ((result=da_trunk_binlog_get_last_id_info(ctx, &id_info)) != 0) {
+            return result;
+        }
+
+        changed = false;
+        if (id_info.id > ctx->trunk_id_info_ctx->current_trunk_id) {
+            changed = true;
+            ctx->trunk_id_info_ctx->current_trunk_id = id_info.id;
+        }
+        if (id_info.subdir > ctx->trunk_id_info_ctx->current_subdir_id) {
+            changed = true;
+            ctx->trunk_id_info_ctx->current_subdir_id = id_info.subdir;
+        }
+        if (changed) {
+            if ((result=save_current_trunk_id(ctx, ctx->trunk_id_info_ctx->
+                            current_trunk_id, ctx->trunk_id_info_ctx->
+                            current_subdir_id)) != 0)
+            {
+                return result;
+            }
+        }
     }
-    */
 
     iniFreeContext(&ini_context);
     return result;
@@ -212,15 +232,11 @@ static int trunk_id_sync_to_file(void *arg)
             &ctx->trunk_id_info_ctx->current_trunk_id, 0);
     current_subdir_id = __sync_add_and_fetch(
             &ctx->trunk_id_info_ctx->current_subdir_id, 0);
-
-    if (ctx->trunk_id_info_ctx->last_trunk_id != ctx->trunk_id_info_ctx->
-            current_trunk_id || ctx->trunk_id_info_ctx->last_subdir_id !=
-            ctx->trunk_id_info_ctx->current_subdir_id)
+    if (ctx->trunk_id_info_ctx->last_trunk_id != current_trunk_id ||
+            ctx->trunk_id_info_ctx->last_subdir_id != current_subdir_id)
     {
-        ctx->trunk_id_info_ctx->last_trunk_id = ctx->
-            trunk_id_info_ctx->current_trunk_id;
-        ctx->trunk_id_info_ctx->last_subdir_id = ctx->
-            trunk_id_info_ctx->current_subdir_id;
+        ctx->trunk_id_info_ctx->last_trunk_id = current_trunk_id;
+        ctx->trunk_id_info_ctx->last_subdir_id = current_subdir_id;
         return save_current_trunk_id(ctx, current_trunk_id,
                 current_subdir_id);
     }

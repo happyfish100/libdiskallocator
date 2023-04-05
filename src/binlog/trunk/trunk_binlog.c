@@ -48,8 +48,7 @@ static int trunk_parse_line(DAContext *ctx,
     DATrunkIdInfo id_info;
     uint32_t trunk_size;
 
-    count = split_string_ex(line, ' ', cols,
-            MAX_FIELD_COUNT, false);
+    count = split_string_ex(line, ' ', cols, MAX_FIELD_COUNT, false);
     if (count < EXPECT_FIELD_COUNT) {
         sprintf(error_info, "field count: %d < %d",
                 count, EXPECT_FIELD_COUNT);
@@ -149,7 +148,6 @@ static int load_one_binlog(DAContext *ctx, const int binlog_index)
     sf_binlog_writer_get_filename(ctx->data.path.str,
             DA_TRUNK_BINLOG_SUBDIR_NAME, binlog_index,
             full_filename, sizeof(full_filename));
-
     if ((fd=open(full_filename, O_RDONLY | O_CLOEXEC)) < 0) {
         result = errno != 0 ? errno : EACCES;
         logError("file: "__FILE__", line: %d, %s "
@@ -240,4 +238,77 @@ int da_trunk_binlog_write(DAContext *ctx, const char op_type,
             path_index, id_info, file_size, wbuffer->bf.buff);
     sf_push_to_binlog_thread_queue(&ctx->trunk_binlog_writer.thread, wbuffer);
     return 0;
+}
+
+static int get_last_id_info(DAContext *ctx,
+        DATrunkIdInfo *id_info, char *error_info)
+{
+    int result;
+    int count;
+    int current_write_index;
+    char op_type;
+    int path_index;
+    char buff[DA_TRUNK_BINLOG_MAX_RECORD_SIZE];
+    string_t cols[MAX_FIELD_COUNT];
+    string_t line;
+    char *endptr;
+
+    current_write_index = da_trunk_binlog_get_current_write_index(ctx);
+    line.str = buff;
+    count = 1;
+    if ((result=sf_binlog_writer_get_last_lines(ctx->data.path.str,
+                    DA_TRUNK_BINLOG_SUBDIR_NAME, current_write_index,
+                    buff, sizeof(buff), &count, &line.len)) != 0)
+    {
+        return result;
+    }
+
+    if (count == 0) {
+        id_info->id = 0;
+        id_info->subdir = 0;
+        return 0;
+    }
+
+    count = split_string_ex(&line, ' ', cols, MAX_FIELD_COUNT, false);
+    if (count < EXPECT_FIELD_COUNT) {
+        logError("file: "__FILE__", line: %d, %s "
+                "field count: %d < %d", __LINE__, ctx->module_name,
+                count, EXPECT_FIELD_COUNT);
+        return EINVAL;
+    }
+
+    op_type = cols[FIELD_INDEX_OP_TYPE].str[0];
+    SF_BINLOG_PARSE_INT_SILENCE(path_index, "path index",
+            FIELD_INDEX_PATH_INDEX, ' ', 0);
+    if (path_index > ctx->storage.cfg.max_store_path_index) {
+        logError("file: "__FILE__", line: %d, %s "
+                "invalid path_index: %d > max_store_path_index: %d",
+                __LINE__, ctx->module_name, path_index,
+                ctx->storage.cfg.max_store_path_index);
+        return EINVAL;
+    }
+
+    SF_BINLOG_PARSE_INT_SILENCE(id_info->id, "trunk id",
+            FIELD_INDEX_TRUNK_ID, ' ', 1);
+    SF_BINLOG_PARSE_INT_SILENCE(id_info->subdir, "subdir",
+            FIELD_INDEX_SUBDIR, ' ', 1);
+    return 0;
+}
+
+int da_trunk_binlog_get_last_id_info(DAContext *ctx,
+        DATrunkIdInfo *id_info)
+{
+    int result;
+    char error_info[256];
+
+    *error_info = '\0';
+    if ((result=get_last_id_info(ctx, id_info, error_info)) != 0) {
+        if (*error_info != '\0') {
+            logError("file: "__FILE__", line: %d, %s "
+                    "parse last line of trunk binlog fail, error info: %s",
+                    __LINE__, ctx->module_name, error_info);
+        }
+    }
+
+    return result;
 }

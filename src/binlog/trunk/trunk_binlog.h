@@ -69,6 +69,9 @@ extern "C" {
             const int path_index, const DATrunkIdInfo *id_info,
             const uint32_t file_size);
 
+    int da_trunk_binlog_get_last_id_info(DAContext *ctx,
+            DATrunkIdInfo *id_info);
+
 #ifdef __cplusplus
 }
 #endif
