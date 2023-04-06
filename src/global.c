@@ -124,3 +124,10 @@ int da_init_start_ex(DAContext *ctx, da_slice_migrate_done_callback
 
     return 0;
 }
+
+void da_destroy(DAContext *context)
+{
+    da_trunk_write_thread_terminate(context);
+    da_trunk_binlog_destroy(context);
+    da_trunk_id_info_destroy(context);
+}

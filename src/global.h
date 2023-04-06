@@ -67,6 +67,8 @@ extern "C" {
             trunk_migrate_done_callback, da_cached_slice_write_done_callback
             cached_slice_write_done, const int skip_path_index);
 
+    void da_destroy(DAContext *context);
+
 #define da_init_start(ctx, slice_migrate_done_callback) \
     da_init_start_ex(ctx, slice_migrate_done_callback, NULL, NULL, -1)
 

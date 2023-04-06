@@ -278,6 +278,13 @@ static int get_last_id_info(DAContext *ctx,
     }
 
     op_type = cols[FIELD_INDEX_OP_TYPE].str[0];
+    if (op_type != DA_IO_TYPE_CREATE_TRUNK) {
+        logError("file: "__FILE__", line: %d, %s "
+                "invalid op_type: 0x%02x", __LINE__,
+                ctx->module_name, op_type);
+        return EINVAL;
+    }
+
     SF_BINLOG_PARSE_INT_SILENCE(path_index, "path index",
             FIELD_INDEX_PATH_INDEX, ' ', 0);
     if (path_index > ctx->storage.cfg.max_store_path_index) {
