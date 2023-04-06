@@ -24,6 +24,7 @@
 #define DA_IO_TYPE_DELETE_TRUNK           'D'
 #define DA_IO_TYPE_WRITE_SLICE_BY_BUFF    'W'
 #define DA_IO_TYPE_WRITE_SLICE_BY_IOVEC   'V'
+#define DA_IO_TYPE_QUIT                   'Q'
 
 struct da_trunk_write_io_buffer;
 

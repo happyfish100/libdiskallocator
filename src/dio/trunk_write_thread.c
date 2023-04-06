@@ -84,6 +84,7 @@ typedef struct trunk_write_path_contexts_array {
 typedef struct da_trunk_write_context {
     TrunkWritePathContextArray path_ctx_array;
     UniqSkiplistFactory factory;
+    volatile int running_threads;
 } TrunkWriteContext;
 
 static void *da_trunk_write_thread_func(void *arg);
@@ -264,6 +265,32 @@ int da_trunk_write_thread_init(DAContext *ctx)
 
 void da_trunk_write_thread_terminate(DAContext *ctx)
 {
+    TrunkWritePathContext *path_ctx;
+    TrunkWritePathContext *path_end;
+    TrunkWriteThreadContext *thread_ctx;
+    TrunkWriteThreadContext *thread_end;
+    TrunkWriteIOBuffer *iob;
+
+    path_end = ctx->trunk_write_ctx->path_ctx_array.paths +
+        ctx->trunk_write_ctx->path_ctx_array.count;
+    for (path_ctx=ctx->trunk_write_ctx->path_ctx_array.paths;
+            path_ctx<path_end; path_ctx++)
+    {
+        thread_end = path_ctx->writes.contexts + path_ctx->writes.count;
+        for (thread_ctx=path_ctx->writes.contexts;
+                thread_ctx<thread_end; thread_ctx++)
+        {
+            if ((iob=fast_mblock_alloc_object(&thread_ctx->mblock)) != NULL) {
+                memset(iob, 0, sizeof(*iob));
+                iob->op_type = DA_IO_TYPE_QUIT;
+                fc_queue_push(&thread_ctx->queue, iob);
+            }
+        }
+    }
+
+    while (FC_ATOMIC_GET(ctx->trunk_write_ctx->running_threads) > 0) {
+        fc_sleep_ms(1);
+    }
 }
 
 static inline TrunkWriteIOBuffer *alloc_init_buffer(DAContext *ctx,
@@ -714,7 +741,7 @@ static void deal_request_skiplist(TrunkWriteThreadContext *thread)
     int result;
 
     io_count = 0;
-    while (1) {
+    while (SF_G_CONTINUE_FLAG) {
         iob = (TrunkWriteIOBuffer *)uniq_skiplist_get_first(
                 thread->sl_pair->skiplist);
         if (iob == NULL) {
@@ -722,6 +749,8 @@ static void deal_request_skiplist(TrunkWriteThreadContext *thread)
         }
 
         switch (iob->op_type) {
+            case DA_IO_TYPE_QUIT:
+                return;
             case DA_IO_TYPE_CREATE_TRUNK:
             case DA_IO_TYPE_DELETE_TRUNK:
                 if (thread->iovec_array.count > 0) {
@@ -851,6 +880,7 @@ static void *da_trunk_write_thread_func(void *arg)
     }
 #endif
 
+    FC_ATOMIC_INC(thread->ctx->trunk_write_ctx->running_threads);
     while (SF_G_CONTINUE_FLAG) {
         count = pop_to_request_skiplist(thread,
                 thread->iovec_array.count == 0);
@@ -867,6 +897,7 @@ static void *da_trunk_write_thread_func(void *arg)
 
         deal_request_skiplist(thread);
     }
+    FC_ATOMIC_DEC(thread->ctx->trunk_write_ctx->running_threads);
 
     return NULL;
 }
