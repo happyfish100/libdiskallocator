@@ -168,12 +168,11 @@ int da_trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
 }
 
 int da_trunk_allocator_deal_space_changes(DAContext *ctx,
-        DATrunkSpaceLogRecord **records, const int count,
-        uint32_t *used_bytes)
+        DATrunkFileInfo *trunk, DATrunkSpaceLogRecord **records,
+        const int count, uint32_t *used_bytes)
 {
     DATrunkSpaceLogRecord **record;
     DATrunkSpaceLogRecord **end;
-    DATrunkFileInfo *trunk;
 
     if (count <= 0) {
         return 0;

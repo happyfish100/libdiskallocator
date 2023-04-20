@@ -204,7 +204,8 @@ static int do_prealloc_trunk(TrunkMakerThreadInfo *thread,
         return result;
     }
     space.offset = 0;
-    space.size = task->allocator->path_info->ctx->storage.cfg.trunk_file_size;
+    space.size = task->allocator->path_info->
+        ctx->storage.cfg.trunk_file_size;
     if ((result=da_trunk_write_thread_push_trunk_op(task->allocator->
                     path_info->ctx, DA_IO_TYPE_CREATE_TRUNK,
                     &space, create_trunk_done, thread)) == 0)

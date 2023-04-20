@@ -34,10 +34,22 @@ typedef struct da_trunk_reclaim_block_array {
     DATrunkReclaimBlockInfo *blocks;
 } DATrunkReclaimBlockArray;
 
+typedef struct da_trunk_reclaim_space_alloc_info {
+    DATrunkFileInfo *trunk;
+    int alloc_count;
+} DATrunkReclaimSpaceAllocInfo;
+
+typedef struct da_trunk_reclaim_space_alloc_array {
+    int count;
+    int alloc;
+    DATrunkReclaimSpaceAllocInfo *spaces;
+} DATrunkReclaimSpaceAllocArray;
+
 typedef struct da_trunk_reclaim_context {
     DASpaceLogReader reader;
     UniqSkiplist *skiplist;
     DATrunkReclaimBlockArray barray;
+    DATrunkReclaimSpaceAllocArray sarray;
     DASynchronizedReadContext read_ctx;
     struct {
         int total;

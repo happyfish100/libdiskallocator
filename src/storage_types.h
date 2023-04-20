@@ -56,13 +56,14 @@ struct da_piece_field_info;
 struct da_full_trunk_id_info;
 struct da_trunk_file_info;
 struct da_slice_entry;
+struct da_full_trunk_space;
 struct da_trunk_space_info;
 
 typedef void (*da_rw_done_callback_func)(
         struct da_slice_op_context *op_ctx, void *arg);
 
 typedef int (*da_slice_migrate_done_callback)(
-        const struct da_full_trunk_id_info *trunk,
+        const struct da_trunk_file_info *trunk,
         const struct da_piece_field_info *field,
         struct fc_queue_info *space_chain,
         SFSynchronizeContext *sctx, int *flags);
@@ -71,8 +72,8 @@ typedef void (*da_trunk_migrate_done_callback)(
         const struct da_trunk_file_info *trunk);
 
 typedef int (*da_cached_slice_write_done_callback)(const
-        struct da_slice_entry *se, const struct da_trunk_space_info
-        *space, void *arg1, void *arg2);
+        struct da_slice_entry *se, const struct da_full_trunk_space
+        *ts, void *arg1, void *arg2);
 
 typedef struct {
     int index;   //the inner index is important!
@@ -91,8 +92,13 @@ typedef struct da_trunk_space_info {
     uint32_t size;    //alloced space size
 } DATrunkSpaceInfo;
 
-typedef struct {
+typedef struct da_full_trunk_space {
+    struct da_trunk_file_info *trunk;
     DATrunkSpaceInfo space;
+} DAFullTrunkSpace;
+
+typedef struct {
+    DAFullTrunkSpace ts;
     int64_t version; //for write in order
 } DATrunkSpaceWithVersion;
 
@@ -139,6 +145,7 @@ typedef struct da_trunk_file_info {
         struct da_trunk_file_info *next;
     } htable;  //for hashtable
 
+    volatile int reffer_count;  //for waiting slice write done
     struct {
         volatile char event;
         uint32_t last_used_bytes;
@@ -182,6 +189,7 @@ typedef struct da_trunk_space_log_record {
     char op_type;
     DAPieceFieldStorage storage;
     struct fast_mblock_man *allocator;
+    struct da_trunk_file_info *trunk;  //for decreasing trunk's reffer_count
     struct da_trunk_space_log_record *next;
 } DATrunkSpaceLogRecord;
 

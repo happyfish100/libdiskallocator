@@ -43,7 +43,7 @@ typedef struct da_slice_entry {
 typedef struct da_trunk_write_io_buffer {
     int op_type;
     DASliceType slice_type;  //in file, write cache or memory as fallocate
-    DATrunkSpaceInfo space;
+    DAFullTrunkSpace ts;
 
     int64_t version; //for write in order
 
@@ -79,7 +79,8 @@ extern "C" {
 
     int da_trunk_write_thread_push(DAContext *ctx, const int op_type,
             const int64_t version, const DATrunkSpaceInfo *space,
-            void *data, da_trunk_write_io_notify_func notify_func,
+            DATrunkFileInfo *trunk, void *data,
+            da_trunk_write_io_notify_func notify_func,
             void *arg1, void *arg2);
 
     static inline int da_trunk_write_thread_push_trunk_op(DAContext *ctx,
@@ -91,34 +92,35 @@ extern "C" {
             allocators[space->store->index];
         return da_trunk_write_thread_push(ctx, op_type, __sync_add_and_fetch(
                     &allocator->allocate.current_version, 1), space,
-                NULL, notify_func, notify_arg, NULL);
+                NULL, NULL, notify_func, notify_arg, NULL);
     }
 
     int da_trunk_write_thread_push_cached_slice(DAContext *ctx,
             const int op_type, const int64_t version,
-            const DATrunkSpaceInfo *space, void *data,
-            const DASliceEntry *slice, void *arg1, void *arg2);
+            const DATrunkSpaceInfo *space, DATrunkFileInfo *trunk,
+            void *data, const DASliceEntry *slice, void *arg1, void *arg2);
 
-    static inline int da_trunk_write_thread_push_slice_by_buff(
-            DAContext *ctx, const int64_t version, DATrunkSpaceInfo *space,
-            char *buff, da_trunk_write_io_notify_func notify_func,
-            void *arg1, void *arg2)
+    static inline int da_trunk_write_thread_push_slice_by_buff(DAContext *ctx,
+            const int64_t version, const DATrunkSpaceInfo *space,
+            DATrunkFileInfo *trunk, char *buff, da_trunk_write_io_notify_func
+            notify_func, void *arg1, void *arg2)
     {
         return da_trunk_write_thread_push(ctx, DA_IO_TYPE_WRITE_SLICE_BY_BUFF,
-                version, space, buff, notify_func, arg1, arg2);
+                version, space, trunk, buff, notify_func, arg1, arg2);
     }
 
     int da_trunk_write_thread_by_buff_synchronize(DAContext *ctx,
             DATrunkSpaceWithVersion *space_info, char *buff,
             SFSynchronizeContext *sctx);
 
-    static inline int da_trunk_write_thread_push_slice_by_iovec(
-            DAContext *ctx, const int64_t version, DATrunkSpaceInfo *space,
-            iovec_array_t *iovec_array, da_trunk_write_io_notify_func notify_func,
+    static inline int da_trunk_write_thread_push_slice_by_iovec(DAContext *ctx,
+            const int64_t version, const DATrunkSpaceInfo *space,
+            DATrunkFileInfo *trunk, iovec_array_t *iovec_array,
+            da_trunk_write_io_notify_func notify_func,
             void *arg1, void *arg2)
     {
         return da_trunk_write_thread_push(ctx, DA_IO_TYPE_WRITE_SLICE_BY_IOVEC,
-                version, space, iovec_array, notify_func, arg1, arg2);
+                version, space, trunk, iovec_array, notify_func, arg1, arg2);
     }
 
 #ifdef __cplusplus

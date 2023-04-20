@@ -28,6 +28,9 @@ typedef struct {
     pthread_lock_cond_pair_t lcp;  //for lock and notify
 } DATrunkFreelist;
 
+#define da_trunk_freelist_decrease_reffer_count(trunk_info) \
+    da_trunk_freelist_decrease_reffer_count_ex(trunk_info, 1)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -43,6 +46,9 @@ extern "C" {
     int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
             DATrunkFreelist *freelist, const uint64_t blk_hc, const int size,
             DATrunkSpaceWithVersion *spaces, int *count, const bool is_normal);
+
+    void da_trunk_freelist_decrease_reffer_count_ex(DATrunkFileInfo *trunk,
+            const int dec_count);
 
 #ifdef __cplusplus
 }

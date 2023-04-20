@@ -14,7 +14,6 @@
  */
 
 #include <limits.h>
-#include <assert.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include "fastcommon/shared_func.h"
@@ -78,6 +77,32 @@ static int realloc_rb_array(DATrunkReclaimBlockArray *array)
 
     array->alloc = new_alloc;
     array->blocks = blocks;
+    return 0;
+}
+
+static int realloc_space_array(DATrunkReclaimSpaceAllocArray *array)
+{
+    DATrunkReclaimSpaceAllocInfo *spaces;
+    int new_alloc;
+    int bytes;
+
+    new_alloc = (array->alloc > 0) ? 2 * array->alloc : 64;
+    bytes = sizeof(DATrunkReclaimSpaceAllocInfo) * new_alloc;
+    spaces = (DATrunkReclaimSpaceAllocInfo *)fc_malloc(bytes);
+    if (spaces == NULL) {
+        return ENOMEM;
+    }
+
+    if (array->spaces != NULL) {
+        if (array->count > 0) {
+            memcpy(spaces, array->spaces, array->count *
+                    sizeof(DATrunkReclaimSpaceAllocInfo));
+        }
+        free(array->spaces);
+    }
+
+    array->alloc = new_alloc;
+    array->spaces = spaces;
     return 0;
 }
 
@@ -165,7 +190,7 @@ static int slice_write(DATrunkReclaimContext *rctx,
 }
 
 static int migrate_one_slice(DATrunkReclaimContext *rctx,
-        DATrunkSpaceLogRecord *record, DAFullTrunkIdInfo *trunk)
+        DATrunkSpaceLogRecord *record, DATrunkFileInfo **trunk)
 {
     int result;
     DATrunkSpaceWithVersion space_info;
@@ -183,11 +208,26 @@ static int migrate_one_slice(DATrunkReclaimContext *rctx,
         return result;
     }
 
-    record->storage.trunk_id = space_info.space.id_info.id;
-    record->storage.offset = space_info.space.offset;
-    record->storage.size = space_info.space.size;
-    trunk->store = space_info.space.store;
-    trunk->id_info = space_info.space.id_info;
+    *trunk = space_info.ts.trunk;
+    if (rctx->sarray.count == 0 || rctx->sarray.spaces[rctx->
+            sarray.count - 1].trunk != *trunk)
+    {
+        if (rctx->sarray.alloc <= rctx->sarray.count) {
+            if ((result=realloc_space_array(&rctx->sarray)) != 0) {
+                return result;
+            }
+        }
+
+        rctx->sarray.spaces[rctx->sarray.count].trunk = *trunk;
+        rctx->sarray.spaces[rctx->sarray.count].alloc_count = 1;
+        rctx->sarray.count++;
+    } else {
+        rctx->sarray.spaces[rctx->sarray.count - 1].alloc_count++;
+    }
+
+    record->storage.trunk_id = space_info.ts.space.id_info.id;
+    record->storage.offset = space_info.ts.space.offset;
+    record->storage.size = space_info.ts.space.size;
     return 0;
 }
 
@@ -201,7 +241,7 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
     int result;
     int flags;
     uint32_t offset;
-    DAFullTrunkIdInfo trunk;
+    DATrunkFileInfo *trunk;
     DAPieceFieldInfo field;
     struct fc_queue_info space_chain;
 
@@ -251,7 +291,7 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
         field.source = DA_FIELD_UPDATE_SOURCE_RECLAIM;
         field.op_type = da_binlog_op_type_update;
         field.storage = new_record->storage;
-        if ((result=rctx->ctx->slice_migrate_done_callback(&trunk, &field,
+        if ((result=rctx->ctx->slice_migrate_done_callback(trunk, &field,
                         &space_chain, &rctx->log_notify, &flags)) != 0)
         {
             return result;
@@ -274,11 +314,14 @@ static int migrate_blocks(DATrunkReclaimContext *rctx, DATrunkFileInfo *trunk)
 {
     DATrunkReclaimBlockInfo *block;
     DATrunkReclaimBlockInfo *bend;
+    DATrunkReclaimSpaceAllocInfo *space;
+    DATrunkReclaimSpaceAllocInfo *send;
     int result;
 
     __sync_add_and_fetch(&rctx->log_notify.waiting_count,
             rctx->slice_counts.total);
 
+    rctx->sarray.count = 0;
     bend = rctx->barray.blocks + rctx->barray.count;
     for (block=rctx->barray.blocks; block<bend; block++) {
         if ((result=migrate_one_block(rctx, block)) != 0) {
@@ -289,8 +332,19 @@ static int migrate_blocks(DATrunkReclaimContext *rctx, DATrunkFileInfo *trunk)
     if (rctx->ctx->trunk_migrate_done_callback != NULL) {
         rctx->ctx->trunk_migrate_done_callback(trunk);
     }
-
     sf_synchronize_counter_wait(&rctx->log_notify);
+
+    if (rctx->sarray.count == 1) {
+        da_trunk_freelist_decrease_reffer_count_ex(rctx->sarray.spaces[0].
+                trunk, rctx->sarray.spaces[0].alloc_count);
+    } else {
+        send = rctx->sarray.spaces + rctx->sarray.count;
+        for (space=rctx->sarray.spaces; space<send; space++) {
+            da_trunk_freelist_decrease_reffer_count_ex(
+                    space->trunk, space->alloc_count);
+        }
+    }
+
     return 0;
 }
 

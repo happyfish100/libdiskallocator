@@ -19,6 +19,7 @@
 #include "fastcommon/logger.h"
 #include "fastcommon/fast_mblock.h"
 #include "fastcommon/sched_thread.h"
+#include "fastcommon/fc_atomic.h"
 #include "sf/sf_global.h"
 #include "../global.h"
 #include "../storage_allocator.h"
@@ -58,17 +59,19 @@ static inline void push_trunk_util_event_force(DATrunkAllocator *allocator,
     }
 }
 
-#define TRUNK_ALLOC_SPACE(trunk, space_info, alloc_size) \
+#define TRUNK_ALLOC_SPACE(_trunk, space_info, alloc_size) \
     do { \
-        space_info->space.store = &trunk->allocator->path_info->store; \
-        space_info->space.id_info = trunk->id_info;   \
-        space_info->space.offset = trunk->free_start; \
-        space_info->space.size = alloc_size;          \
-        space_info->version = __sync_add_and_fetch(&trunk->  \
+        space_info->ts.trunk = _trunk;  \
+        space_info->ts.space.store = &_trunk->allocator->path_info->store; \
+        space_info->ts.space.id_info = _trunk->id_info;   \
+        space_info->ts.space.offset = _trunk->free_start; \
+        space_info->ts.space.size = alloc_size;           \
+        space_info->version = __sync_add_and_fetch(&_trunk->  \
                 allocator->allocate.current_version, 1); \
-        trunk->free_start += alloc_size;  \
-        __sync_sub_and_fetch(&trunk->allocator->path_info-> \
+        _trunk->free_start += alloc_size;  \
+        __sync_sub_and_fetch(&_trunk->allocator->path_info-> \
                 trunk_stat.avail, alloc_size);  \
+        FC_ATOMIC_INC(_trunk->reffer_count); \
     } while (0)
 
 void da_trunk_freelist_keep_water_mark(struct da_trunk_allocator
@@ -122,6 +125,24 @@ void da_trunk_freelist_add(DATrunkFreelist *freelist,
             trunk_stat.avail, avail_bytes);
 }
 
+#define PUSH_TRUNK_UTIL_EVEENT_QUEUE(trunk_info) \
+    do { \
+        da_set_trunk_status(trunk_info, DA_TRUNK_STATUS_REPUSH); \
+        push_trunk_util_event_force(trunk_info->allocator, \
+                trunk_info, DA_TRUNK_UTIL_EVENT_CREATE);   \
+        da_set_trunk_status(trunk_info, DA_TRUNK_STATUS_NONE); \
+    } while (0)
+
+void da_trunk_freelist_decrease_reffer_count_ex(DATrunkFileInfo *trunk,
+        const int dec_count)
+{
+    if (__sync_sub_and_fetch(&trunk->reffer_count, dec_count) == 0) {
+        if (FC_ATOMIC_GET(trunk->status) == DA_TRUNK_STATUS_NONE) {
+            PUSH_TRUNK_UTIL_EVEENT_QUEUE(trunk);
+        }
+    }
+}
+
 static void da_trunk_freelist_remove(DATrunkFreelist *freelist)
 {
     DATrunkFileInfo *trunk_info;
@@ -133,10 +154,11 @@ static void da_trunk_freelist_remove(DATrunkFreelist *freelist)
     }
     freelist->count--;
 
-    da_set_trunk_status(trunk_info, DA_TRUNK_STATUS_REPUSH);
-    push_trunk_util_event_force(trunk_info->allocator,
-            trunk_info, DA_TRUNK_UTIL_EVENT_CREATE);
-    da_set_trunk_status(trunk_info, DA_TRUNK_STATUS_NONE);
+    if (FC_ATOMIC_GET(trunk_info->reffer_count) == 0) {
+        PUSH_TRUNK_UTIL_EVEENT_QUEUE(trunk_info);
+    } else {
+        da_set_trunk_status(trunk_info, DA_TRUNK_STATUS_NONE);
+    }
 
     if (freelist->count < freelist->water_mark_trunks) {
         da_trunk_maker_allocate_ex(trunk_info->allocator,

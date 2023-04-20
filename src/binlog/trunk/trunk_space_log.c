@@ -252,7 +252,9 @@ static int write_to_log_file(DAContext *ctx,
     int result;
     int fd;
     uint32_t used_bytes;
+    int dec_count;
     DATrunkSpaceLogRecord **current;
+    DATrunkFileInfo *trunk;
 
     if ((result=get_write_fd(ctx, (*start)->storage.trunk_id, &fd)) != 0) {
         return result;
@@ -260,6 +262,8 @@ static int write_to_log_file(DAContext *ctx,
 
     used_bytes = 0;
     ctx->space_log_ctx.buffer.length = 0;
+    trunk = NULL;
+    dec_count = 0;
     do {
         for (current=start; current<end; current++) {
             if (ctx->space_log_ctx.buffer.alloc_size -
@@ -276,6 +280,14 @@ static int write_to_log_file(DAContext *ctx,
                 ctx->space_log_ctx.buffer.length = 0;
             }
 
+            if ((*current)->trunk != NULL) {
+                if (trunk == NULL) {
+                    trunk = (*current)->trunk;
+                }
+                (*current)->trunk = NULL;
+                ++dec_count;
+            }
+
             da_trunk_space_log_pack(*current, &ctx->space_log_ctx.buffer,
                     ctx->storage.have_extra_field);
         }
@@ -287,8 +299,17 @@ static int write_to_log_file(DAContext *ctx,
             break;
         }
 
+        if (trunk != NULL) {
+            da_trunk_freelist_decrease_reffer_count_ex(trunk, dec_count);
+        } else if ((trunk=da_trunk_hashtable_get(&ctx->trunk_htable_ctx,
+                    (*start)->storage.trunk_id)) == NULL)
+        {
+            result = ENOENT;
+            break;
+        }
+
         result = da_trunk_allocator_deal_space_changes(ctx,
-                start, end - start, &used_bytes);
+                trunk, start, end - start, &used_bytes);
     } while (0);
 
     if (result != 0 || used_bytes == 0) {
@@ -691,6 +712,9 @@ int da_trunk_space_log_init(DAContext *ctx)
         return result;
     }
 
+    RECORD_PTR_ARRAY.records = NULL;
+    RECORD_PTR_ARRAY.count = 0;
+    RECORD_PTR_ARRAY.alloc = 0;
     return 0;
 }
 
