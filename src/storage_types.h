@@ -72,8 +72,8 @@ typedef void (*da_trunk_migrate_done_callback)(
         const struct da_trunk_file_info *trunk);
 
 typedef int (*da_cached_slice_write_done_callback)(const
-        struct da_slice_entry *se, const struct da_full_trunk_space
-        *ts, void *arg1, void *arg2);
+        struct da_slice_entry *se, const struct da_trunk_space_info
+        *space, void *arg1, void *arg2);
 
 typedef struct {
     int index;   //the inner index is important!
@@ -132,7 +132,7 @@ typedef struct da_trunk_file_info {
     volatile int status;
     struct {
         uint32_t count;  //slice count
-        volatile uint32_t bytes;
+        volatile int64_t bytes;
     } used;
     uint32_t size;        //file size
     uint32_t free_start;  //free space offset
@@ -148,7 +148,7 @@ typedef struct da_trunk_file_info {
     volatile int reffer_count;  //for waiting slice write done
     struct {
         volatile char event;
-        uint32_t last_used_bytes;
+        int64_t last_used_bytes;
         struct da_trunk_file_info *next;
     } util;  //for util manager queue
 } DATrunkFileInfo;

@@ -251,7 +251,7 @@ static int write_to_log_file(DAContext *ctx,
 {
     int result;
     int fd;
-    uint32_t used_bytes;
+    int64_t used_bytes;
     int dec_count;
     DATrunkSpaceLogRecord **current;
     DATrunkFileInfo *trunk;
@@ -301,6 +301,12 @@ static int write_to_log_file(DAContext *ctx,
 
         if (trunk != NULL) {
             da_trunk_freelist_decrease_reffer_count_ex(trunk, dec_count);
+            /*
+            logInfo("file: "__FILE__", line: %d, %s "
+                    "trunk id: %"PRId64", dec_count: %d, reffer_count: %d",
+                    __LINE__, ctx->module_name, trunk->id_info.id,
+                    dec_count, FC_ATOMIC_GET(trunk->reffer_count));
+                    */
         } else if ((trunk=da_trunk_hashtable_get(&ctx->trunk_htable_ctx,
                     (*start)->storage.trunk_id)) == NULL)
         {
@@ -312,8 +318,11 @@ static int write_to_log_file(DAContext *ctx,
                 trunk, start, end - start, &used_bytes);
     } while (0);
 
-    if (result != 0 || used_bytes == 0) {
+    if (result != 0 || (used_bytes <= 0 && trunk != NULL && FC_ATOMIC_GET(
+                    trunk->status) != DA_TRUNK_STATUS_ALLOCING))
+    {
         da_trunk_fd_cache_delete(&FD_CACHE_CTX, (*start)->storage.trunk_id);
+        logInfo("========= da_trunk_fd_cache_delete trunk id: %u", (*start)->storage.trunk_id);
     }
     return result;
 }
@@ -372,7 +381,6 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
         DATrunkSpaceLogRecord **end, int *redo_count)
 {
 #define FIXED_RECORD_COUNT   1024
-    const bool ignore_enoent = true;
     bool found;
     bool keep;
     int result;
@@ -398,8 +406,8 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
         }
     }
 
-    if ((result=da_space_log_reader_load_ex(&ctx->space_log_ctx.reader,
-                    (*start)->storage.trunk_id, &skiplist, ignore_enoent)) != 0)
+    if ((result=da_space_log_reader_load(&ctx->space_log_ctx.reader,
+                    (*start)->storage.trunk_id, &skiplist)) != 0)
     {
         return result;
     }
@@ -528,15 +536,14 @@ static int dump_trunk_indexes(DAContext *ctx)
 
 static int set_trunk_by_space_log(DAContext *ctx, DATrunkFileInfo *trunk)
 {
-    const bool ignore_enoent = true;
     int result;
     UniqSkiplist *skiplist;
     UniqSkiplistIterator it;
     DATrunkSpaceLogRecord *record;
     DATrunkSpaceLogRecord *last;
 
-    if ((result=da_space_log_reader_load_ex(&ctx->space_log_ctx.reader,
-                    trunk->id_info.id, &skiplist, ignore_enoent)) != 0)
+    if ((result=da_space_log_reader_load(&ctx->space_log_ctx.reader,
+                    trunk->id_info.id, &skiplist)) != 0)
     {
         return result;
     }

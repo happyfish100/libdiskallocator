@@ -141,9 +141,8 @@ static int parse_to_skiplist(DASpaceLogReader *reader,
     return 0;
 }
 
-int da_space_log_reader_load_ex(DASpaceLogReader *reader,
-        const uint32_t trunk_id, UniqSkiplist **skiplist,
-        const bool ignore_enoent)
+int da_space_log_reader_load(DASpaceLogReader *reader,
+        const uint32_t trunk_id, UniqSkiplist **skiplist)
 {
     int result;
     int fd;
@@ -162,7 +161,7 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
             space_log_filename, sizeof(space_log_filename));
     if ((fd=open(space_log_filename, O_RDONLY | O_CLOEXEC)) < 0) {
         result = errno != 0 ? errno : EACCES;
-        if (result == ENOENT && ignore_enoent) {
+        if (result == ENOENT) {
             return 0;
         } else {
             logError("file: "__FILE__", line: %d, %s "

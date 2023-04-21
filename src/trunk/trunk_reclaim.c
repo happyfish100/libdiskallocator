@@ -115,7 +115,6 @@ static int combine_to_rb_array(DATrunkReclaimContext *rctx,
     DATrunkSpaceLogRecord *tail;
     DATrunkReclaimBlockInfo *block;
 
-    rctx->slice_counts.total = 0;
     uniq_skiplist_iterator(rctx->skiplist, &it);
     block = barray->blocks;
     record = uniq_skiplist_next(&it);
@@ -334,7 +333,7 @@ static int migrate_blocks(DATrunkReclaimContext *rctx, DATrunkFileInfo *trunk)
     }
     sf_synchronize_counter_wait(&rctx->log_notify);
 
-    if (rctx->sarray.count == 1) {
+    if (rctx->sarray.count == 1) {  //fast path
         da_trunk_freelist_decrease_reffer_count_ex(rctx->sarray.spaces[0].
                 trunk, rctx->sarray.spaces[0].alloc_count);
     } else {
@@ -353,22 +352,21 @@ int da_trunk_reclaim(DATrunkReclaimContext *rctx, DATrunkAllocator
 {
     int result;
 
-    rctx->slice_counts.skip = rctx->slice_counts.ignore = 0;
-    if ((result=da_space_log_reader_load(&rctx->reader,
-                    trunk->id_info.id, &rctx->skiplist)) != 0)
+    rctx->slice_counts.total = 0;
+    rctx->slice_counts.skip = 0;
+    rctx->slice_counts.ignore = 0;
+    if ((result=da_space_log_reader_load(&rctx->reader, trunk->
+                    id_info.id, &rctx->skiplist)) != 0)
     {
+        rctx->barray.count = 0;
         return result;
     }
 
-    do {
-        if ((result=combine_to_rb_array(rctx, &rctx->barray)) != 0) {
-            break;
+    if (!uniq_skiplist_empty(rctx->skiplist)) {
+        if ((result=combine_to_rb_array(rctx, &rctx->barray)) == 0) {
+            result = migrate_blocks(rctx, trunk);
         }
-
-        if ((result=migrate_blocks(rctx, trunk)) != 0) {
-            break;
-        }
-    } while (0);
+    }
 
     uniq_skiplist_free(rctx->skiplist);
     return result;

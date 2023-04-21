@@ -169,7 +169,7 @@ int da_trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
 
 int da_trunk_allocator_deal_space_changes(DAContext *ctx,
         DATrunkFileInfo *trunk, DATrunkSpaceLogRecord **records,
-        const int count, uint32_t *used_bytes)
+        const int count, int64_t *used_bytes)
 {
     DATrunkSpaceLogRecord **record;
     DATrunkSpaceLogRecord **end;
@@ -178,21 +178,15 @@ int da_trunk_allocator_deal_space_changes(DAContext *ctx,
         return 0;
     }
 
-    if ((trunk=da_trunk_hashtable_get(&ctx->trunk_htable_ctx,
-                    records[0]->storage.trunk_id)) == NULL)
-    {
-        return ENOENT;
-    }
-
     PTHREAD_MUTEX_LOCK(&trunk->allocator->freelist.lcp.lock);
     end = records + count;
     for (record=records; record<end; record++) {
         if ((*record)->op_type == da_binlog_op_type_consume_space) {
-            trunk->used.bytes += (*record)->storage.size;
+            *used_bytes = __sync_add_and_fetch(&trunk->used.bytes,
+                    (*record)->storage.size);
             trunk->used.count++;
-            *used_bytes = trunk->used.bytes;
         } else {
-            *used_bytes = __sync_fetch_and_sub(&trunk->used.bytes,
+            *used_bytes = __sync_sub_and_fetch(&trunk->used.bytes,
                     (*record)->storage.size);
             trunk->used.count--;
 
@@ -303,8 +297,8 @@ void da_trunk_allocator_deal_on_ready(DATrunkAllocator *allocator)
 
 void da_trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info)
 {
-    logInfo("%s trunk id: %"PRId64", subdir: %u, status: %d, slice "
-            "count: %d, used bytes: %u, trunk size: %u, free start: %u, "
+    logInfo("%s trunk id: %"PRId64", subdir: %u, status: %d, slice count: %d, "
+            "used bytes: %"PRId64", trunk size: %u, free start: %u, "
             "remain bytes: %u", trunk_info->allocator->path_info->
             ctx->module_name, trunk_info->id_info.id,
             trunk_info->id_info.subdir, trunk_info->status,

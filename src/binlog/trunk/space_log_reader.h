@@ -29,17 +29,8 @@ extern "C" {
 
     void da_space_log_reader_destroy(DASpaceLogReader *reader);
 
-    int da_space_log_reader_load_ex(DASpaceLogReader *reader,
-            const uint32_t trunk_id, UniqSkiplist **skiplist,
-            const bool ignore_enoent);
-
-    static inline int da_space_log_reader_load(DASpaceLogReader *reader,
-            const uint32_t trunk_id, UniqSkiplist **skiplist)
-    {
-        const bool ignore_enoent = false;
-        return da_space_log_reader_load_ex(reader,
-                trunk_id, skiplist, ignore_enoent);
-    }
+    int da_space_log_reader_load(DASpaceLogReader *reader,
+            const uint32_t trunk_id, UniqSkiplist **skiplist);
 
     int da_space_log_reader_load_to_chain(DASpaceLogReader *reader,
             const char *space_log_filename, struct fc_queue_info *chain);

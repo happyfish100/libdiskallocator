@@ -238,7 +238,8 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     DATrunkFileInfo *trunk;
     int64_t used_bytes;
     int64_t time_used;
-    char bytes_buff[64];
+    char last_bytes_buff[32];
+    char current_bytes_buff[32];
     char time_buff[64];
     char time_prompt[64];
     int result;
@@ -291,14 +292,15 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
         result = 0;
     }
 
-    long_to_comma_str(used_bytes, bytes_buff);
+    long_to_comma_str(used_bytes, last_bytes_buff);
+    long_to_comma_str(FC_ATOMIC_GET(trunk->used.bytes), current_bytes_buff);
     long_to_comma_str(time_used, time_buff);
     sprintf(time_prompt, "time used: %s ms", time_buff);
     logInfo("file: "__FILE__", line: %d, %s "
             "path index: %d, reclaimed trunk id: %"PRId64", "
             "migrate block count: %d, "
             "slice counts {total: %d, skip: %d, ignore: %d}, "
-            "used bytes {last: %s, current: %u}, "
+            "used bytes {last: %s, current: %s}, "
             "last usage ratio: %.2f%%, result: %d, %s", __LINE__,
             task->allocator->path_info->ctx->module_name,
             task->allocator->path_info->store.index, trunk->id_info.id,
@@ -306,7 +308,7 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
             thread->reclaim_ctx.slice_counts.total,
             thread->reclaim_ctx.slice_counts.skip,
             thread->reclaim_ctx.slice_counts.ignore,
-            bytes_buff, trunk->used.bytes,
+            last_bytes_buff, current_bytes_buff,
             100.00 * (double)used_bytes / (double)trunk->size,
             result, time_prompt);
 

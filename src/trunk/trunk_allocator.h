@@ -187,7 +187,7 @@ extern "C" {
 
     int da_trunk_allocator_deal_space_changes(DAContext *ctx,
             DATrunkFileInfo *trunk, DATrunkSpaceLogRecord **records,
-            const int count, uint32_t *used_bytes);
+            const int count, int64_t *used_bytes);
 
 #ifdef __cplusplus
 }
