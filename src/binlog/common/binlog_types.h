@@ -22,6 +22,7 @@
 
 #define da_binlog_op_type_consume_space  da_binlog_op_type_create
 #define da_binlog_op_type_reclaim_space  da_binlog_op_type_remove
+#define da_binlog_op_type_unlink_binlog  da_binlog_op_type_update
 
 typedef enum da_binlog_op_type {
     da_binlog_op_type_create = 'c',

@@ -133,11 +133,13 @@ static int record_ptr_compare(const DATrunkSpaceLogRecord **record1,
     return fc_compare_int64((*record1)->version, (*record2)->version);
 }
 
-static int chain_to_array(DAContext *ctx, DATrunkSpaceLogRecord *head)
+static int chain_to_array(DAContext *ctx, DATrunkSpaceLogRecord *head,
+        int *notify_count)
 {
     int result;
     DATrunkSpaceLogRecord *record;
 
+    *notify_count = 0;
     RECORD_PTR_ARRAY.count = 0;
     record = head;
     do {
@@ -148,15 +150,16 @@ static int chain_to_array(DAContext *ctx, DATrunkSpaceLogRecord *head)
         }
 
         RECORD_PTR_ARRAY.records[RECORD_PTR_ARRAY.count++] = record;
+        if (record->op_type != da_binlog_op_type_unlink_binlog) {
+            ctx->trunk_index_ctx.last_version = record->storage.version;
+            ++(*notify_count);
+        }
     } while ((record=record->next) != NULL);
-
-    ctx->trunk_index_ctx.last_version = RECORD_PTR_ARRAY.
-        records[RECORD_PTR_ARRAY.count - 1]->storage.version;
 
     if (RECORD_PTR_ARRAY.count > 1) {
         qsort(RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count,
-                sizeof(DATrunkSpaceLogRecord *),
-                (int (*)(const void *, const void *))record_ptr_compare);
+                sizeof(DATrunkSpaceLogRecord *), (int (*)(const void *,
+                        const void *))record_ptr_compare);
     }
 
     return 0;
@@ -251,7 +254,6 @@ static int write_to_log_file(DAContext *ctx,
 {
     int result;
     int fd;
-    int64_t used_bytes;
     int dec_count;
     DATrunkSpaceLogRecord **current;
     DATrunkFileInfo *trunk;
@@ -260,7 +262,6 @@ static int write_to_log_file(DAContext *ctx,
         return result;
     }
 
-    used_bytes = 0;
     ctx->space_log_ctx.buffer.length = 0;
     trunk = NULL;
     dec_count = 0;
@@ -315,19 +316,14 @@ static int write_to_log_file(DAContext *ctx,
         }
 
         result = da_trunk_allocator_deal_space_changes(ctx,
-                trunk, start, end - start, &used_bytes);
+                trunk, start, end - start);
     } while (0);
 
-    if (result != 0 || (used_bytes <= 0 && trunk != NULL && FC_ATOMIC_GET(
-                    trunk->status) != DA_TRUNK_STATUS_ALLOCING))
-    {
-        da_trunk_fd_cache_delete(&FD_CACHE_CTX, (*start)->storage.trunk_id);
-        logInfo("========= da_trunk_fd_cache_delete trunk id: %u", (*start)->storage.trunk_id);
-    }
     return result;
 }
 
-int da_trunk_space_log_unlink(DAContext *ctx, const uint32_t trunk_id)
+static inline int da_trunk_space_log_unlink(DAContext *ctx,
+        const uint32_t trunk_id)
 {
     char space_log_filename[PATH_MAX];
 
@@ -336,7 +332,19 @@ int da_trunk_space_log_unlink(DAContext *ctx, const uint32_t trunk_id)
     return fc_delete_file_ex(space_log_filename, "trunk space log");
 }
 
-static int array_to_log_file(DAContext *ctx,
+static inline int deal_trunk_records(DAContext *ctx,
+        DATrunkSpaceLogRecord **start,
+        DATrunkSpaceLogRecord **end)
+{
+    if ((*start)->op_type == da_binlog_op_type_unlink_binlog) {
+        da_trunk_fd_cache_delete(&FD_CACHE_CTX, (*start)->storage.trunk_id);
+        return da_trunk_space_log_unlink(ctx, (*start)->storage.trunk_id);
+    } else {
+        return write_to_log_file(ctx, start, end);
+    }
+}
+
+static int deal_sorted_array(DAContext *ctx,
         DATrunkSpaceLogRecordArray *array)
 {
     int result;
@@ -348,29 +356,33 @@ static int array_to_log_file(DAContext *ctx,
     current = start;
     end = array->records + array->count;
     while (++current < end) {
-        if ((*current)->storage.trunk_id != (*start)->storage.trunk_id) {
-            if ((result=write_to_log_file(ctx, start, current)) != 0) {
+        if ((*current)->storage.trunk_id != (*start)->storage.trunk_id ||
+                (*current)->op_type == da_binlog_op_type_unlink_binlog)
+        {
+            if ((result=deal_trunk_records(ctx, start, current)) != 0) {
                 return result;
             }
             start = current;
         }
     }
 
-    return write_to_log_file(ctx, start, current);
+    return deal_trunk_records(ctx, start, current);
 }
 
-static int deal_records(DAContext *ctx, DATrunkSpaceLogRecord *head)
+static int deal_all_records(DAContext *ctx, DATrunkSpaceLogRecord *head)
 {
     int result;
+    int notify_count;
 
-    if ((result=chain_to_array(ctx, head)) != 0) {
+    if ((result=chain_to_array(ctx, head, &notify_count)) != 0) {
         return result;
     }
 
-    result = array_to_log_file(ctx, &RECORD_PTR_ARRAY);
-
-    sf_synchronize_counter_notify(&ctx->space_log_ctx.notify,
-            RECORD_PTR_ARRAY.count);
+    result = deal_sorted_array(ctx, &RECORD_PTR_ARRAY);
+    if (notify_count > 0) {
+        sf_synchronize_counter_notify(&ctx->space_log_ctx.
+                notify, notify_count);
+    }
 
     fast_mblock_free_objects(&ctx->space_log_ctx.reader.record_allocator,
             (void **)RECORD_PTR_ARRAY.records, RECORD_PTR_ARRAY.count);
@@ -492,12 +504,13 @@ int da_trunk_space_log_redo_by_chain(DAContext *ctx,
         struct fc_queue_info *chain)
 {
     int result;
+    int notify_count;
 
     if (chain->head == NULL) {
         return 0;
     }
 
-    if ((result=chain_to_array(ctx, chain->head)) != 0) {
+    if ((result=chain_to_array(ctx, chain->head, &notify_count)) != 0) {
         return result;
     }
 
@@ -616,7 +629,7 @@ static int load_trunk_indexes(DAContext *ctx)
 
         /*
         logInfo("%s trunk id: %"PRId64", path index: %d, version: %"PRId64", "
-                "calc: %d, used count: %u, used bytes: %u, "
+                "calc: %d, used count: %u, used bytes: %"PRId64", "
                 "free start: %u", ctx->module_name, trunk->id_info.id,
                 trunk->allocator->path_info->store.index, version,
                 index->version != version, trunk->used.count,
@@ -659,7 +672,7 @@ static void *trunk_space_log_func(void *arg)
             continue;
         }
 
-        if (deal_records(ctx, head) != 0) {
+        if (deal_all_records(ctx, head) != 0) {
             logCrit("file: "__FILE__", line: %d, %s "
                     "deal records fail, program exit!",
                     __LINE__, ctx->module_name);

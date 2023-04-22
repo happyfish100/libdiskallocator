@@ -112,13 +112,24 @@ extern "C" {
         fc_queue_push_queue_to_tail(&ctx->space_log_ctx.queue, qinfo);
     }
 
+    static inline int da_trunk_space_log_push_unlink_binlog(
+            DAContext *ctx, const uint32_t trunk_id)
+    {
+        DATrunkSpaceLogRecord *record;
+
+        if ((record=da_trunk_space_log_alloc_record(ctx)) == NULL) {
+            return ENOMEM;
+        }
+        record->op_type = da_binlog_op_type_unlink_binlog;
+        record->storage.trunk_id = trunk_id;
+        fc_queue_push(&ctx->space_log_ctx.queue, record);
+        return 0;
+    }
+
     int da_trunk_space_log_redo_by_chain(DAContext *ctx,
             struct fc_queue_info *chain);
     int da_trunk_space_log_redo_by_file(DAContext *ctx,
             const char *space_log_filename);
-
-    int da_trunk_space_log_unlink(DAContext *ctx,
-            const uint32_t trunk_id);
 
     static inline void da_trunk_space_log_pack(const DATrunkSpaceLogRecord
             *record, FastBuffer *buffer, const bool have_extra_field)

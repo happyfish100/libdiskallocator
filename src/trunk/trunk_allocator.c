@@ -169,7 +169,7 @@ int da_trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
 
 int da_trunk_allocator_deal_space_changes(DAContext *ctx,
         DATrunkFileInfo *trunk, DATrunkSpaceLogRecord **records,
-        const int count, int64_t *used_bytes)
+        const int count)
 {
     DATrunkSpaceLogRecord **record;
     DATrunkSpaceLogRecord **end;
@@ -182,12 +182,10 @@ int da_trunk_allocator_deal_space_changes(DAContext *ctx,
     end = records + count;
     for (record=records; record<end; record++) {
         if ((*record)->op_type == da_binlog_op_type_consume_space) {
-            *used_bytes = __sync_add_and_fetch(&trunk->used.bytes,
-                    (*record)->storage.size);
+            __sync_add_and_fetch(&trunk->used.bytes, (*record)->storage.size);
             trunk->used.count++;
         } else {
-            *used_bytes = __sync_sub_and_fetch(&trunk->used.bytes,
-                    (*record)->storage.size);
+            __sync_sub_and_fetch(&trunk->used.bytes, (*record)->storage.size);
             trunk->used.count--;
 
             push_trunk_util_change_event(trunk->allocator, trunk,
@@ -229,7 +227,7 @@ static bool can_add_to_freelist(DATrunkFileInfo *trunk_info)
     /*
     logInfo("file: "__FILE__", line: %d, %s"
             "path index: %d, trunk id: %"PRId64", "
-            "used bytes: %u, free start: %u", __LINE__,
+            "used bytes: %"PRId64", free start: %u", __LINE__,
             trunk_info->allocator->path_info->ctx->module_name,
             trunk_info->allocator->path_info->store.index,
             trunk_info->id_info.id, trunk_info->used.bytes,
@@ -292,6 +290,8 @@ void da_trunk_allocator_deal_on_ready(DATrunkAllocator *allocator)
             push_trunk_util_change_event(allocator, trunk_info,
                     DA_TRUNK_UTIL_EVENT_CREATE);
         }
+
+        //da_trunk_allocator_log_trunk_info(trunk_info);
     }
 }
 
