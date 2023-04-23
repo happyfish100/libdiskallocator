@@ -57,7 +57,7 @@ typedef struct binlog_writer_chain_array {
 
 typedef struct binlog_writer_shrink_task {
     DABinlogWriter *writer;
-    int64_t id;
+    uint64_t id;
     char type;
     int last_shrink_time;
     void *args;
@@ -504,7 +504,7 @@ int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t id,
     return 0;
 }
 
-int da_binlog_writer_shrink(DABinlogWriter *writer, const int64_t id,
+int da_binlog_writer_shrink(DABinlogWriter *writer, const uint64_t id,
         const time_t last_shrink_time, void *args)
 {
     BinlogWriterShrinkTask *stask;

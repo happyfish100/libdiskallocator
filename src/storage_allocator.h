@@ -46,7 +46,7 @@ typedef struct da_storage_allocator_manager {
     DATrunkAllocatorPtrArray allocator_ptr_array; //by store path index
     struct fast_mblock_man aptr_array_allocator;
     pthread_mutex_t lock;
-    int64_t current_trunk_id;
+    uint64_t current_trunk_id;
 } DAStorageAllocatorManager;
 
 #ifdef __cplusplus

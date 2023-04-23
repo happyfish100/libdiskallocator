@@ -154,7 +154,7 @@ int da_trunk_allocator_add(DATrunkAllocator *allocator,
     return result;
 }
 
-int da_trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id)
+int da_trunk_allocator_delete(DATrunkAllocator *allocator, const uint64_t id)
 {
     DATrunkFileInfo target;
     int result;

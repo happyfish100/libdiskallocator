@@ -166,7 +166,7 @@ static int chain_to_array(DAContext *ctx, DATrunkSpaceLogRecord *head,
 }
 
 int da_trunk_space_log_calc_version(DAContext *ctx,
-        const uint32_t trunk_id, int64_t *version)
+        const uint64_t trunk_id, int64_t *version)
 {
     int result;
     struct stat buf;
@@ -192,7 +192,7 @@ int da_trunk_space_log_calc_version(DAContext *ctx,
     return 0;
 }
 
-static int get_write_fd(DAContext *ctx, const uint32_t trunk_id, int *fd)
+static int get_write_fd(DAContext *ctx, const uint64_t trunk_id, int *fd)
 {
     const int flags = O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC;
     int result;
@@ -217,7 +217,7 @@ static int get_write_fd(DAContext *ctx, const uint32_t trunk_id, int *fd)
     return 0;
 }
 
-static int do_write_to_file(DAContext *ctx, const uint32_t trunk_id,
+static int do_write_to_file(DAContext *ctx, const uint64_t trunk_id,
         int fd, char *buff, const int len, const bool flush)
 {
     int result;
@@ -330,7 +330,7 @@ static int write_to_log_file(DAContext *ctx,
 }
 
 static inline int da_trunk_space_log_unlink(DAContext *ctx,
-        const uint32_t trunk_id)
+        const uint64_t trunk_id)
 {
     char space_log_filename[PATH_MAX];
 

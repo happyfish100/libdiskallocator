@@ -47,10 +47,10 @@ typedef struct {
 } SortedSubdirArray;
 
 typedef struct da_trunk_id_info_context {
-    volatile int64_t current_trunk_id;
-    volatile int64_t current_subdir_id;
-    int64_t last_trunk_id;
-    int64_t last_subdir_id;
+    volatile uint64_t current_trunk_id;
+    volatile uint64_t current_subdir_id;
+    uint64_t last_trunk_id;
+    uint64_t last_subdir_id;
     SortedSubdirArray subdir_array;
 } DATrunkIdInfoContext;
 
@@ -67,7 +67,7 @@ static inline void get_trunk_id_dat_filename(DAContext *ctx,
     save_current_trunk_id_ex(ctx, current_trunk_id, current_subdir_id, false)
 
 static int save_current_trunk_id_ex(DAContext *ctx,
-        const int64_t current_trunk_id, const int64_t current_subdir_id,
+        const uint64_t current_trunk_id, const uint64_t current_subdir_id,
         const bool on_exit)
 {
     char full_filename[PATH_MAX];
@@ -224,8 +224,8 @@ static int init_sorted_subdirs(DAContext *ctx, DAStoragePathArray *parray)
 static int trunk_id_sync_to_file(void *arg)
 {
     DAContext *ctx;
-    int64_t current_trunk_id;
-    int64_t current_subdir_id;
+    uint64_t current_trunk_id;
+    uint64_t current_subdir_id;
 
     ctx = arg;
     current_trunk_id = __sync_add_and_fetch(
@@ -304,8 +304,8 @@ int da_trunk_id_info_init(DAContext *ctx)
 
 void da_trunk_id_info_destroy(DAContext *ctx)
 {
-    int64_t current_trunk_id;
-    int64_t current_subdir_id;
+    uint64_t current_trunk_id;
+    uint64_t current_subdir_id;
 
     current_trunk_id = __sync_add_and_fetch(
             &ctx->trunk_id_info_ctx->current_trunk_id, 0);

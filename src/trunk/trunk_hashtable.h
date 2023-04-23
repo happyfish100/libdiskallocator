@@ -33,7 +33,7 @@ extern "C" {
             DATrunkFileInfo *trunk);
 
     DATrunkFileInfo *da_trunk_hashtable_get_ex(DATrunkHTableContext *ctx,
-            const uint32_t trunk_id, const int log_level);
+            const uint64_t trunk_id, const int log_level);
 
 #define da_trunk_hashtable_get(ctx, trunk_id) \
     da_trunk_hashtable_get_ex(ctx, trunk_id, LOG_ERR)

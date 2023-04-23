@@ -142,7 +142,7 @@ static int parse_to_skiplist(DASpaceLogReader *reader,
 }
 
 int da_space_log_reader_load(DASpaceLogReader *reader,
-        const uint32_t trunk_id, UniqSkiplist **skiplist)
+        const uint64_t trunk_id, UniqSkiplist **skiplist)
 {
     int result;
     int fd;

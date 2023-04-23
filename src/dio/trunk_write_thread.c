@@ -31,7 +31,7 @@
 #define IO_THREAD_BYTES_MAX   (64 * 1024 * 1024)
 
 typedef struct write_file_handle {
-    uint32_t trunk_id;
+    uint64_t trunk_id;
     uint32_t offset;
     int fd;
 } WriteFileHandle;

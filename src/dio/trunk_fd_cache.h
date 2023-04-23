@@ -31,13 +31,13 @@ extern "C" {
 
     //return fd, -1 for not exist
     int da_trunk_fd_cache_get(DATrunkFDCacheContext *cache_ctx,
-            const uint32_t trunk_id);
+            const uint64_t trunk_id);
 
     int da_trunk_fd_cache_add(DATrunkFDCacheContext *cache_ctx,
-            const uint32_t trunk_id, const int fd);
+            const uint64_t trunk_id, const int fd);
 
     int da_trunk_fd_cache_delete(DATrunkFDCacheContext *cache_ctx,
-            const uint32_t trunk_id);
+            const uint64_t trunk_id);
 
     static inline void dio_get_trunk_filename(DATrunkSpaceInfo *space,
             char *trunk_filename, const int size)
@@ -48,7 +48,7 @@ extern "C" {
     }
 
     static inline void dio_get_space_log_filename(DAContext *ctx, const
-            uint32_t trunk_id, char *binlog_filename, const int size)
+            uint64_t trunk_id, char *binlog_filename, const int size)
     {
         DATrunkFileInfo *trunk;
 

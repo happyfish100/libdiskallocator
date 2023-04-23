@@ -84,10 +84,10 @@ extern "C" {
             const DATrunkIdInfo *id_info, const int64_t size,
             DATrunkFileInfo **pp_trunk);
 
-    int da_trunk_allocator_delete(DATrunkAllocator *allocator, const int64_t id);
+    int da_trunk_allocator_delete(DATrunkAllocator *allocator, const uint64_t id);
 
     int da_trunk_allocator_free(DATrunkAllocator *allocator,
-            const int id, const int size);
+            const uint64_t id, const int size);
 
     DATrunkFreelistType da_trunk_allocator_add_to_freelist(
             DATrunkAllocator *allocator, DATrunkFileInfo *trunk_info);
@@ -103,7 +103,7 @@ extern "C" {
     void da_trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info);
 
     static inline int da_compare_trunk_by_size_id(const DATrunkFileInfo *t1,
-            const int64_t last_used_bytes2, const int64_t id2)
+            const int64_t last_used_bytes2, const uint64_t id2)
     {
         int sub;
 

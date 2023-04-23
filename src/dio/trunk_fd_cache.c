@@ -67,7 +67,7 @@ int da_trunk_fd_cache_init(DATrunkFDCacheContext *cache_ctx, const int capacity)
 }
 
 int da_trunk_fd_cache_get(DATrunkFDCacheContext *cache_ctx,
-        const uint32_t trunk_id)
+        const uint64_t trunk_id)
 {
     DATrunkFDCacheEntry **bucket;
     DATrunkFDCacheEntry *entry;
@@ -98,7 +98,7 @@ int da_trunk_fd_cache_get(DATrunkFDCacheContext *cache_ctx,
 }
 
 int da_trunk_fd_cache_add(DATrunkFDCacheContext *cache_ctx,
-        const uint32_t trunk_id, const int fd)
+        const uint64_t trunk_id, const int fd)
 {
     DATrunkFDCacheEntry **bucket;
     DATrunkFDCacheEntry *entry;
@@ -128,7 +128,7 @@ int da_trunk_fd_cache_add(DATrunkFDCacheContext *cache_ctx,
 }
 
 int da_trunk_fd_cache_delete(DATrunkFDCacheContext *cache_ctx,
-        const uint32_t trunk_id)
+        const uint64_t trunk_id)
 {
     DATrunkFDCacheEntry **bucket;
     DATrunkFDCacheEntry *previous;

@@ -58,7 +58,7 @@ int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t id,
 
 int da_binlog_writer_synchronize(DABinlogWriter *writer);
 
-int da_binlog_writer_shrink(DABinlogWriter *writer, const int64_t id,
+int da_binlog_writer_shrink(DABinlogWriter *writer, const uint64_t id,
         const time_t last_shrink_time, void *args);
 
 int da_binlog_writer_clear_fd_cache();

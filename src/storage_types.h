@@ -81,7 +81,7 @@ typedef struct {
 } DAStorePath;
 
 typedef struct da_trunk_id_info {
-    int64_t id;
+    uint64_t id;
     uint32_t subdir;     //in which subdir
 } DATrunkIdInfo;
 
@@ -161,7 +161,7 @@ typedef struct da_trunk_file_info {
 
 typedef struct da_piece_field_storage {
     int64_t version;
-    uint32_t trunk_id; //0 for not inited
+    uint64_t trunk_id; //0 for not inited
     uint32_t length;   //data length
     uint32_t offset;   //space offset
     uint32_t size;     //space size
@@ -195,7 +195,7 @@ typedef struct da_trunk_space_log_record {
 
 typedef struct da_trunk_index_record {
     int64_t version;  //for check dirty
-    uint32_t trunk_id;
+    uint64_t trunk_id;
     uint32_t free_start;
     int64_t used_count;
     int64_t used_bytes;
@@ -386,7 +386,7 @@ typedef struct da_space_log_reader {
 
 /* trunk fd cache */
 typedef struct da_trunk_id_fd_pair {
-    uint32_t trunk_id;
+    uint64_t trunk_id;
     int fd;
 } DATrunkIdFDPair;
 

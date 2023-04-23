@@ -44,7 +44,7 @@ extern "C" {
     void da_trunk_space_log_destroy(DAContext *ctx);
 
     int da_trunk_space_log_calc_version(DAContext *ctx,
-            const uint32_t trunk_id, int64_t *version);
+            const uint64_t trunk_id, int64_t *version);
 
     static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_record1(
             DASpaceLogReader *reader)
@@ -113,7 +113,7 @@ extern "C" {
     }
 
     static inline int da_trunk_space_log_push_unlink_binlog(
-            DAContext *ctx, const uint32_t trunk_id)
+            DAContext *ctx, const uint64_t trunk_id)
     {
         DATrunkSpaceLogRecord *record;
 
@@ -135,7 +135,7 @@ extern "C" {
             *record, FastBuffer *buffer, const bool have_extra_field)
     {
         buffer->length += sprintf(buffer->data + buffer->length,
-                "%u %"PRId64" %"PRId64" %"PRId64" %c %u %u %u %u",
+                "%u %"PRId64" %"PRId64" %"PRId64" %c %"PRId64" %u %u %u",
                 (uint32_t)g_current_time, record->storage.version,
                 record->oid, record->fid, record->op_type,
                 record->storage.trunk_id, record->storage.length,

@@ -30,7 +30,7 @@ extern "C" {
     void da_space_log_reader_destroy(DASpaceLogReader *reader);
 
     int da_space_log_reader_load(DASpaceLogReader *reader,
-            const uint32_t trunk_id, UniqSkiplist **skiplist);
+            const uint64_t trunk_id, UniqSkiplist **skiplist);
 
     int da_space_log_reader_load_to_chain(DASpaceLogReader *reader,
             const char *space_log_filename, struct fc_queue_info *chain);

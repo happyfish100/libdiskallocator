@@ -157,7 +157,7 @@ static inline void log_rw_error(DAContext *ctx, DASliceOpContext *op_ctx,
     log_level = (result == ignore_errno) ? LOG_DEBUG : LOG_ERR;
     log_it_ex(&g_log_context, log_level,
             "file: "__FILE__", line: %d, %s %s slice fail, "
-            "trunk id: %u, offset: %u, length: %u, size: %u, "
+            "trunk id: %"PRId64", offset: %u, length: %u, size: %u, "
             "errno: %d, error info: %s", __LINE__, ctx->module_name,
             caption, op_ctx->storage->trunk_id, op_ctx->storage->offset,
             op_ctx->storage->length, op_ctx->storage->size,
