@@ -30,7 +30,7 @@
 
 static int pack_record(char *buff, DATrunkIndexRecord *record)
 {
-    return sprintf(buff, "%"PRId64" %u %u %u %u\n",
+    return sprintf(buff, "%"PRId64" %u %"PRId64" %"PRId64" %u\n",
             record->version, record->trunk_id, record->used_count,
             record->used_bytes, record->free_start);
 }

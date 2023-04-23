@@ -550,7 +550,7 @@ static int dump_to_array(DATrunkAllocator *allocator,
                 trunk_info->id_info.id, &record->version);
         record->trunk_id = trunk_info->id_info.id;
         record->used_count = trunk_info->used.count;
-        record->used_bytes = trunk_info->used.bytes;
+        record->used_bytes = FC_ATOMIC_GET(trunk_info->used.bytes);
         record->free_start = trunk_info->free_start;
     }
     PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);

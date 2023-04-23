@@ -257,7 +257,7 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
         return ENOENT;
     }
 
-    used_bytes = __sync_fetch_and_add(&trunk->used.bytes, 0);
+    used_bytes = FC_ATOMIC_GET(trunk->used.bytes);
     if ((int64_t)trunk->size - used_bytes < task->allocator->
             path_info->ctx->storage.file_block_size)
     {

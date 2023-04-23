@@ -196,9 +196,9 @@ typedef struct da_trunk_space_log_record {
 typedef struct da_trunk_index_record {
     int64_t version;  //for check dirty
     uint32_t trunk_id;
-    uint32_t used_count;
-    uint32_t used_bytes;
     uint32_t free_start;
+    int64_t used_count;
+    int64_t used_bytes;
 } DATrunkIndexRecord;
 
 typedef struct da_trunk_read_buffer {
@@ -418,6 +418,7 @@ typedef struct da_trunk_space_log_context {
     DATrunkSpaceLogRecordArray record_array;
     DATrunkFDCacheContext fd_cache_ctx;
     FastBuffer buffer;
+    int64_t written_count;
 } DATrunkSpaceLogContext;
 
 typedef struct da_context {
