@@ -262,6 +262,7 @@ static int write_to_log_file(DAContext *ctx,
     int result;
     int fd;
     int dec_count;
+    int skip_count;
     DATrunkSpaceLogRecord **current;
     DATrunkFileInfo *trunk;
 
@@ -270,10 +271,33 @@ static int write_to_log_file(DAContext *ctx,
     }
 
     ctx->space_log_ctx.buffer.length = 0;
-    trunk = NULL;
-    dec_count = 0;
+    dec_count = skip_count = 0;
     do {
+        if ((*start)->trunk != NULL) {
+            trunk = (*start)->trunk;
+        } else if ((trunk=da_trunk_hashtable_get(&ctx->trunk_htable_ctx,
+                        (*start)->storage.trunk_id)) == NULL)
+        {
+            result = ENOENT;
+            break;
+        }
+
         for (current=start; current<end; current++) {
+            if ((*current)->trunk != NULL) {
+                (*current)->trunk = NULL;
+                ++dec_count;
+            }
+
+            if ((*current)->version <= trunk->start_version) {
+                logInfo("file: "__FILE__", line: %d, %s "
+                        "trunk id: %"PRId64", record version: %"PRId64" <= "
+                        "trunk start version: %"PRId64", skip!", __LINE__,
+                        ctx->module_name, trunk->id_info.id,
+                        (*current)->version, trunk->start_version);
+                ++skip_count;
+                continue;
+            }
+
             if (ctx->space_log_ctx.buffer.alloc_size -
                     ctx->space_log_ctx.buffer.length < 128)
             {
@@ -288,26 +312,19 @@ static int write_to_log_file(DAContext *ctx,
                 ctx->space_log_ctx.buffer.length = 0;
             }
 
-            if ((*current)->trunk != NULL) {
-                if (trunk == NULL) {
-                    trunk = (*current)->trunk;
-                }
-                (*current)->trunk = NULL;
-                ++dec_count;
-            }
-
             da_trunk_space_log_pack(*current, &ctx->space_log_ctx.buffer,
                     ctx->storage.have_extra_field);
         }
 
-        if ((result=do_write_to_file(ctx, (*start)->storage.trunk_id,
-                        fd, ctx->space_log_ctx.buffer.data,
-                        ctx->space_log_ctx.buffer.length, true)) != 0)
+        if (ctx->space_log_ctx.buffer.length > 0 && (result=do_write_to_file(
+                        ctx, (*start)->storage.trunk_id, fd, ctx->
+                        space_log_ctx.buffer.data, ctx->space_log_ctx.
+                        buffer.length, true)) != 0)
         {
             break;
         }
 
-        if (trunk != NULL) {
+        if (dec_count > 0) {
             da_trunk_freelist_decrease_writing_count_ex(trunk, dec_count);
             /*
             logInfo("file: "__FILE__", line: %d, %s "
@@ -315,15 +332,23 @@ static int write_to_log_file(DAContext *ctx,
                     __LINE__, ctx->module_name, trunk->id_info.id,
                     dec_count, FC_ATOMIC_GET(trunk->writing_count));
                     */
-        } else if ((trunk=da_trunk_hashtable_get(&ctx->trunk_htable_ctx,
-                    (*start)->storage.trunk_id)) == NULL)
-        {
-            result = ENOENT;
-            break;
         }
 
-        result = da_trunk_allocator_deal_space_changes(ctx,
-                trunk, start, end - start);
+        if (skip_count == 0) {
+            result = da_trunk_allocator_deal_space_changes(ctx,
+                    trunk, start, end - start);
+        } else {
+            for (current=start; current<end; current++) {
+                if ((*current)->version > trunk->start_version) {
+                    if ((result=da_trunk_allocator_deal_space_changes(
+                                    ctx, trunk, current, 1)) != 0)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+
     } while (0);
 
     return result;
@@ -343,9 +368,14 @@ static inline int deal_trunk_records(DAContext *ctx,
         DATrunkSpaceLogRecord **start,
         DATrunkSpaceLogRecord **end)
 {
+    DATrunkFileInfo *trunk;
+
     if ((*start)->op_type == da_binlog_op_type_unlink_binlog) {
-        da_trunk_fd_cache_delete(&FD_CACHE_CTX, (*start)->storage.trunk_id);
-        return da_trunk_space_log_unlink(ctx, (*start)->storage.trunk_id);
+        trunk = (*start)->trunk;
+        (*start)->trunk = NULL;
+        trunk->start_version = (*start)->storage.version;
+        da_trunk_fd_cache_delete(&FD_CACHE_CTX, trunk->id_info.id);
+        return da_trunk_space_log_unlink(ctx, trunk->id_info.id);
     } else {
         return write_to_log_file(ctx, start, end);
     }

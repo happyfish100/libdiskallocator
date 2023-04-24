@@ -130,6 +130,8 @@ int da_trunk_allocator_add(DATrunkAllocator *allocator,
     trunk_info->used.bytes = 0;
     trunk_info->used.count = 0;
     trunk_info->free_start = 0;
+    trunk_info->start_version = 0;
+    trunk_info->writing_count = 0;
     result = uniq_skiplist_insert(allocator->
             trunks.by_id.skiplist, trunk_info);
     PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);

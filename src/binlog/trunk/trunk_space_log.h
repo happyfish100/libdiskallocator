@@ -46,6 +46,11 @@ extern "C" {
     int da_trunk_space_log_calc_version(DAContext *ctx,
             const uint64_t trunk_id, int64_t *version);
 
+    static inline int64_t da_trunk_space_log_current_version(DAContext *ctx)
+    {
+        return FC_ATOMIC_GET(ctx->space_log_ctx.reader.current_version);
+    }
+
     static inline DATrunkSpaceLogRecord *da_trunk_space_log_alloc_record1(
             DASpaceLogReader *reader)
     {
@@ -112,8 +117,8 @@ extern "C" {
         fc_queue_push_queue_to_tail(&ctx->space_log_ctx.queue, qinfo);
     }
 
-    static inline int da_trunk_space_log_push_unlink_binlog(
-            DAContext *ctx, const uint64_t trunk_id)
+    static inline int da_trunk_space_log_push_unlink_binlog(DAContext *ctx,
+            DATrunkFileInfo *trunk, const int64_t start_version)
     {
         DATrunkSpaceLogRecord *record;
 
@@ -121,7 +126,9 @@ extern "C" {
             return ENOMEM;
         }
         record->op_type = da_binlog_op_type_unlink_binlog;
-        record->storage.trunk_id = trunk_id;
+        record->trunk = trunk;
+        record->storage.trunk_id = trunk->id_info.id;
+        record->storage.version = start_version;
         fc_queue_push(&ctx->space_log_ctx.queue, record);
         return 0;
     }

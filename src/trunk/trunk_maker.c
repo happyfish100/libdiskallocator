@@ -313,8 +313,9 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
             result, time_prompt);
 
     if (result == 0) {
-        da_trunk_space_log_push_unlink_binlog(task->allocator->
-                path_info->ctx, trunk->id_info.id);
+        da_trunk_space_log_push_unlink_binlog(task->allocator->path_info->
+                ctx, trunk, da_trunk_space_log_current_version(
+                    task->allocator->path_info->ctx));
 
         PTHREAD_MUTEX_LOCK(&task->allocator->freelist.lcp.lock);
         trunk->free_start = 0;
