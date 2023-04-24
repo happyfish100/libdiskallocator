@@ -71,7 +71,7 @@ static inline void push_trunk_util_event_force(DATrunkAllocator *allocator,
         _trunk->free_start += alloc_size;  \
         __sync_sub_and_fetch(&_trunk->allocator->path_info-> \
                 trunk_stat.avail, alloc_size);  \
-        FC_ATOMIC_INC(_trunk->reffer_count); \
+        FC_ATOMIC_INC(_trunk->writing_count); \
     } while (0)
 
 void da_trunk_freelist_keep_water_mark(struct da_trunk_allocator
@@ -133,10 +133,10 @@ void da_trunk_freelist_add(DATrunkFreelist *freelist,
         da_set_trunk_status(trunk_info, DA_TRUNK_STATUS_NONE); \
     } while (0)
 
-void da_trunk_freelist_decrease_reffer_count_ex(DATrunkFileInfo *trunk,
+void da_trunk_freelist_decrease_writing_count_ex(DATrunkFileInfo *trunk,
         const int dec_count)
 {
-    if (__sync_sub_and_fetch(&trunk->reffer_count, dec_count) == 0) {
+    if (__sync_sub_and_fetch(&trunk->writing_count, dec_count) == 0) {
         if (FC_ATOMIC_GET(trunk->status) == DA_TRUNK_STATUS_NONE) {
             PUSH_TRUNK_UTIL_EVEENT_QUEUE(trunk);
         }
@@ -154,7 +154,7 @@ static void da_trunk_freelist_remove(DATrunkFreelist *freelist)
     }
     freelist->count--;
 
-    if (FC_ATOMIC_GET(trunk_info->reffer_count) == 0) {
+    if (FC_ATOMIC_GET(trunk_info->writing_count) == 0) {
         PUSH_TRUNK_UTIL_EVEENT_QUEUE(trunk_info);
     } else {
         da_set_trunk_status(trunk_info, DA_TRUNK_STATUS_NONE);

@@ -145,7 +145,7 @@ typedef struct da_trunk_file_info {
         struct da_trunk_file_info *next;
     } htable;  //for hashtable
 
-    volatile int reffer_count;  //for waiting slice write done
+    volatile int writing_count;  //for waiting slice write done
     struct {
         volatile char event;
         int64_t last_used_bytes;

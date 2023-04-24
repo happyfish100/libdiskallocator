@@ -308,12 +308,12 @@ static int write_to_log_file(DAContext *ctx,
         }
 
         if (trunk != NULL) {
-            da_trunk_freelist_decrease_reffer_count_ex(trunk, dec_count);
+            da_trunk_freelist_decrease_writing_count_ex(trunk, dec_count);
             /*
             logInfo("file: "__FILE__", line: %d, %s "
-                    "trunk id: %"PRId64", dec_count: %d, reffer_count: %d",
+                    "trunk id: %"PRId64", dec_count: %d, writing_count: %d",
                     __LINE__, ctx->module_name, trunk->id_info.id,
-                    dec_count, FC_ATOMIC_GET(trunk->reffer_count));
+                    dec_count, FC_ATOMIC_GET(trunk->writing_count));
                     */
         } else if ((trunk=da_trunk_hashtable_get(&ctx->trunk_htable_ctx,
                     (*start)->storage.trunk_id)) == NULL)

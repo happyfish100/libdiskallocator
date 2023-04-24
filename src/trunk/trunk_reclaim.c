@@ -334,12 +334,12 @@ static int migrate_blocks(DATrunkReclaimContext *rctx, DATrunkFileInfo *trunk)
     sf_synchronize_counter_wait(&rctx->log_notify);
 
     if (rctx->sarray.count == 1) {  //fast path
-        da_trunk_freelist_decrease_reffer_count_ex(rctx->sarray.spaces[0].
+        da_trunk_freelist_decrease_writing_count_ex(rctx->sarray.spaces[0].
                 trunk, rctx->sarray.spaces[0].alloc_count);
     } else {
         send = rctx->sarray.spaces + rctx->sarray.count;
         for (space=rctx->sarray.spaces; space<send; space++) {
-            da_trunk_freelist_decrease_reffer_count_ex(
+            da_trunk_freelist_decrease_writing_count_ex(
                     space->trunk, space->alloc_count);
         }
     }
