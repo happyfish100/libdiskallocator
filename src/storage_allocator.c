@@ -531,12 +531,18 @@ static int dump_to_array(DATrunkAllocator *allocator,
     UniqSkiplistIterator it;
     DATrunkFileInfo *trunk_info;
     DATrunkIndexRecord *record;
+    int64_t used_bytes;
     int result;
 
     result = 0;
     PTHREAD_MUTEX_LOCK(&allocator->freelist.lcp.lock);
     uniq_skiplist_iterator(allocator->trunks.by_id.skiplist, &it);
     while ((trunk_info=(DATrunkFileInfo *)uniq_skiplist_next(&it)) != NULL) {
+        used_bytes = FC_ATOMIC_GET(trunk_info->used.bytes);
+        if (trunk_info->used.count < 0 || used_bytes < 0) {
+            continue;
+        }
+
         if (array->count >= array->alloc) {
             if ((result=sf_binlog_index_expand_array(array,
                             sizeof(DATrunkIndexRecord))) != 0)
@@ -550,7 +556,7 @@ static int dump_to_array(DATrunkAllocator *allocator,
                 trunk_info->id_info.id, &record->version);
         record->trunk_id = trunk_info->id_info.id;
         record->used_count = trunk_info->used.count;
-        record->used_bytes = FC_ATOMIC_GET(trunk_info->used.bytes);
+        record->used_bytes = used_bytes;
         record->free_start = trunk_info->free_start;
     }
     PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);

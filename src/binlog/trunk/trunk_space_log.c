@@ -693,7 +693,7 @@ static void *trunk_space_log_func(void *arg)
 }
 
 
-static int binlog_index_dump(void *args)
+static int trunk_index_dump(void *args)
 {
     if (dump_trunk_indexes(args) != 0) {
         logCrit("file: "__FILE__", line: %d, %s "
@@ -759,7 +759,7 @@ int da_trunk_space_log_start(DAContext *ctx)
     INIT_SCHEDULE_ENTRY_EX(scheduleEntries[0], sched_generate_next_id(),
             ctx->data.trunk_index_dump_base_time,
             ctx->data.trunk_index_dump_interval,
-            binlog_index_dump, ctx);
+            trunk_index_dump, ctx);
     scheduleArray.entries = scheduleEntries;
     scheduleArray.count = 1;
     if ((result=sched_add_entries(&scheduleArray)) != 0) {

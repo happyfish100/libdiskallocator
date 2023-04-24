@@ -131,7 +131,7 @@ typedef struct da_trunk_file_info {
     DATrunkIdInfo id_info;
     volatile int status;
     struct {
-        uint32_t count;  //slice count
+        int count;  //slice count
         volatile int64_t bytes;
     } used;
     uint32_t size;        //file size
@@ -197,7 +197,7 @@ typedef struct da_trunk_index_record {
     int64_t version;  //for check dirty
     uint64_t trunk_id;
     uint32_t free_start;
-    int64_t used_count;
+    int used_count;
     int64_t used_bytes;
 } DATrunkIndexRecord;
 
