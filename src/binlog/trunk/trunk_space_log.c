@@ -29,7 +29,7 @@
 #define RECORD_PTR_ARRAY  ctx->space_log_ctx.record_array
 #define FD_CACHE_CTX      ctx->space_log_ctx.fd_cache_ctx
 
-#define SPACE_LOG_MAX_FIELD_COUNT        10
+#define SPACE_LOG_MAX_FIELD_COUNT        11
 
 #define SPACE_LOG_FIELD_INDEX_TIMESTAMP   0
 #define SPACE_LOG_FIELD_INDEX_VERSION     1
@@ -40,7 +40,8 @@
 #define SPACE_LOG_FIELD_INDEX_LENGTH      6
 #define SPACE_LOG_FIELD_INDEX_OFFSET      7
 #define SPACE_LOG_FIELD_INDEX_SIZE        8
-#define SPACE_LOG_FIELD_INDEX_EXTRA       9
+#define SPACE_LOG_FIELD_INDEX_SLICE_TYPE  9
+#define SPACE_LOG_FIELD_INDEX_EXTRA      10
 
 int da_trunk_space_log_unpack(const string_t *line,
         DATrunkSpaceLogRecord *record, char *error_info,
@@ -48,21 +49,27 @@ int da_trunk_space_log_unpack(const string_t *line,
 {
     int count;
     int expect;
+    bool have_slice_type;
     char size_endchr;
     char *endptr;
     string_t cols[SPACE_LOG_MAX_FIELD_COUNT];
 
+    have_slice_type = true;
+    size_endchr = ' ';
     if (have_extra_field) {
-        size_endchr = ' ';
         expect = SPACE_LOG_MAX_FIELD_COUNT;
     } else {
-        size_endchr = '\n';
         expect = SPACE_LOG_MAX_FIELD_COUNT - 1;
     }
     count = split_string_ex(line, ' ', cols,
             SPACE_LOG_MAX_FIELD_COUNT, false);
     if (count != expect) {
-        sprintf(error_info, "record count: %d != %d", count, expect);
+        if (!have_extra_field && (count == expect - 1)) {  //compatible with old format
+            have_slice_type = false;
+            size_endchr = '\n';
+        } else {
+            sprintf(error_info, "record count: %d != %d", count, expect);
+        }
         return EINVAL;
     }
 
@@ -88,6 +95,18 @@ int da_trunk_space_log_unpack(const string_t *line,
             SPACE_LOG_FIELD_INDEX_OFFSET, ' ', 0);
     SF_BINLOG_PARSE_INT_SILENCE(record->storage.size, "size",
             SPACE_LOG_FIELD_INDEX_SIZE, size_endchr, 0);
+    if (have_slice_type) {
+        record->slice_type = cols[SPACE_LOG_FIELD_INDEX_SLICE_TYPE].str[0];
+        if (!(record->slice_type == DA_SLICE_TYPE_FILE ||
+                    record->slice_type == DA_SLICE_TYPE_ALLOC))
+        {
+            sprintf(error_info, "unkown slice type: %d (0x%02x)",
+                    record->slice_type, (unsigned char)record->slice_type);
+            return EINVAL;
+        }
+    } else {
+        record->slice_type = DA_SLICE_TYPE_FILE;
+    }
     if (have_extra_field) {
         SF_BINLOG_PARSE_INT_SILENCE(record->extra, "extra",
                 SPACE_LOG_FIELD_INDEX_EXTRA, '\n', 0);

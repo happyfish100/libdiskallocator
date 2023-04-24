@@ -86,6 +86,7 @@ extern "C" {
         record->fid = fid;
         record->extra = extra;
         record->op_type = op_type;
+        record->slice_type = DA_SLICE_TYPE_FILE;
         record->storage.version = version;
         record->storage.trunk_id = storage->trunk_id;
         record->storage.length = storage->length;
@@ -142,11 +143,12 @@ extern "C" {
             *record, FastBuffer *buffer, const bool have_extra_field)
     {
         buffer->length += sprintf(buffer->data + buffer->length,
-                "%u %"PRId64" %"PRId64" %"PRId64" %c %"PRId64" %u %u %u",
+                "%u %"PRId64" %"PRId64" %"PRId64" %c %"PRId64" %u %u %u %c",
                 (uint32_t)g_current_time, record->storage.version,
                 record->oid, record->fid, record->op_type,
                 record->storage.trunk_id, record->storage.length,
-                record->storage.offset, record->storage.size);
+                record->storage.offset, record->storage.size,
+                record->slice_type);
         if (have_extra_field) {
             buffer->length += sprintf(buffer->data + buffer->length,
                     " %u\n", record->extra);

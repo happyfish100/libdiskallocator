@@ -110,6 +110,7 @@ static int combine_to_rb_array(DATrunkReclaimContext *rctx,
         DATrunkReclaimBlockArray *barray)
 {
     int result;
+    DASliceType slice_type;
     UniqSkiplistIterator it;
     DATrunkSpaceLogRecord *record;
     DATrunkSpaceLogRecord *tail;
@@ -128,13 +129,14 @@ static int combine_to_rb_array(DATrunkReclaimContext *rctx,
         }
         rctx->slice_counts.total++;
 
+        slice_type = record->slice_type;
         block->total_size = record->storage.size;
         block->head = tail = record;
         while ((record=uniq_skiplist_next(&it)) != NULL &&
-                (tail->storage.offset + tail->storage.size ==
-                 record->storage.offset) && (block->total_size +
-                     record->storage.size <= rctx->ctx->
-                     storage.file_block_size))
+                record->slice_type == slice_type && (tail->storage.offset +
+                 tail->storage.size == record->storage.offset) &&
+                (block->total_size + record->storage.size <=
+                 rctx->ctx->storage.file_block_size))
         {
             block->total_size += record->storage.size;
             tail->next = record;
@@ -164,47 +166,41 @@ static inline void log_rw_error(DAContext *ctx, DASliceOpContext *op_ctx,
             result, STRERROR(result));
 }
 
-static int slice_write(DATrunkReclaimContext *rctx,
-        const uint64_t oid, DATrunkSpaceWithVersion *space_info)
-{
-    int count;
-    int result;
-
-    count = 1;
-    if ((result=da_storage_allocator_reclaim_alloc(rctx->ctx,
-                    oid, rctx->read_ctx.op_ctx.storage->length,
-                    space_info, &count)) != 0)
-    {
-        logError("file: "__FILE__", line: %d, %s "
-                "alloc disk space %d bytes fail, errno: %d, "
-                "error info: %s", __LINE__, rctx->ctx->module_name,
-                rctx->read_ctx.op_ctx.storage->length,
-                result, STRERROR(result));
-        return result;
-    }
-
-    return da_trunk_write_thread_by_buff_synchronize(rctx->ctx,
-            space_info, DA_OP_CTX_BUFFER_PTR(rctx->read_ctx.op_ctx),
-            &rctx->read_ctx.sctx);
-}
-
 static int migrate_one_slice(DATrunkReclaimContext *rctx,
         DATrunkSpaceLogRecord *record, DATrunkFileInfo **trunk)
 {
     int result;
+    int count;
     DATrunkSpaceWithVersion space_info;
 
-    rctx->read_ctx.op_ctx.storage = &record->storage;
-    if ((result=da_slice_read(rctx->ctx, &rctx->read_ctx)) != 0) {
-        log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
-                result, ENOENT, "read");
-        return result == ENOENT ? 0 : result;
+    count = 1;
+    if ((result=da_storage_allocator_reclaim_alloc(rctx->ctx,
+                    record->oid, record->storage.length,
+                    &space_info, &count)) != 0)
+    {
+        logError("file: "__FILE__", line: %d, %s "
+                "alloc disk space %d bytes fail, errno: %d, "
+                "error info: %s", __LINE__, rctx->ctx->module_name,
+                record->storage.length, result, STRERROR(result));
+        return result;
     }
 
-    if ((result=slice_write(rctx, record->oid, &space_info)) != 0) {
-        log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
-                result, 0, "write");
-        return result;
+    if (record->slice_type == DA_SLICE_TYPE_FILE) {
+        rctx->read_ctx.op_ctx.storage = &record->storage;
+        if ((result=da_slice_read(rctx->ctx, &rctx->read_ctx)) != 0) {
+            log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
+                    result, ENOENT, "read");
+            return result == ENOENT ? 0 : result;
+        }
+
+        if ((result=da_trunk_write_thread_by_buff_synchronize(rctx->ctx,
+                        &space_info, DA_OP_CTX_BUFFER_PTR(rctx->read_ctx.
+                            op_ctx), &rctx->read_ctx.sctx)) != 0)
+        {
+            log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
+                    result, 0, "write");
+            return result;
+        }
     }
 
     *trunk = space_info.ts.trunk;
@@ -267,12 +263,14 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
         old_record->fid = record->fid;
         old_record->extra = record->extra;
         old_record->op_type = da_binlog_op_type_reclaim_space;
+        old_record->slice_type = record->slice_type;
         old_record->storage = record->storage;
 
         new_record->oid = record->oid;
         new_record->fid = record->fid;
         new_record->extra = record->extra;
         new_record->op_type = da_binlog_op_type_consume_space;
+        new_record->slice_type = record->slice_type;
         new_record->storage.version = record->storage.version;
         new_record->storage.trunk_id = holder.storage.trunk_id;
         new_record->storage.offset = offset;

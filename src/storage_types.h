@@ -188,6 +188,7 @@ typedef struct da_trunk_space_log_record {
     uint64_t fid;    //field ID (key)
     int extra;       //such as slice offset
     char op_type;
+    DASliceType slice_type;
     DAPieceFieldStorage storage;
     struct fast_mblock_man *allocator;
     struct da_trunk_file_info *trunk;  //for decreasing trunk's reffer_count
