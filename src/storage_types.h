@@ -72,8 +72,8 @@ typedef void (*da_trunk_migrate_done_callback)(
         const struct da_trunk_file_info *trunk);
 
 typedef int (*da_cached_slice_write_done_callback)(const
-        struct da_slice_entry *se, const struct da_trunk_space_info
-        *space, void *arg1, void *arg2);
+        struct da_slice_entry *se, const struct da_full_trunk_space
+        *ts, void *arg1, void *arg2);
 
 typedef struct {
     int index;   //the inner index is important!
@@ -191,7 +191,7 @@ typedef struct da_trunk_space_log_record {
     DASliceType slice_type;
     DAPieceFieldStorage storage;
     struct fast_mblock_man *allocator;
-    struct da_trunk_file_info *trunk;  //for decreasing trunk's reffer_count
+    struct da_trunk_file_info *trunk;  //for decreasing trunk's writing_count
     struct da_trunk_space_log_record *next;
 } DATrunkSpaceLogRecord;
 

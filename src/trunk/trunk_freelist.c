@@ -141,6 +141,11 @@ void da_trunk_freelist_decrease_writing_count_ex(DATrunkFileInfo *trunk,
             PUSH_TRUNK_UTIL_EVEENT_QUEUE(trunk);
         }
     }
+    /*
+    logInfo("============ trunk_id: %"PRId64", dec_count: %d, "
+            "current writing_count: %d", trunk->id_info.id,
+            dec_count, FC_ATOMIC_GET(trunk->writing_count));
+            */
 }
 
 static void da_trunk_freelist_remove(DATrunkFreelist *freelist)
