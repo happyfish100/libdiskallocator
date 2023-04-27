@@ -131,17 +131,25 @@ static int deal_allocator_on_ready(DAContext *ctx,
 {
     DATrunkAllocator *allocator;
     DATrunkAllocator *end;
+    char total_buff[32];
+    char used_buff[32];
+    char avail_buff[32];
 
     end = allocator_ctx->all.allocators + allocator_ctx->all.count;
     for (allocator=allocator_ctx->all.allocators; allocator<end; allocator++) {
         da_trunk_allocator_deal_on_ready(allocator);
 
-        logInfo("%s path index: %d, total: %"PRId64" MB, used: %"PRId64" MB, "
-                "avail: %"PRId64" MB", ctx->module_name,
+        long_to_comma_str(allocator->path_info->trunk_stat.total /
+                (1024 * 1024), total_buff);
+        long_to_comma_str(allocator->path_info->trunk_stat.used /
+                (1024 * 1024), used_buff);
+        long_to_comma_str(allocator->path_info->trunk_stat.avail /
+                (1024 * 1024), avail_buff);
+        logInfo("%s path index: %d, trunk count: %d, space stats "
+                "{total: %s MB, used: %s MB, avail: %s MB}", ctx->module_name,
                 allocator->path_info->store.index,
-                allocator->path_info->trunk_stat.total / (1024 * 1024),
-                allocator->path_info->trunk_stat.used / (1024 * 1024),
-                allocator->path_info->trunk_stat.avail / (1024 * 1024));
+                uniq_skiplist_count(allocator->trunks.by_id.skiplist),
+                total_buff, used_buff, avail_buff);
     }
 
     return 0;
@@ -184,7 +192,7 @@ static void wait_allocator_available(DAContext *ctx)
 
     logInfo("file: "__FILE__", line: %d, %s "
             "waiting count: %d, path stat {avail count: %d, "
-            "full count: %d}, reclaim freelist count: %d", __LINE__,
+            "full count: %d}, freelist for reclaim count: %d", __LINE__,
             ctx->module_name, i, ctx->store_allocator_mgr->store_path.
             avail->count, ctx->store_allocator_mgr->store_path.full->count,
             ctx->store_allocator_mgr->reclaim_freelist.count);
@@ -418,6 +426,11 @@ int da_storage_allocator_prealloc_trunk_freelists(DAContext *ctx)
     {
         return result;
     }
+
+    logInfo("%s global freelist for reclaim {avail: %d, water_mark: %d}",
+            ctx->module_name, ctx->store_allocator_mgr->
+            reclaim_freelist.count, ctx->store_allocator_mgr->
+            reclaim_freelist.water_mark_trunks);
 
     if ((result=prealloc_trunk_freelist(&ctx->store_allocator_mgr->
                     write_cache)) != 0)

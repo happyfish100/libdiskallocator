@@ -452,7 +452,7 @@ typedef struct da_context {
     struct da_trunk_prealloc_context *trunk_prealloc_ctx;
     struct da_trunk_maker_context *trunk_maker_ctx;
 
-    da_slice_migrate_done_callback slice_migrate_done_callback;
+    volatile da_slice_migrate_done_callback slice_migrate_done_callback;
     da_trunk_migrate_done_callback trunk_migrate_done_callback;
     da_cached_slice_write_done_callback cached_slice_write_done;
 } DAContext;

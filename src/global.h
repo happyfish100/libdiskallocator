@@ -69,6 +69,12 @@ extern "C" {
 
     void da_destroy(DAContext *context);
 
+    static inline void da_set_slice_migrate_done_callback(DAContext *ctx,
+            da_slice_migrate_done_callback slice_migrate_done_callback)
+    {
+        ctx->slice_migrate_done_callback = slice_migrate_done_callback;
+    }
+
 #define da_init_start(ctx, slice_migrate_done_callback) \
     da_init_start_ex(ctx, slice_migrate_done_callback, NULL, NULL, -1)
 

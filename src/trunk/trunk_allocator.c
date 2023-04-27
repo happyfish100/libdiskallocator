@@ -293,7 +293,7 @@ void da_trunk_allocator_deal_on_ready(DATrunkAllocator *allocator)
                     DA_TRUNK_UTIL_EVENT_CREATE);
         }
 
-        da_trunk_allocator_log_trunk_info(trunk_info);
+        //da_trunk_allocator_log_trunk_info(trunk_info);
     }
 }
 
