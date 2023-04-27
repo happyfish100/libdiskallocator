@@ -201,6 +201,8 @@ static int migrate_one_slice(DATrunkReclaimContext *rctx,
                     result, 0, "write");
             return result;
         }
+
+        rctx->migrage_bytes += record->storage.length;
     }
 
     *trunk = space_info.ts.trunk;
@@ -350,6 +352,7 @@ int da_trunk_reclaim(DATrunkReclaimContext *rctx, DATrunkAllocator
 {
     int result;
 
+    rctx->migrage_bytes = 0;
     rctx->slice_counts.total = 0;
     rctx->slice_counts.skip = 0;
     rctx->slice_counts.ignore = 0;

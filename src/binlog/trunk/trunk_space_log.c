@@ -69,8 +69,8 @@ int da_trunk_space_log_unpack(const string_t *line,
             size_endchr = '\n';
         } else {
             sprintf(error_info, "record count: %d != %d", count, expect);
+            return EINVAL;
         }
-        return EINVAL;
     }
 
     SF_BINLOG_PARSE_INT_SILENCE(record->storage.version,
@@ -392,6 +392,12 @@ static inline int deal_trunk_records(DAContext *ctx,
     if ((*start)->op_type == da_binlog_op_type_unlink_binlog) {
         trunk = (*start)->trunk;
         (*start)->trunk = NULL;
+
+        if (FC_ATOMIC_GET(trunk->used.bytes) < 0) {
+            logWarning("================== trunk id: %"PRId64", used count: %d, used bytes: %"PRId64" =========",
+                    trunk->id_info.id, trunk->used.count, FC_ATOMIC_GET(trunk->used.bytes));
+        }
+
         trunk->start_version = (*start)->storage.version;
         da_trunk_fd_cache_delete(&FD_CACHE_CTX, trunk->id_info.id);
         return da_trunk_space_log_unlink(ctx, trunk->id_info.id);
@@ -699,14 +705,15 @@ static int load_trunk_indexes(DAContext *ctx)
             if ((result=set_trunk_by_space_log(ctx, trunk)) != 0) {
                 return result;
             }
-            trunk->status = DA_TRUNK_STATUS_LOADED;
 
             /*
-            logInfo("%s trunk id: %"PRId64", path index: %d, used_count: %u, "
-                    "used_bytes: %u, free_start: %u", ctx->module_name,
-                    trunk->id_info.id, trunk->allocator->path_info->store.index,
-                    trunk->used.count, trunk->used.bytes, trunk->free_start);
-                    */
+               logInfo("%s trunk id: %"PRId64", path index: %d, used_count: %u, "
+               "used_bytes: %u, free_start: %u", ctx->module_name,
+               trunk->id_info.id, trunk->allocator->path_info->store.index,
+               trunk->used.count, trunk->used.bytes, trunk->free_start);
+             */
+        } else {
+            trunk->status = DA_TRUNK_STATUS_NONE;
         }
     }
 

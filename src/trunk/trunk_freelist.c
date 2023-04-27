@@ -276,8 +276,8 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
 
         TRUNK_ALLOC_SPACE(trunk_info, space_info, aligned_size);
         space_info++;
-        if (DA_TRUNK_AVAIL_SPACE(trunk_info) < allocator->path_info->
-                ctx->storage.cfg.discard_remain_space_size)
+        if (DA_TRUNK_AVAIL_SPACE(trunk_info) < trunk_info->allocator->
+                path_info->ctx->storage.cfg.discard_remain_space_size)
         {
             da_trunk_freelist_remove(freelist);
             __sync_sub_and_fetch(&trunk_info->allocator->path_info->

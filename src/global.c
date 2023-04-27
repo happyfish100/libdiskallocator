@@ -114,11 +114,11 @@ int da_init_start_ex(DAContext *ctx, da_slice_migrate_done_callback
         return result;
     }
 
-    if ((result=da_storage_allocator_prealloc_trunk_freelists(ctx)) != 0) {
+    if ((result=da_trunk_prealloc_init(ctx)) != 0) {
         return result;
     }
 
-    if ((result=da_trunk_prealloc_init(ctx)) != 0) {
+    if ((result=da_storage_allocator_prealloc_trunk_freelists(ctx)) != 0) {
         return result;
     }
 

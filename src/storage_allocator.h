@@ -131,9 +131,9 @@ extern "C" {
             return result;
         }
 
-        return da_trunk_freelist_alloc_space(NULL,
-                &ctx->store_allocator_mgr->reclaim_freelist, blk_hc,
-                size, spaces, count, is_normal);
+        return da_trunk_freelist_alloc_space(NULL, &ctx->
+                store_allocator_mgr->reclaim_freelist,
+                blk_hc, size, spaces, count, is_normal);
     }
 
 #define da_storage_allocator_normal_alloc(ctx, blk_hc, size, spaces, count) \

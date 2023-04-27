@@ -299,11 +299,12 @@ void da_trunk_allocator_deal_on_ready(DATrunkAllocator *allocator)
 
 void da_trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info)
 {
-    logInfo("%s trunk id: %"PRId64", subdir: %u, status: %d, slice count: %d, "
-            "used bytes: %"PRId64", trunk size: %u, free start: %u, "
-            "remain bytes: %u", trunk_info->allocator->path_info->
-            ctx->module_name, trunk_info->id_info.id,
-            trunk_info->id_info.subdir, trunk_info->status,
+    logInfo("%s trunk id: %"PRId64", path index: %d, subdir: %u, "
+            "status: %d, slice count: %d, used bytes: %"PRId64", "
+            "trunk size: %u, free start: %u, remain bytes: %u",
+            trunk_info->allocator->path_info->ctx->module_name,
+            trunk_info->id_info.id, trunk_info->allocator->path_info->
+            store.index, trunk_info->id_info.subdir, trunk_info->status,
             trunk_info->used.count, trunk_info->used.bytes,
             trunk_info->size, trunk_info->free_start,
             DA_TRUNK_AVAIL_SPACE(trunk_info));
