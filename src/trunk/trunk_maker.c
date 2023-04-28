@@ -244,6 +244,7 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     char migrage_bytes_buff[32];
     char time_buff[64];
     char time_prompt[64];
+    int used_count;
     int result;
 
     if (task->urgent || g_current_time - task->allocator->
@@ -272,16 +273,19 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     ratio_thredhold = da_trunk_allocator_calc_reclaim_ratio_thredhold(
             task->allocator);
 
+    /*
     logInfo("file: "__FILE__", line: %d, "
             "path index: %d, trunk id: %"PRId64", "
             "usage ratio: %.2f%%, ratio_thredhold: %.2f%%",
             __LINE__, task->allocator->path_info->store.index,
             trunk->id_info.id, 100.00 * (double)used_bytes /
             (double)trunk->size, 100.00 * ratio_thredhold);
+            */
 
     if ((double)used_bytes / (double)trunk->size >= ratio_thredhold) {
         return ENOENT;
     }
+    used_count = trunk->used.count;
 
     if (used_bytes > 0) {
         int64_t start_time_us;
@@ -310,6 +314,7 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
             "path index: %d, reclaimed trunk id: %"PRId64", "
             "migrate block count: %d, migrage bytes: %s, "
             "slice counts {total: %d, skip: %d, ignore: %d}, "
+            "trunk used count {last: %d, current: %d}, "
             "trunk used bytes {last: %s, current: %s}, "
             "last usage ratio: %.2f%%, result: %d, %s", __LINE__,
             task->allocator->path_info->ctx->module_name,
@@ -318,6 +323,7 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
             thread->reclaim_ctx.slice_counts.total,
             thread->reclaim_ctx.slice_counts.skip,
             thread->reclaim_ctx.slice_counts.ignore,
+            used_count, trunk->used.count,
             last_bytes_buff, current_bytes_buff,
             100.00 * (double)used_bytes / (double)trunk->size,
             result, time_prompt);
@@ -366,10 +372,6 @@ static int do_allocate_trunk(TrunkMakerThreadInfo *thread, TrunkMakerTask *task,
     } else {
         need_reclaim = true;
     }
-
-    logInfo("path index: %d, avail_enough: %d, need_reclaim: %d",
-            task->allocator->path_info->store.index,
-            avail_enough, need_reclaim);
 
     if (need_reclaim) {
         if ((result=do_reclaim_trunk(thread, task, freelist_type)) == 0) {

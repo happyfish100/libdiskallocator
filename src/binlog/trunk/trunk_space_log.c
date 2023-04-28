@@ -98,7 +98,8 @@ int da_trunk_space_log_unpack(const string_t *line,
     if (have_slice_type) {
         record->slice_type = cols[SPACE_LOG_FIELD_INDEX_SLICE_TYPE].str[0];
         if (!(record->slice_type == DA_SLICE_TYPE_FILE ||
-                    record->slice_type == DA_SLICE_TYPE_ALLOC))
+                    record->slice_type == DA_SLICE_TYPE_ALLOC ||
+                    record->slice_type == DA_SLICE_TYPE_CACHE))
         {
             sprintf(error_info, "unkown slice type: %d (0x%02x)",
                     record->slice_type, (unsigned char)record->slice_type);
@@ -308,7 +309,7 @@ static int write_to_log_file(DAContext *ctx,
             }
 
             if ((*current)->version <= trunk->start_version) {
-                logInfo("file: "__FILE__", line: %d, %s "
+                logWarning("file: "__FILE__", line: %d, %s "
                         "trunk id: %"PRId64", record version: %"PRId64" <= "
                         "trunk start version: %"PRId64", skip!", __LINE__,
                         ctx->module_name, trunk->id_info.id,

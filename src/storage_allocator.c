@@ -145,9 +145,10 @@ static int deal_allocator_on_ready(DAContext *ctx,
                 (1024 * 1024), used_buff);
         long_to_comma_str(allocator->path_info->trunk_stat.avail /
                 (1024 * 1024), avail_buff);
-        logInfo("%s path index: %d, trunk count: %d, space stats "
+        logInfo("%s path #%d: %s, trunk count: %d, space stats "
                 "{total: %s MB, used: %s MB, avail: %s MB}", ctx->module_name,
                 allocator->path_info->store.index,
+                allocator->path_info->store.path.str,
                 uniq_skiplist_count(allocator->trunks.by_id.skiplist),
                 total_buff, used_buff, avail_buff);
     }

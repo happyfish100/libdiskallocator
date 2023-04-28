@@ -82,8 +82,9 @@ void da_trunk_freelist_keep_water_mark(struct da_trunk_allocator
 
     count = allocator->freelist.water_mark_trunks - allocator->freelist.count;
     if (count <= 0) {
-        logInfo("%s path: %s, freelist count: %d, water_mark count: %d",
+        logInfo("%s path #%d: %s, freelist count: %d, water_mark count: %d",
                 allocator->path_info->ctx->module_name,
+                allocator->path_info->store.index,
                 allocator->path_info->store.path.str,
                 allocator->freelist.count,
                 allocator->freelist.water_mark_trunks);

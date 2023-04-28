@@ -71,9 +71,9 @@ typedef int (*da_slice_migrate_done_callback)(
 typedef void (*da_trunk_migrate_done_callback)(
         const struct da_trunk_file_info *trunk);
 
-typedef int (*da_cached_slice_write_done_callback)(const
-        struct da_slice_entry *se, const struct da_full_trunk_space
-        *ts, void *arg1, void *arg2);
+typedef int (*da_cached_slice_write_done_callback)(
+        const struct da_slice_entry *se,
+        const struct da_full_trunk_space *ts, void *arg);
 
 typedef struct {
     int index;   //the inner index is important!

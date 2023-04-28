@@ -120,6 +120,13 @@ static int combine_to_rb_array(DATrunkReclaimContext *rctx,
     block = barray->blocks;
     record = uniq_skiplist_next(&it);
     while (record != NULL) {
+        while (record->slice_type == DA_SLICE_TYPE_CACHE) {
+            if ((record=uniq_skiplist_next(&it)) == NULL) {
+                barray->count = block - barray->blocks;
+                return 0;
+            }
+        }
+
         if (barray->alloc <= block - barray->blocks) {
             barray->count = block - barray->blocks;
             if ((result=realloc_rb_array(barray)) != 0) {
@@ -316,6 +323,10 @@ static int migrate_blocks(DATrunkReclaimContext *rctx, DATrunkFileInfo *trunk)
     DATrunkReclaimSpaceAllocInfo *space;
     DATrunkReclaimSpaceAllocInfo *send;
     int result;
+
+    if (rctx->barray.count == 0) {
+        return 0;
+    }
 
     __sync_add_and_fetch(&rctx->log_notify.waiting_count,
             rctx->slice_counts.total);

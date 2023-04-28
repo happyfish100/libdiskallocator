@@ -348,7 +348,7 @@ int da_trunk_write_thread_push(DAContext *ctx, const int op_type,
 int da_trunk_write_thread_push_cached_slice(DAContext *ctx,
         const int op_type, const int64_t version,
         const DATrunkSpaceInfo *space, DATrunkFileInfo *trunk,
-        void *data, const DASliceEntry *slice, void *arg1, void *arg2)
+        void *data, const DASliceEntry *slice, void *arg)
 {
     TrunkWriteThreadContext *thread_ctx;
     TrunkWriteIOBuffer *iob;
@@ -361,8 +361,7 @@ int da_trunk_write_thread_push_cached_slice(DAContext *ctx,
 
     iob->slice_type = DA_SLICE_TYPE_CACHE;
     iob->slice = *slice;
-    iob->arg1 = arg1;
-    iob->arg2 = arg2;
+    iob->arg = arg;
     fc_queue_push(&thread_ctx->queue, iob);
     return 0;
 }
@@ -659,7 +658,7 @@ static int batch_write(TrunkWriteThreadContext *thread)
         for (; iob < end; iob++) {
             if ((*iob)->slice_type == DA_SLICE_TYPE_CACHE) {
                 thread->ctx->cached_slice_write_done(&(*iob)->slice,
-                        &(*iob)->ts, (*iob)->arg1, (*iob)->arg2);
+                        &(*iob)->ts, (*iob)->arg);
             } else if ((*iob)->notify.func != NULL) {
                 (*iob)->notify.func(*iob, 0);
             }

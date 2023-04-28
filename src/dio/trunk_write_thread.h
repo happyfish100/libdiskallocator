@@ -61,8 +61,7 @@ typedef struct da_trunk_write_io_buffer {
 
         struct {
             DASliceEntry slice;
-            void *arg1;
-            void *arg2;
+            void *arg;
         };  //for slice_type == DA_SLICE_TYPE_CACHE
     };
 
@@ -97,7 +96,7 @@ extern "C" {
     int da_trunk_write_thread_push_cached_slice(DAContext *ctx,
             const int op_type, const int64_t version,
             const DATrunkSpaceInfo *space, DATrunkFileInfo *trunk,
-            void *data, const DASliceEntry *slice, void *arg1, void *arg2);
+            void *data, const DASliceEntry *slice, void *arg);
 
     static inline int da_trunk_write_thread_push_slice_by_buff(
             DAContext *ctx, const int64_t version, DATrunkSpaceInfo *space,
