@@ -50,6 +50,9 @@
 #define DA_REDO_QUEUE_PUSH_FLAGS_SKIP    1 //do NOT need migrate
 #define DA_REDO_QUEUE_PUSH_FLAGS_IGNORE  2 //object/inode not exist
 
+#define DA_SPACE_SKPLIST_INIT_LEVEL_COUNT  4
+#define DA_SPACE_SKPLIST_MAX_LEVEL_COUNT  12
+
 struct da_slice_op_context;
 struct da_trunk_allocator;
 struct da_piece_field_info;

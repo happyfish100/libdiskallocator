@@ -457,11 +457,11 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
 {
 #define FIXED_RECORD_COUNT   1024
     bool found;
-    bool keep;
     int result;
     int count;
     DATrunkSpaceLogRecord *fixed[FIXED_RECORD_COUNT];
     DATrunkSpaceLogRecord **current;
+    DATrunkSpaceLogRecord *record;
     UniqSkiplist *skiplist;
     DATrunkFileInfo *trunk;
     DATrunkSpaceLogRecord target;
@@ -487,6 +487,14 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
         return result;
     }
 
+    if (skiplist == NULL) {
+        skiplist = uniq_skiplist_new(&ctx->space_log_ctx.reader.
+                factory, DA_SPACE_SKPLIST_INIT_LEVEL_COUNT);
+        if (skiplist == NULL) {
+            return ENOMEM;
+        }
+    }
+
     count = end - start;
     if (count <= FIXED_RECORD_COUNT) {
         array.records = fixed;
@@ -502,20 +510,25 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
 
     array.count = 0;
     for (current=start; current<end; current++) {
-        if (skiplist != NULL) {
-            target.storage.offset = (*current)->storage.offset;
-            found = (uniq_skiplist_find(skiplist, &target) != NULL);
-        } else {
-            found = false;
-        }
+        target.storage = (*current)->storage;
+        found = (uniq_skiplist_find(skiplist, &target) != NULL);
         if ((*current)->op_type == da_binlog_op_type_consume_space) {
-            keep = !found;
-        } else {  //da_binlog_op_type_reclaim_space
-            keep = found;
-        }
+            if (!found) {
+                if ((record=da_trunk_space_log_alloc_record(ctx)) == NULL) {
+                    return ENOMEM;
+                }
 
-        if (keep) {
-            array.records[array.count++] = *current;
+                record->storage = (*current)->storage;
+                if ((result=uniq_skiplist_insert(skiplist, record)) != 0) {
+                    return ENOMEM;
+                }
+                array.records[array.count++] = *current;
+            }
+        } else {  //da_binlog_op_type_reclaim_space
+            if (found) {
+                uniq_skiplist_delete(skiplist, *current);
+                array.records[array.count++] = *current;
+            }
         }
     }
 
@@ -528,9 +541,7 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
     if (array.records != fixed) {
         free(array.records);
     }
-    if (skiplist != NULL) {
-        uniq_skiplist_free(skiplist);
-    }
+    uniq_skiplist_free(skiplist);
 
     return result;
 }
@@ -539,10 +550,12 @@ static int redo_by_array(DAContext *ctx, DATrunkSpaceLogRecordArray *array)
 {
     int result;
     int redo_count;
+    int total_redo_count;
     DATrunkSpaceLogRecord **start;
     DATrunkSpaceLogRecord **end;
     DATrunkSpaceLogRecord **current;
 
+    total_redo_count = 0;
     redo_count = 0;
     start = array->records;
     current = start;
@@ -552,6 +565,7 @@ static int redo_by_array(DAContext *ctx, DATrunkSpaceLogRecordArray *array)
             if ((result=redo_by_trunk(ctx, start, current, &redo_count)) != 0) {
                 return result;
             }
+            total_redo_count += redo_count;
             start = current;
         }
     }
@@ -559,6 +573,10 @@ static int redo_by_array(DAContext *ctx, DATrunkSpaceLogRecordArray *array)
     if ((result=redo_by_trunk(ctx, start, current, &redo_count)) != 0) {
         return result;
     }
+    total_redo_count += redo_count;
+    logInfo("file: "__FILE__", line: %d, %s "
+            "record count: %d, redo count: %d", __LINE__,
+            ctx->module_name, array->count, total_redo_count);
 
     return 0;
 }

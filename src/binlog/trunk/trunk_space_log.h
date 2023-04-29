@@ -105,6 +105,20 @@ extern "C" {
                 version, oid, fid, op_type, storage, extra);
     }
 
+    static inline void da_trunk_space_log_free_record(
+            DAContext *ctx, DATrunkSpaceLogRecord *record)
+    {
+        fast_mblock_free_object(&ctx->space_log_ctx.
+                reader.record_allocator, record);
+    }
+
+    static inline void da_trunk_space_log_free_records(DAContext *ctx,
+            DATrunkSpaceLogRecord **records, const int count)
+    {
+        fast_mblock_free_objects(&ctx->space_log_ctx.reader.
+                record_allocator, (void **)records, count);
+    }
+
     static inline void da_trunk_space_log_free_chain(
             DAContext *ctx, struct fc_queue_info *chain)
     {

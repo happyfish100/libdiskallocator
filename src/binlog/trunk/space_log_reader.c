@@ -24,9 +24,6 @@
 #include "trunk_space_log.h"
 #include "space_log_reader.h"
 
-#define DA_SPACE_SKPLIST_INIT_LEVEL_COUNT  4
-#define DA_SPACE_SKPLIST_MAX_LEVEL_COUNT  12
-
 static int compare_by_trunk_offset(const DATrunkSpaceLogRecord *s1,
         const DATrunkSpaceLogRecord *s2)
 {
