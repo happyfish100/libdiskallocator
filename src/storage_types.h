@@ -76,7 +76,9 @@ typedef void (*da_trunk_migrate_done_callback)(
 
 typedef int (*da_cached_slice_write_done_callback)(
         const struct da_slice_entry *se,
-        const struct da_full_trunk_space *ts, void *arg);
+        const struct da_trunk_space_info *space, void *arg);
+
+typedef bool (*da_slice_load_done_callback)();
 
 typedef struct {
     int index;   //the inner index is important!
@@ -187,7 +189,10 @@ typedef struct da_piece_field_array {
 
 typedef struct da_trunk_space_log_record {
     int64_t version; //for stable sort only
-    uint64_t oid;    //object ID
+    union {
+        uint64_t oid;    //object ID
+        SFSynchronizeContext *sctx;  //for unlink space log
+    };
     uint64_t fid;    //field ID (key)
     int extra;       //such as slice offset
     char op_type;
@@ -384,6 +389,12 @@ typedef struct da_trunk_space_log_record_array {
 
 typedef struct da_space_log_reader {
     volatile int64_t current_version; //generate version for DATrunkSpaceLogRecord
+    uint32_t row_count;
+    struct {
+        uint32_t exist;
+        uint32_t noent;
+        uint32_t other;
+    } error_counts;
     struct fast_mblock_man record_allocator;
     UniqSkiplistFactory factory;
     struct da_context *ctx;
@@ -455,6 +466,7 @@ typedef struct da_context {
     struct da_trunk_prealloc_context *trunk_prealloc_ctx;
     struct da_trunk_maker_context *trunk_maker_ctx;
 
+    da_slice_load_done_callback slice_load_done_callback;
     volatile da_slice_migrate_done_callback slice_migrate_done_callback;
     da_trunk_migrate_done_callback trunk_migrate_done_callback;
     da_cached_slice_write_done_callback cached_slice_write_done;

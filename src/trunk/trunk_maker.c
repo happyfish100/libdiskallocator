@@ -43,10 +43,7 @@ typedef struct da_trunk_maker_task {
 
 typedef struct da_trunk_maker_thread_info {
     int index;
-    struct {
-        int result;
-        pthread_lock_cond_pair_t lcp; //for notify
-    } allocate;
+    SFSynchronizeContext notify;  //for notify
     DATrunkReclaimContext reclaim_ctx;
     struct fast_mblock_man task_allocator;
     struct fc_queue queue;
@@ -161,10 +158,11 @@ static void create_trunk_done(struct da_trunk_write_io_buffer *record,
     TrunkMakerThreadInfo *thread;
 
     thread = record->notify.arg1;
-    PTHREAD_MUTEX_LOCK(&thread->allocate.lcp.lock);
-    thread->allocate.result = result >= 0 ? result : -1 * result;
-    pthread_cond_signal(&thread->allocate.lcp.cond);
-    PTHREAD_MUTEX_UNLOCK(&thread->allocate.lcp.lock);
+    PTHREAD_MUTEX_LOCK(&thread->notify.lcp.lock);
+    thread->notify.finished = true;
+    thread->notify.result = result >= 0 ? result : -1 * result;
+    pthread_cond_signal(&thread->notify.lcp.cond);
+    PTHREAD_MUTEX_UNLOCK(&thread->notify.lcp.lock);
 }
 
 static int prealloc_trunk_finish(DATrunkAllocator *allocator,
@@ -210,18 +208,18 @@ static int do_prealloc_trunk(TrunkMakerThreadInfo *thread,
                     path_info->ctx, DA_IO_TYPE_CREATE_TRUNK,
                     &space, create_trunk_done, thread)) == 0)
     {
-        PTHREAD_MUTEX_LOCK(&thread->allocate.lcp.lock);
-        while (thread->allocate.result == -1 && SF_G_CONTINUE_FLAG) {
-            pthread_cond_wait(&thread->allocate.lcp.cond,
-                    &thread->allocate.lcp.lock);
+        PTHREAD_MUTEX_LOCK(&thread->notify.lcp.lock);
+        while (!thread->notify.finished && SF_G_CONTINUE_FLAG) {
+            pthread_cond_wait(&thread->notify.lcp.cond,
+                    &thread->notify.lcp.lock);
         }
-        result = thread->allocate.result;
-        thread->allocate.result = -1;  /* reset for next */
-        PTHREAD_MUTEX_UNLOCK(&thread->allocate.lcp.lock);
-
-        if (result == -1) {
-            return EINTR;
+        if (thread->notify.finished) {
+            result = thread->notify.result;
+            thread->notify.finished = false;  /* reset for next */
+        } else {
+            result = EINTR;
         }
+        PTHREAD_MUTEX_UNLOCK(&thread->notify.lcp.lock);
     }
 
     if (result != 0) {
@@ -331,14 +329,31 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     if (result == 0) {
         da_trunk_space_log_push_unlink_binlog(task->allocator->path_info->
                 ctx, trunk, da_trunk_space_log_current_version(
-                    task->allocator->path_info->ctx));
+                    task->allocator->path_info->ctx), &thread->notify);
 
-        PTHREAD_MUTEX_LOCK(&task->allocator->freelist.lcp.lock);
-        trunk->free_start = 0;
-        PTHREAD_MUTEX_UNLOCK(&task->allocator->freelist.lcp.lock);
+        PTHREAD_MUTEX_LOCK(&thread->notify.lcp.lock);
+        while (!thread->notify.finished && SF_G_CONTINUE_FLAG) {
+            pthread_cond_wait(&thread->notify.lcp.cond,
+                    &thread->notify.lcp.lock);
+        }
+        if (thread->notify.finished) {
+            result = thread->notify.result;
+            thread->notify.finished = false;  /* reset for next */
+        } else {
+            result = EINTR;
+        }
+        PTHREAD_MUTEX_UNLOCK(&thread->notify.lcp.lock);
 
-        uniq_skiplist_delete(task->allocator->trunks.by_size.skiplist, trunk);
-        *freelist_type = da_trunk_allocator_add_to_freelist(task->allocator, trunk);
+        if (result == 0) {
+            PTHREAD_MUTEX_LOCK(&task->allocator->freelist.lcp.lock);
+            trunk->free_start = 0;
+            PTHREAD_MUTEX_UNLOCK(&task->allocator->freelist.lcp.lock);
+
+            uniq_skiplist_delete(task->allocator->
+                    trunks.by_size.skiplist, trunk);
+            *freelist_type = da_trunk_allocator_add_to_freelist(
+                    task->allocator, trunk);
+        }
     } else {
         da_set_trunk_status(trunk, DA_TRUNK_STATUS_NONE); //rollback status
     }
@@ -438,6 +453,14 @@ static void *da_trunk_maker_thread_func(void *arg)
     }
 #endif
 
+    if (thread->reclaim_ctx.ctx->slice_load_done_callback != NULL) {
+        while (SF_G_CONTINUE_FLAG && !thread->reclaim_ctx.
+                ctx->slice_load_done_callback())
+        {
+            fc_sleep_ms(10);
+        }
+    }
+
     while (SF_G_CONTINUE_FLAG) {
         head = (TrunkMakerTask *)fc_queue_pop_all(&thread->queue);
         if (head == NULL) {
@@ -482,8 +505,7 @@ int da_trunk_maker_init(DAContext *ctx)
             thread<end; thread++)
     {
         thread->index = thread - ctx->trunk_maker_ctx->thread_array.threads;
-        thread->allocate.result = -1;
-        if ((result=init_pthread_lock_cond_pair(&thread->allocate.lcp)) != 0) {
+        if ((result=sf_synchronize_ctx_init(&thread->notify)) != 0) {
             return result;
         }
 

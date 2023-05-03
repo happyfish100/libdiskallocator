@@ -69,13 +69,15 @@ int da_load_config_ex(DAContext *context, const char *module_name,
     return result;
 }
 
-int da_init_start_ex(DAContext *ctx, da_slice_migrate_done_callback
+int da_init_start_ex(DAContext *ctx, da_slice_load_done_callback
+        slice_load_done_callback, da_slice_migrate_done_callback
         slice_migrate_done_callback, da_trunk_migrate_done_callback
         trunk_migrate_done_callback, da_cached_slice_write_done_callback
         cached_slice_write_done, const int skip_path_index)
 {
     int result;
 
+    ctx->slice_load_done_callback = slice_load_done_callback;
     ctx->slice_migrate_done_callback = slice_migrate_done_callback;
     ctx->trunk_migrate_done_callback = trunk_migrate_done_callback;
     ctx->cached_slice_write_done = cached_slice_write_done;

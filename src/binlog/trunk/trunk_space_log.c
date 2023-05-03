@@ -388,20 +388,23 @@ static inline int deal_trunk_records(DAContext *ctx,
         DATrunkSpaceLogRecord **start,
         DATrunkSpaceLogRecord **end)
 {
+    int result;
     DATrunkFileInfo *trunk;
 
     if ((*start)->op_type == da_binlog_op_type_unlink_binlog) {
         trunk = (*start)->trunk;
         (*start)->trunk = NULL;
 
-        if (FC_ATOMIC_GET(trunk->used.bytes) < 0) {
+        if (FC_ATOMIC_GET(trunk->used.bytes) != 0) {
             logWarning("================== trunk id: %"PRId64", used count: %d, used bytes: %"PRId64" =========",
                     trunk->id_info.id, trunk->used.count, FC_ATOMIC_GET(trunk->used.bytes));
         }
 
         trunk->start_version = (*start)->storage.version;
         da_trunk_fd_cache_delete(&FD_CACHE_CTX, trunk->id_info.id);
-        return da_trunk_space_log_unlink(ctx, trunk->id_info.id);
+        result = da_trunk_space_log_unlink(ctx, trunk->id_info.id);
+        sf_synchronize_finished_notify((*start)->sctx, result);
+        return result;
     } else {
         return write_to_log_file(ctx, start, end);
     }
@@ -456,15 +459,14 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
         DATrunkSpaceLogRecord **end, int *redo_count)
 {
 #define FIXED_RECORD_COUNT   1024
-    bool found;
     int result;
     int count;
     DATrunkSpaceLogRecord *fixed[FIXED_RECORD_COUNT];
     DATrunkSpaceLogRecord **current;
     DATrunkSpaceLogRecord *record;
+    DATrunkSpaceLogRecord *found;
     UniqSkiplist *skiplist;
     DATrunkFileInfo *trunk;
-    DATrunkSpaceLogRecord target;
     DATrunkSpaceLogRecordArray array;
 
     if (ctx->storage.skip_path_index >= 0) {
@@ -510,10 +512,8 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
 
     array.count = 0;
     for (current=start; current<end; current++) {
-        target.storage = (*current)->storage;
-        found = (uniq_skiplist_find(skiplist, &target) != NULL);
         if ((*current)->op_type == da_binlog_op_type_consume_space) {
-            if (!found) {
+            if (uniq_skiplist_find(skiplist, *current) == NULL) {
                 if ((record=da_trunk_space_log_alloc_record(ctx)) == NULL) {
                     return ENOMEM;
                 }
@@ -525,9 +525,11 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
                 array.records[array.count++] = *current;
             }
         } else {  //da_binlog_op_type_reclaim_space
-            if (found) {
-                uniq_skiplist_delete(skiplist, *current);
-                array.records[array.count++] = *current;
+            if ((found=uniq_skiplist_find(skiplist, *current)) != NULL) {
+                if (found->storage.size == (*current)->storage.size) {
+                    uniq_skiplist_delete(skiplist, *current);
+                    array.records[array.count++] = *current;
+                }
             }
         }
     }

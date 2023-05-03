@@ -43,7 +43,7 @@ typedef struct da_slice_entry {
 typedef struct da_trunk_write_io_buffer {
     int op_type;
     DASliceType slice_type;  //in file, write cache or memory as fallocate
-    DAFullTrunkSpace ts;
+    DATrunkSpaceInfo space;
 
     int64_t version; //for write in order
 
@@ -95,8 +95,8 @@ extern "C" {
 
     int da_trunk_write_thread_push_cached_slice(DAContext *ctx,
             const int op_type, const int64_t version,
-            const DATrunkSpaceInfo *space, DATrunkFileInfo *trunk,
-            void *data, const DASliceEntry *slice, void *arg);
+            const DATrunkSpaceInfo *space, void *data,
+            const DASliceEntry *slice, void *arg);
 
     static inline int da_trunk_write_thread_push_slice_by_buff(
             DAContext *ctx, const int64_t version, DATrunkSpaceInfo *space,

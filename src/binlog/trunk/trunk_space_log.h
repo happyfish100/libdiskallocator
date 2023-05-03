@@ -133,7 +133,8 @@ extern "C" {
     }
 
     static inline int da_trunk_space_log_push_unlink_binlog(DAContext *ctx,
-            DATrunkFileInfo *trunk, const int64_t start_version)
+            DATrunkFileInfo *trunk, const int64_t start_version,
+            SFSynchronizeContext *sctx)
     {
         DATrunkSpaceLogRecord *record;
 
@@ -144,6 +145,7 @@ extern "C" {
         record->trunk = trunk;
         record->storage.trunk_id = trunk->id_info.id;
         record->storage.version = start_version;
+        record->sctx = sctx;
         fc_queue_push(&ctx->space_log_ctx.queue, record);
         return 0;
     }
