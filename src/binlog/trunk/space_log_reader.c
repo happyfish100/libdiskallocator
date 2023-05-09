@@ -105,6 +105,7 @@ static int parse_to_skiplist(DASpaceLogReader *reader,
             return ENOMEM;
         }
 
+        ++(reader->row_count);
         ++line_end;
         line.str = line_start;
         line.len = line_end - line_start;
@@ -122,14 +123,37 @@ static int parse_to_skiplist(DASpaceLogReader *reader,
             need_free = true;
         }
 
+        if (result == EEXIST || result == ENOENT) {
+            logWarning("file: "__FILE__", line: %d, %s "
+                    "row no: %d, trunk id: %"PRId64", data version: "
+                    "%"PRId64", storage {offset: %u, size: %u} %s "
+                    "exist", __LINE__, reader->ctx->module_name,
+                    reader->row_count, record->storage.trunk_id,
+                    record->storage.version, record->storage.offset,
+                    record->storage.size, result == EEXIST ?
+                    "already" : "NOT");
+        }
+
         if (need_free) {
             fast_mblock_free_object(record->allocator, record);
         }
 
-        if (result == ENOMEM) {
-            sprintf(error_info, "alloc skiplist node fail "
-                    "because out of memory");
-            return result;
+        switch (result) {
+            case 0:
+                break;
+            case EEXIST:
+                reader->error_counts.exist++;
+                break;
+            case ENOENT:
+                reader->error_counts.noent++;
+                break;
+            case ENOMEM:
+                sprintf(error_info, "alloc skiplist node fail "
+                        "because out of memory");
+                return result;
+            default:
+                reader->error_counts.other++;
+                break;
         }
 
         line_start = line_end;
@@ -172,6 +196,10 @@ int da_space_log_reader_load(DASpaceLogReader *reader,
     }
 
     result = 0;
+    reader->row_count = 0;
+    reader->error_counts.exist = 0;
+    reader->error_counts.noent = 0;
+    reader->error_counts.other = 0;
     *error_info = '\0';
     content.str = buff;
     while ((content.len=fc_read_lines(fd, buff, sizeof(buff))) > 0) {
@@ -179,11 +207,22 @@ int da_space_log_reader_load(DASpaceLogReader *reader,
                         &content, error_info)) != 0)
         {
             logError("file: "__FILE__", line: %d, %s "
-                    "parse file: %s fail, errno: %d, error info: %s",
-                    __LINE__, reader->ctx->module_name, space_log_filename,
-                    result, error_info);
+                    "parse file: %s fail, row no: %d, errno: %d, "
+                    "error info: %s", __LINE__, reader->ctx->module_name,
+                    space_log_filename, reader->row_count, result, error_info);
             break;
         }
+    }
+
+    if (reader->error_counts.exist + reader->error_counts.noent +
+            reader->error_counts.other > 0)
+    {
+        logWarning("file: "__FILE__", line: %d, %s "
+                "parse file: %s fail, warning counts: "
+                "{exist: %u, noent: %u, other: %u}",
+                __LINE__, reader->ctx->module_name,
+                space_log_filename, reader->error_counts.exist,
+                reader->error_counts.noent, reader->error_counts.other);
     }
 
     if (content.len < 0) {

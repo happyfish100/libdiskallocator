@@ -395,14 +395,25 @@ static inline int deal_trunk_records(DAContext *ctx,
         trunk = (*start)->trunk;
         (*start)->trunk = NULL;
 
-        if (FC_ATOMIC_GET(trunk->used.bytes) != 0) {
-            logWarning("================== trunk id: %"PRId64", used count: %d, used bytes: %"PRId64" =========",
-                    trunk->id_info.id, trunk->used.count, FC_ATOMIC_GET(trunk->used.bytes));
-        }
-
         trunk->start_version = (*start)->storage.version;
         da_trunk_fd_cache_delete(&FD_CACHE_CTX, trunk->id_info.id);
-        result = da_trunk_space_log_unlink(ctx, trunk->id_info.id);
+        if (FC_ATOMIC_GET(trunk->used.bytes) != 0) {
+            char space_log_filename[PATH_MAX];
+            char bak_filename[PATH_MAX];
+
+            dio_get_space_log_filename(ctx, trunk->id_info.id,
+                    space_log_filename, sizeof(space_log_filename));
+            snprintf(bak_filename, sizeof(bak_filename), "%s.%ld",
+                    space_log_filename, (long)g_current_time);
+            result = fc_check_rename(space_log_filename, bak_filename);
+            logWarning("file: "__FILE__", line: %d, %s "
+                    "trunk id: %"PRId64", slice count: %d, used bytes: "
+                    "%"PRId64" != 0", __LINE__, ctx->module_name,
+                    trunk->id_info.id, trunk->used.count,
+                    FC_ATOMIC_GET(trunk->used.bytes));
+        } else {
+            result = da_trunk_space_log_unlink(ctx, trunk->id_info.id);
+        }
         sf_synchronize_finished_notify((*start)->sctx, result);
         return result;
     } else {
