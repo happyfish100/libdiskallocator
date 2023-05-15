@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _TRUNK_BINLOG_H
-#define _TRUNK_BINLOG_H
+#ifndef _DA_TRUNK_BINLOG_H
+#define _DA_TRUNK_BINLOG_H
 
 #include "../../storage_config.h"
 
@@ -23,13 +23,54 @@
 extern "C" {
 #endif
 
-    int trunk_binlog_init();
-    void trunk_binlog_destroy();
+    int da_trunk_binlog_init(DAContext *ctx);
+    void da_trunk_binlog_destroy(DAContext *ctx);
 
-    int trunk_sf_binlog_get_current_write_index();
+    static inline const char *da_trunk_binlog_get_filepath(
+            DAContext *ctx, char *filepath, const int size)
+    {
+        return sf_binlog_writer_get_filepath(ctx->data.path.str,
+                DA_TRUNK_BINLOG_SUBDIR_NAME, filepath, size);
+    }
 
-    int trunk_binlog_write(const char op_type, const int path_index,
-            const DATrunkIdInfo *id_info, const uint32_t file_size);
+    static inline const char *da_trunk_binlog_get_filename(DAContext *ctx,
+            const int binlog_index, char *filename, const int size)
+    {
+        return sf_binlog_writer_get_filename(ctx->data.path.str,
+                DA_TRUNK_BINLOG_SUBDIR_NAME, binlog_index,
+                filename, size);
+    }
+
+    static inline int da_trunk_binlog_get_current_write_index(DAContext *ctx)
+    {
+        return sf_binlog_get_current_write_index(
+                &ctx->trunk_binlog_writer.writer);
+    }
+
+    static inline int da_trunk_binlog_set_binlog_write_index(
+            DAContext *ctx, const int binlog_index)
+    {
+        /* force write to binlog index file */
+        ctx->trunk_binlog_writer.writer.fw.binlog.last_index = -1;
+        return sf_binlog_writer_set_binlog_write_index(&ctx->
+                trunk_binlog_writer.writer, binlog_index);
+    }
+
+    static inline int da_trunk_binlog_log_to_buff(const char op_type,
+            const int path_index, const DATrunkIdInfo *id_info,
+            const uint32_t file_size, char *buff)
+    {
+        return sprintf(buff, "%d %c %d %"PRId64" %u %u\n",
+                (int)g_current_time, op_type, path_index,
+                id_info->id, id_info->subdir, file_size);
+    }
+
+    int da_trunk_binlog_write(DAContext *ctx, const char op_type,
+            const int path_index, const DATrunkIdInfo *id_info,
+            const uint32_t file_size);
+
+    int da_trunk_binlog_get_last_id_info(DAContext *ctx,
+            DATrunkIdInfo *id_info);
 
 #ifdef __cplusplus
 }

@@ -20,16 +20,35 @@
 #include "fastcommon/logger.h"
 #include "binlog_fd_cache.h"
 
-static bool subdir_exists(const char *subdir_name, const int subdir_index)
+const char *da_binlog_fd_cache_binlog_filename(
+        DABinlogFDCacheContext *cache_ctx, const uint64_t id,
+        char *full_filename, const int size)
+{
+    return da_binlog_fd_cache_binlog_filename_ex(
+            cache_ctx->data_path, cache_ctx->subdir_name,
+            cache_ctx->subdirs, id, full_filename, size);
+}
+
+const char *da_binlog_fd_cache_hash_filename(
+        DABinlogFDCacheContext *cache_ctx, const uint64_t id,
+        char *full_filename, const int size)
+{
+    return da_binlog_fd_cache_hash_filename_ex(cache_ctx->data_path,
+            cache_ctx->subdir_name, cache_ctx->subdir_bits,
+            cache_ctx->subdir_mask, id, full_filename, size);
+}
+
+static inline bool subdir_exists(const char *data_path,
+        const char *subdir_name, const int subdir_index)
 {
     char filepath[PATH_MAX];
 
     snprintf(filepath, sizeof(filepath), "%s/%s/%02X/%02X",
-            DA_DATA_PATH_STR, subdir_name, subdir_index, subdir_index);
+            data_path, subdir_name, subdir_index, subdir_index);
     return isDir(filepath);
 }
 
-static int check_make_subdirs(const char *subdir_name)
+static int check_make_subdirs(const DABinlogFDCacheContext *cache_ctx)
 {
     int result;
     int i, k;
@@ -37,47 +56,31 @@ static int check_make_subdirs(const char *subdir_name)
     char filepath2[PATH_MAX];
 
     snprintf(filepath1, sizeof(filepath1), "%s/%s",
-            DA_DATA_PATH_STR, subdir_name);
+            cache_ctx->data_path, cache_ctx->subdir_name);
     if ((result=fc_check_mkdir(filepath1, 0755)) != 0) {
         return result;
     }
 
-    if (subdir_exists(subdir_name, 0) && subdir_exists(
-                subdir_name, DA_BINLOG_SUBDIRS - 1))
+    if (subdir_exists(cache_ctx->data_path, cache_ctx->subdir_name, 0) &&
+            subdir_exists(cache_ctx->data_path, cache_ctx->subdir_name,
+                cache_ctx->subdirs - 1))
     {
         return 0;
     }
 
-    for (i=0; i<DA_BINLOG_SUBDIRS; i++) {
+    for (i=0; i<cache_ctx->subdirs; i++) {
         snprintf(filepath1, sizeof(filepath1), "%s/%s/%02X",
-                DA_DATA_PATH_STR, subdir_name, i);
+                cache_ctx->data_path, cache_ctx->subdir_name, i);
         if ((result=fc_check_mkdir(filepath1, 0755)) != 0) {
             return result;
         }
 
-        for (k=0; k<DA_BINLOG_SUBDIRS; k++) {
+        for (k=0; k<cache_ctx->subdirs; k++) {
             snprintf(filepath2, sizeof(filepath2),
                     "%s/%02X", filepath1, k);
             if ((result=fc_check_mkdir(filepath2, 0755)) != 0) {
                 return result;
             }
-        }
-    }
-
-    return 0;
-}
-
-static int check_make_all_subdirs(const DABinlogFDCacheContext *cache_ctx)
-{
-    int result;
-    DABinlogTypeSubdirPair *pair;
-    DABinlogTypeSubdirPair *end;
-
-    end = cache_ctx->type_subdir_array.pairs +
-        cache_ctx->type_subdir_array.count;
-    for (pair=cache_ctx->type_subdir_array.pairs; pair<end; pair++) {
-        if ((result=check_make_subdirs(pair->subdir_name)) != 0) {
-            return result;
         }
     }
 
@@ -120,71 +123,66 @@ static int init_htable_and_allocator(DABinlogFDCacheContext
             alloc_elements_once, 0, NULL, NULL, false);
 }
 
-static int duplicate_type_subdir_array(DABinlogFDCacheContext *cache_ctx,
-        const DABinlogTypeSubdirArray *type_subdir_array)
-{
-    int bytes;
-
-    bytes = sizeof(DABinlogTypeSubdirPair) * type_subdir_array->count;
-    cache_ctx->type_subdir_array.pairs =
-        (DABinlogTypeSubdirPair *)fc_malloc(bytes);
-    if (cache_ctx->type_subdir_array.pairs == NULL) {
-        return ENOMEM;
-    }
-
-    cache_ctx->type_subdir_array.count = type_subdir_array->count;
-    memcpy(cache_ctx->type_subdir_array.pairs,
-            type_subdir_array->pairs, bytes);
-
-    return 0;
-}
-
 int da_binlog_fd_cache_init(DABinlogFDCacheContext *cache_ctx,
-        const DABinlogTypeSubdirArray *type_subdir_array,
+        const char *data_path, const char *subdir_name,
         const int open_flags, const int max_idle_time,
-        const int capacity)
+        const int capacity, da_binlog_fd_cache_filename_func
+        filename_func, const int subdirs)
 {
     int result;
+    int subdir_bits;
+    int n;
 
     if ((result=init_htable_and_allocator(cache_ctx, capacity)) != 0) {
         return result;
     }
 
-    if ((result=duplicate_type_subdir_array(cache_ctx,
-                    type_subdir_array)) != 0)
-    {
+    cache_ctx->data_path = fc_strdup(data_path);
+    if (cache_ctx->data_path == NULL) {
+        return ENOMEM;
+    }
+    cache_ctx->subdirs = subdirs;
+    snprintf(cache_ctx->subdir_name, sizeof(cache_ctx->subdir_name),
+            "%s", subdir_name);
+    if ((result=check_make_subdirs(cache_ctx)) != 0) {
         return result;
     }
 
-    if ((result=check_make_all_subdirs(cache_ctx)) != 0) {
-        return result;
+    n = 1;
+    subdir_bits = 0;
+    while (n < subdirs) {
+        n *= 2;
+        ++subdir_bits;
     }
 
+    cache_ctx->subdir_bits = subdir_bits;
+    cache_ctx->subdir_mask = n - 1;
+    cache_ctx->filename_func = filename_func;
     cache_ctx->open_flags = open_flags;
     cache_ctx->max_idle_time = max_idle_time;
     cache_ctx->lru.count = 0;
     cache_ctx->lru.capacity = capacity;
     FC_INIT_LIST_HEAD(&cache_ctx->lru.head);
+
     return 0;
 }
 
 static int fd_cache_get(DABinlogFDCacheContext *cache_ctx,
-        const DABinlogIdTypePair *key)
+        const uint64_t id)
 {
     DABinlogFDCacheEntry **bucket;
     DABinlogFDCacheEntry *entry;
 
-    bucket = cache_ctx->htable.buckets +
-        key->id % cache_ctx->htable.size;
+    bucket = cache_ctx->htable.buckets + id % cache_ctx->htable.size;
     if (*bucket == NULL) {
         return -1;
     }
-    if (DA_BINLOG_ID_TYPE_EQUALS((*bucket)->pair.key, *key)) {
+    if ((*bucket)->pair.id == id) {
         entry = *bucket;
     } else {
         entry = (*bucket)->next;
         while (entry != NULL) {
-            if (DA_BINLOG_ID_TYPE_EQUALS(entry->pair.key, *key)) {
+            if (entry->pair.id == id) {
                 break;
             }
 
@@ -212,14 +210,13 @@ static inline void fd_cache_remove(DABinlogFDCacheContext *cache_ctx,
 }
 
 int da_binlog_fd_cache_remove(DABinlogFDCacheContext *cache_ctx,
-        const DABinlogIdTypePair *key)
+        const uint64_t id)
 {
     DABinlogFDCacheEntry **bucket;
     DABinlogFDCacheEntry *previous;
     DABinlogFDCacheEntry *entry;
 
-    bucket = cache_ctx->htable.buckets +
-        key->id % cache_ctx->htable.size;
+    bucket = cache_ctx->htable.buckets + id % cache_ctx->htable.size;
     if (*bucket == NULL) {
         return ENOENT;
     }
@@ -227,7 +224,7 @@ int da_binlog_fd_cache_remove(DABinlogFDCacheContext *cache_ctx,
     previous = NULL;
     entry = *bucket;
     while (entry != NULL) {
-        if (DA_BINLOG_ID_TYPE_EQUALS(entry->pair.key, *key)) {
+        if (entry->pair.id == id) {
             break;
         }
 
@@ -275,7 +272,7 @@ void da_binlog_fd_cache_clear(DABinlogFDCacheContext *cache_ctx)
 }
 
 static int fd_cache_add(DABinlogFDCacheContext *cache_ctx,
-        const DABinlogIdTypePair *key, const int fd)
+        const uint64_t id, const int fd)
 {
     DABinlogFDCacheEntry **bucket;
     DABinlogFDCacheEntry *entry;
@@ -284,7 +281,7 @@ static int fd_cache_add(DABinlogFDCacheContext *cache_ctx,
         if ((entry=fc_list_first_entry(&cache_ctx->lru.head,
                         DABinlogFDCacheEntry, dlink)) != NULL)
         {
-            da_binlog_fd_cache_remove(cache_ctx, &entry->pair.key);
+            da_binlog_fd_cache_remove(cache_ctx, entry->pair.id);
         }
     }
 
@@ -294,11 +291,9 @@ static int fd_cache_add(DABinlogFDCacheContext *cache_ctx,
         return ENOMEM;
     }
 
-    entry->pair.key = *key;
+    entry->pair.id = id;
     entry->pair.fd = fd;
-
-    bucket = cache_ctx->htable.buckets +
-        key->id % cache_ctx->htable.size;
+    bucket = cache_ctx->htable.buckets + id % cache_ctx->htable.size;
     entry->next = *bucket;
     *bucket = entry;
 
@@ -308,18 +303,14 @@ static int fd_cache_add(DABinlogFDCacheContext *cache_ctx,
 }
 
 static inline int open_file(DABinlogFDCacheContext *cache_ctx,
-        const DABinlogIdTypePair *key)
+        const uint64_t id)
 {
     int fd;
     int result;
     char full_filename[PATH_MAX];
 
-    if ((result=da_binlog_fd_cache_filename(cache_ctx, key,
-                    full_filename, sizeof(full_filename))) != 0)
-    {
-        return -1 * result;
-    }
-
+    cache_ctx->filename_func(cache_ctx, id,
+            full_filename, sizeof(full_filename));
     if ((fd=open(full_filename, cache_ctx->open_flags, 0755)) < 0) {
         result = errno != 0 ? errno : ENOENT;
         logError("file: "__FILE__", line: %d, "
@@ -332,20 +323,20 @@ static inline int open_file(DABinlogFDCacheContext *cache_ctx,
 }
 
 int da_binlog_fd_cache_get(DABinlogFDCacheContext *cache_ctx,
-        const DABinlogIdTypePair *key)
+        const uint64_t id)
 {
     int fd;
     int result;
 
-    if ((fd=fd_cache_get(cache_ctx, key)) >= 0) {
+    if ((fd=fd_cache_get(cache_ctx, id)) >= 0) {
         return fd;
     }
 
-    if ((fd=open_file(cache_ctx, key)) < 0) {
+    if ((fd=open_file(cache_ctx, id)) < 0) {
         return fd;
     }
 
-    if ((result=fd_cache_add(cache_ctx, key, fd)) == 0) {
+    if ((result=fd_cache_add(cache_ctx, id, fd)) == 0) {
         return fd;
     } else {
         close(fd);

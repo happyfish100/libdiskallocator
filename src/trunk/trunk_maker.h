@@ -14,29 +14,29 @@
  */
 
 
-#ifndef _TRUNK_MAKER_H
-#define _TRUNK_MAKER_H
+#ifndef _DA_TRUNK_MAKER_H
+#define _DA_TRUNK_MAKER_H
 
 #include "fastcommon/uniq_skiplist.h"
 #include "fastcommon/multi_skiplist.h"
 #include "../storage_config.h"
 #include "trunk_allocator.h"
 
-typedef void (*trunk_allocate_done_callback)(DATrunkAllocator *allocator,
+typedef void (*da_trunk_allocate_done_callback)(DATrunkAllocator *allocator,
         const int result, const bool is_new_trunk, void *arg);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int trunk_maker_init();
+    int da_trunk_maker_init(DAContext *ctx);
 
-    int trunk_maker_allocate_ex(DATrunkAllocator *allocator,
+    int da_trunk_maker_allocate_ex(DATrunkAllocator *allocator,
             const bool urgent, const bool need_lock,
-            trunk_allocate_done_callback callback, void *arg);
+            da_trunk_allocate_done_callback callback, void *arg);
 
-#define trunk_maker_allocate(allocator) \
-    trunk_maker_allocate_ex(allocator, false, true, NULL, NULL)
+#define da_trunk_maker_allocate(allocator) \
+    da_trunk_maker_allocate_ex(allocator, false, true, NULL, NULL)
 
 #ifdef __cplusplus
 }

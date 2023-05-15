@@ -18,52 +18,23 @@
 #define _DISK_ALLOCATOR_GLOBAL_H
 
 #include "fastcommon/common_define.h"
+#include "fastcommon/base64.h"
 #include "sf/sf_global.h"
 #include "binlog/common/binlog_types.h"
 #include "storage_config.h"
 
 typedef struct {
-    string_t path;   //data path
-    int binlog_buffer_size;
-    int binlog_subdirs;
-    int trunk_index_dump_interval;
-    TimeInfo trunk_index_dump_base_time;
-    bool read_by_direct_io;  //if read by direct IO in Linux
-} DADataGlobalConfig;
-
-typedef struct {
-    DADataGlobalConfig data;
-
-    struct {
-        int file_block_size;
-        DAStorageConfig cfg;
-    } storage;
-
+    bool inited;
     int my_server_id;
-
-    da_redo_queue_push_func redo_queue_push_func;
+    struct base64_context base64_ctx;
+    struct fast_mblock_man trunk_allocator;  //element: DATrunkAllocator
+    da_binlog_unpack_record_func unpack_record;
+    da_binlog_shrink_func shrink;
 } DiskAllocatorGlobalVars;
 
-#define DA_DATA_PATH           g_disk_allocator_vars.data.path
-#define DA_DATA_PATH_STR       DA_DATA_PATH.str
-#define DA_DATA_PATH_LEN       DA_DATA_PATH.len
-
-#define DA_BINLOG_BUFFER_SIZE  g_disk_allocator_vars.data.binlog_buffer_size
-#define DA_BINLOG_SUBDIRS      g_disk_allocator_vars.data.binlog_subdirs
-
-#define DA_TRUNK_INDEX_DUMP_INTERVAL  g_disk_allocator_vars. \
-    data.trunk_index_dump_interval
-
-#define DA_TRUNK_INDEX_DUMP_BASE_TIME g_disk_allocator_vars. \
-    data.trunk_index_dump_base_time
-
-#define DA_READ_BY_DIRECT_IO  g_disk_allocator_vars.data.read_by_direct_io
-
 #define DA_MY_SERVER_ID        g_disk_allocator_vars.my_server_id
-#define DA_STORE_CFG           g_disk_allocator_vars.storage.cfg
-#define DA_FILE_BLOCK_SIZE     g_disk_allocator_vars.storage.file_block_size
-
-#define DA_REDO_QUEUE_PUSH_FUNC g_disk_allocator_vars.redo_queue_push_func
+#define DA_BASE64_CTX          g_disk_allocator_vars.base64_ctx
+#define DA_TRUNK_ALLOCATOR     g_disk_allocator_vars.trunk_allocator
 
 #ifdef __cplusplus
 extern "C" {
@@ -71,10 +42,42 @@ extern "C" {
 
     extern DiskAllocatorGlobalVars g_disk_allocator_vars;
 
-    int da_load_config(const int my_server_id, const int file_block_size,
-            const DADataGlobalConfig *data_cfg, const char *storage_filename);
+    int da_global_init(const int my_server_id);
 
-    int da_init_start(da_redo_queue_push_func redo_queue_push_func);
+    int da_load_config_ex(DAContext *context, const char *module_name,
+            const int file_block_size, const DADataConfig *data_cfg,
+            const char *storage_filename, const bool have_extra_field,
+            const bool destroy_store_path_index,
+            const bool migrate_path_mark_filename);
+
+    static inline int da_load_config(DAContext *context,
+            const char *module_name, const int file_block_size,
+            const DADataConfig *data_cfg, const char *storage_filename)
+    {
+        const bool have_extra_field = false;
+        const bool destroy_store_path_index = true;
+        const bool migrate_path_mark_filename = false;
+        return da_load_config_ex(context, module_name, file_block_size,
+                data_cfg, storage_filename, have_extra_field,
+                destroy_store_path_index, migrate_path_mark_filename);
+    }
+
+    int da_init_start_ex(DAContext *ctx, da_slice_load_done_callback
+            slice_load_done_callback, da_slice_migrate_done_callback
+            slice_migrate_done_callback, da_trunk_migrate_done_callback
+            trunk_migrate_done_callback, da_cached_slice_write_done_callback
+            cached_slice_write_done, const int skip_path_index);
+
+    void da_destroy(DAContext *context);
+
+    static inline void da_set_slice_migrate_done_callback(DAContext *ctx,
+            da_slice_migrate_done_callback slice_migrate_done_callback)
+    {
+        ctx->slice_migrate_done_callback = slice_migrate_done_callback;
+    }
+
+#define da_init_start(ctx, slice_migrate_done_callback) \
+    da_init_start_ex(ctx, NULL, slice_migrate_done_callback, NULL, NULL, -1)
 
 #ifdef __cplusplus
 }

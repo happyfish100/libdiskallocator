@@ -18,8 +18,7 @@
 #include "../common/binlog_fd_cache.h"
 #include "binlog_reader.h"
 
-static int load(const DABinlogIdTypePair *bkey,
-        void *args, const string_t *context)
+static int load(const uint64_t id, void *args, const string_t *context)
 {
     int result;
     int line_count;
@@ -44,15 +43,15 @@ static int load(const DABinlogIdTypePair *bkey,
         ++line_end;
         line.str = line_start;
         line.len = line_end - line_start;
-        if ((result=g_da_write_cache_ctx.type_subdir_array.pairs[bkey->type].
-                    unpack_record(&line, args, error_info)) != 0)
+        if ((result=g_disk_allocator_vars.unpack_record(
+                        &line, args, error_info)) != 0)
         {
             char filename[PATH_MAX];
-            da_write_fd_cache_filename(bkey, filename, sizeof(filename));
+            da_write_fd_cache_filename(id, filename, sizeof(filename));
             logError("file: "__FILE__", line: %d, "
                     "parse record fail, binlog id: %"PRId64", "
                     "binlog file: %s, line no: %d%s%s", __LINE__,
-                    bkey->id, filename, line_count, (*error_info != '\0' ?
+                    id, filename, line_count, (*error_info != '\0' ?
                         ", error info: " : ""), error_info);
             break;
         }
@@ -63,14 +62,14 @@ static int load(const DABinlogIdTypePair *bkey,
     return result;
 }
 
-int da_binlog_reader_load(const DABinlogIdTypePair *bkey, void *args)
+int da_binlog_reader_load(const uint64_t id, void *args)
 {
     int result;
     char filename[PATH_MAX];
     int64_t file_size;
     string_t context;
 
-    da_write_fd_cache_filename(bkey, filename, sizeof(filename));
+    da_write_fd_cache_filename(id, filename, sizeof(filename));
     if (access(filename, F_OK) != 0) {
         result = errno != 0 ? errno : EPERM;
         if (result == ENOENT) {
@@ -78,7 +77,7 @@ int da_binlog_reader_load(const DABinlogIdTypePair *bkey, void *args)
         } else {
             logError("file: "__FILE__", line: %d, "
                     "binlog id: %"PRId64", access binlog file %s fail, "
-                    "errno: %d, error info: %s", __LINE__, bkey->id,
+                    "errno: %d, error info: %s", __LINE__, id,
                     filename, result,STRERROR(result));
             return result;
         }
@@ -89,7 +88,7 @@ int da_binlog_reader_load(const DABinlogIdTypePair *bkey, void *args)
     }
     context.len = file_size;
 
-    result = load(bkey, args, &context);
+    result = load(id, args, &context);
     free(context.str);
     return result;
 }

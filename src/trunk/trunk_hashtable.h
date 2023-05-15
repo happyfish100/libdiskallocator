@@ -14,35 +14,37 @@
  */
 
 
-#ifndef _TRUNK_HASHTABLE_H
-#define _TRUNK_HASHTABLE_H
+#ifndef _DA_TRUNK_HASHTABLE_H
+#define _DA_TRUNK_HASHTABLE_H
 
 #include "../storage_config.h"
-
-typedef struct {
-    DATrunkFileInfo **bucket;
-    DATrunkFileInfo *current;
-    bool need_lock;
-} TrunkHashtableIterator;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int trunk_hashtable_init();
+    int da_trunk_hashtable_init(DATrunkHTableContext *ctx);
 
-    void trunk_hashtable_destroy();
+    void da_trunk_hashtable_destroy(DATrunkHTableContext *ctx);
 
-    int trunk_hashtable_count();
+    int da_trunk_hashtable_count(DATrunkHTableContext *ctx);
 
-    int trunk_hashtable_add(DATrunkFileInfo *trunk);
+    int da_trunk_hashtable_add(DATrunkHTableContext *ctx,
+            DATrunkFileInfo *trunk);
 
-    DATrunkFileInfo *trunk_hashtable_get(const uint32_t trunk_id);
+    DATrunkFileInfo *da_trunk_hashtable_get_ex(DATrunkHTableContext *ctx,
+            const uint64_t trunk_id, const int log_level);
 
-    void trunk_hashtable_iterator(TrunkHashtableIterator *it,
-            const bool need_lock);
+#define da_trunk_hashtable_get(ctx, trunk_id) \
+    da_trunk_hashtable_get_ex(ctx, trunk_id, LOG_ERR)
 
-    DATrunkFileInfo *trunk_hashtable_next(TrunkHashtableIterator *it);
+    void da_trunk_hashtable_iterator(DATrunkHTableContext *ctx,
+            DATrunkHashtableIterator *it, const bool need_lock);
+
+    DATrunkFileInfo *da_trunk_hashtable_next(DATrunkHashtableIterator *it);
+
+    int da_trunk_hashtable_dump_to_file(DATrunkHTableContext *ctx,
+            const char *filename, int64_t *total_trunk_count);
 
 #ifdef __cplusplus
 }

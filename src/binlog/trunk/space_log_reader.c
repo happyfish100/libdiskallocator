@@ -24,16 +24,6 @@
 #include "trunk_space_log.h"
 #include "space_log_reader.h"
 
-#define DA_SPACE_SKPLIST_INIT_LEVEL_COUNT  4
-#define DA_SPACE_SKPLIST_MAX_LEVEL_COUNT  12
-
-static int space_log_record_alloc_init(void *element, void *args)
-{
-    ((DATrunkSpaceLogRecord *)element)->allocator =
-        (struct fast_mblock_man *)args;
-    return 0;
-}
-
 static int compare_by_trunk_offset(const DATrunkSpaceLogRecord *s1,
         const DATrunkSpaceLogRecord *s2)
 {
@@ -45,7 +35,14 @@ static void space_log_record_free_func(void *ptr, const int delay_seconds)
     fast_mblock_free_object(((DATrunkSpaceLogRecord *)ptr)->allocator, ptr);
 }
 
-int da_space_log_reader_init(DASpaceLogReader *reader,
+static int space_log_record_alloc_init(void *element, void *args)
+{
+    ((DATrunkSpaceLogRecord *)element)->allocator =
+        (struct fast_mblock_man *)args;
+    return 0;
+}
+
+int da_space_log_reader_init(DASpaceLogReader *reader, DAContext *ctx,
         const int alloc_skiplist_once, const bool use_lock)
 {
     const int min_alloc_elements_once = 4;
@@ -53,6 +50,8 @@ int da_space_log_reader_init(DASpaceLogReader *reader,
     const bool bidirection = false;
     int result;
 
+    reader->ctx = ctx;
+    reader->current_version = 0;
     if ((result=fast_mblock_init_ex1(&reader->record_allocator,
                     "space-log-record", sizeof(DATrunkSpaceLogRecord),
                     8 * 1024, 0, space_log_record_alloc_init,
@@ -99,19 +98,19 @@ static int parse_to_skiplist(DASpaceLogReader *reader,
             break;
         }
 
-        record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &reader->record_allocator);
+        record = da_trunk_space_log_alloc_record1(reader);
         if (record == NULL) {
             sprintf(error_info, "alloc record object fail "
                     "because out of memory");
             return ENOMEM;
         }
 
+        ++(reader->row_count);
         ++line_end;
         line.str = line_start;
         line.len = line_end - line_start;
-        if ((result=da_trunk_space_log_unpack(&line,
-                        record, error_info)) != 0)
+        if ((result=da_trunk_space_log_unpack(&line, record, error_info,
+                        reader->ctx->storage.have_extra_field)) != 0)
         {
             return result;
         }
@@ -124,14 +123,37 @@ static int parse_to_skiplist(DASpaceLogReader *reader,
             need_free = true;
         }
 
-        if (need_free) {
-            fast_mblock_free_object(&reader->record_allocator, record);
+        if (result == EEXIST || result == ENOENT) {
+            logWarning("file: "__FILE__", line: %d, %s "
+                    "row no: %d, trunk id: %"PRId64", data version: "
+                    "%"PRId64", storage {offset: %u, size: %u} %s "
+                    "exist", __LINE__, reader->ctx->module_name,
+                    reader->row_count, record->storage.trunk_id,
+                    record->storage.version, record->storage.offset,
+                    record->storage.size, result == EEXIST ?
+                    "already" : "NOT");
         }
 
-        if (result == ENOMEM) {
-            sprintf(error_info, "alloc skiplist node fail "
-                    "because out of memory");
-            return result;
+        if (need_free) {
+            fast_mblock_free_object(record->allocator, record);
+        }
+
+        switch (result) {
+            case 0:
+                break;
+            case EEXIST:
+                reader->error_counts.exist++;
+                break;
+            case ENOENT:
+                reader->error_counts.noent++;
+                break;
+            case ENOMEM:
+                sprintf(error_info, "alloc skiplist node fail "
+                        "because out of memory");
+                return result;
+            default:
+                reader->error_counts.other++;
+                break;
         }
 
         line_start = line_end;
@@ -140,9 +162,8 @@ static int parse_to_skiplist(DASpaceLogReader *reader,
     return 0;
 }
 
-int da_space_log_reader_load_ex(DASpaceLogReader *reader,
-        const uint32_t trunk_id, UniqSkiplist **skiplist,
-        const bool ignore_enoent)
+int da_space_log_reader_load(DASpaceLogReader *reader,
+        const uint64_t trunk_id, UniqSkiplist **skiplist)
 {
     int result;
     int fd;
@@ -157,16 +178,17 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
         return ENOMEM;
     }
 
-    dio_get_space_log_filename(trunk_id, space_log_filename,
-            sizeof(space_log_filename));
+    dio_get_space_log_filename(reader->ctx, trunk_id,
+            space_log_filename, sizeof(space_log_filename));
     if ((fd=open(space_log_filename, O_RDONLY | O_CLOEXEC)) < 0) {
         result = errno != 0 ? errno : EACCES;
-        if (result == ENOENT && ignore_enoent) {
+        if (result == ENOENT) {
             return 0;
         } else {
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "open file \"%s\" fail, errno: %d, error info: %s",
-                    __LINE__, space_log_filename, result, STRERROR(result));
+                    __LINE__, reader->ctx->module_name, space_log_filename,
+                    result, STRERROR(result));
             uniq_skiplist_free(*skiplist);
             *skiplist = NULL;
             return result;
@@ -174,24 +196,41 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
     }
 
     result = 0;
+    reader->row_count = 0;
+    reader->error_counts.exist = 0;
+    reader->error_counts.noent = 0;
+    reader->error_counts.other = 0;
     *error_info = '\0';
     content.str = buff;
     while ((content.len=fc_read_lines(fd, buff, sizeof(buff))) > 0) {
         if ((result=parse_to_skiplist(reader, *skiplist,
                         &content, error_info)) != 0)
         {
-            logError("file: "__FILE__", line: %d, "
-                    "parse file: %s fail, errno: %d, error info: %s",
-                    __LINE__, space_log_filename, result, error_info);
+            logError("file: "__FILE__", line: %d, %s "
+                    "parse file: %s fail, row no: %d, errno: %d, "
+                    "error info: %s", __LINE__, reader->ctx->module_name,
+                    space_log_filename, reader->row_count, result, error_info);
             break;
         }
     }
 
+    if (reader->error_counts.exist + reader->error_counts.noent +
+            reader->error_counts.other > 0)
+    {
+        logWarning("file: "__FILE__", line: %d, %s "
+                "parse file: %s fail, warning counts: "
+                "{exist: %u, noent: %u, other: %u}",
+                __LINE__, reader->ctx->module_name,
+                space_log_filename, reader->error_counts.exist,
+                reader->error_counts.noent, reader->error_counts.other);
+    }
+
     if (content.len < 0) {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "read from file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, space_log_filename, result, STRERROR(result));
+                __LINE__, reader->ctx->module_name, space_log_filename,
+                result, STRERROR(result));
     }
     close(fd);
 
@@ -203,8 +242,9 @@ int da_space_log_reader_load_ex(DASpaceLogReader *reader,
     return result;
 }
 
-static int parse_to_chain(DASpaceLogReader *reader, struct fc_queue_info
-        *chain, string_t *content, char *error_info)
+static int parse_to_chain(DASpaceLogReader *reader,
+        struct fc_queue_info *chain, string_t *content,
+        char *error_info)
 {
     int result;
     string_t line;
@@ -222,8 +262,7 @@ static int parse_to_chain(DASpaceLogReader *reader, struct fc_queue_info
             break;
         }
 
-        record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &reader->record_allocator);
+        record = da_trunk_space_log_alloc_record1(reader);
         if (record == NULL) {
             sprintf(error_info, "alloc record object fail "
                     "because out of memory");
@@ -233,8 +272,8 @@ static int parse_to_chain(DASpaceLogReader *reader, struct fc_queue_info
         ++line_end;
         line.str = line_start;
         line.len = line_end - line_start;
-        if ((result=da_trunk_space_log_unpack(&line,
-                        record, error_info)) != 0)
+        if ((result=da_trunk_space_log_unpack(&line, record, error_info,
+                        reader->ctx->storage.have_extra_field)) != 0)
         {
             return result;
         }
@@ -268,9 +307,10 @@ int da_space_log_reader_load_to_chain(DASpaceLogReader *reader,
             return 0;
         }
 
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "open file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, space_log_filename, result, STRERROR(result));
+                __LINE__, reader->ctx->module_name, space_log_filename,
+                result, STRERROR(result));
         return result;
     }
 
@@ -281,18 +321,20 @@ int da_space_log_reader_load_to_chain(DASpaceLogReader *reader,
         if ((result=parse_to_chain(reader, chain,
                         &content, error_info)) != 0)
         {
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "parse file: %s fail, errno: %d, error info: %s",
-                    __LINE__, space_log_filename, result, error_info);
+                    __LINE__, reader->ctx->module_name, space_log_filename,
+                    result, error_info);
             break;
         }
     }
 
     if (content.len < 0) {
         result = errno != 0 ? errno : EACCES;
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "read from file \"%s\" fail, errno: %d, error info: %s",
-                __LINE__, space_log_filename, result, STRERROR(result));
+                __LINE__, reader->ctx->module_name, space_log_filename,
+                result, STRERROR(result));
     }
     close(fd);
 

@@ -29,42 +29,37 @@
 #include "trunk_reclaim.h"
 #include "trunk_maker.h"
 
-struct trunk_maker_thread_info;
-typedef struct trunk_maker_task {
+struct da_trunk_maker_thread_info;
+typedef struct da_trunk_maker_task {
     bool urgent;
     DATrunkAllocator *allocator;
     struct {
-        trunk_allocate_done_callback callback;
+        da_trunk_allocate_done_callback callback;
         void *arg;
     } notify;
-    struct trunk_maker_thread_info *thread;
-    struct trunk_maker_task *next;
+    struct da_trunk_maker_thread_info *thread;
+    struct da_trunk_maker_task *next;
 } TrunkMakerTask;
 
-typedef struct trunk_maker_thread_info {
+typedef struct da_trunk_maker_thread_info {
     int index;
-    struct {
-        int result;
-        pthread_lock_cond_pair_t lcp; //for notify
-    } allocate;
-    TrunkReclaimContext reclaim_ctx;
+    SFSynchronizeContext notify;  //for notify
+    DATrunkReclaimContext reclaim_ctx;
     struct fast_mblock_man task_allocator;
     struct fc_queue queue;
     pthread_t tid;
     bool running;
 } TrunkMakerThreadInfo;
 
-typedef struct trunk_maker_thread_array {
+typedef struct da_trunk_maker_thread_array {
     int count;
     TrunkMakerThreadInfo *threads;
 } TrunkMakerThreadArray;
 
-typedef struct trunk_maker_context {
+typedef struct da_trunk_maker_context {
     volatile int running_count;
     TrunkMakerThreadArray thread_array;
 } TrunkMakerContext;
-
-static TrunkMakerContext tmaker_ctx;
 
 static int deal_trunk_util_change_event(DATrunkAllocator *allocator,
         DATrunkFileInfo *trunk)
@@ -120,7 +115,6 @@ static int deal_trunk_util_change_event(DATrunkAllocator *allocator,
                 {
                     uniq_skiplist_delete_node(allocator->trunks.
                             by_size.skiplist, prev, node);
-
                     trunk->util.last_used_bytes = last_used_bytes;
                     result = uniq_skiplist_insert(allocator->trunks.
                             by_size.skiplist, trunk);
@@ -133,9 +127,10 @@ static int deal_trunk_util_change_event(DATrunkAllocator *allocator,
     }
 
     /*
-    logInfo("event: %c, id: %"PRId64", status: %d, last_used_bytes: %"PRId64", "
-            "current used: %"PRId64", result: %d", event, trunk->id_info.id,
-            trunk->status, trunk->util.last_used_bytes, trunk->used.bytes, result);
+    logInfo("%s event: %c, id: %"PRId64", status: %d, last_used_bytes: "
+            "%u, current used: %u, result: %d", allocator->path_info->
+            ctx->module_name, event, trunk->id_info.id, trunk->status,
+            trunk->util.last_used_bytes, trunk->used.bytes, result);
             */
 
     __sync_bool_compare_and_swap(&trunk->util.event,
@@ -157,16 +152,17 @@ static void deal_trunk_util_change_events(DATrunkAllocator *allocator)
     }
 }
 
-static void create_trunk_done(struct trunk_write_io_buffer *record,
+static void create_trunk_done(struct da_trunk_write_io_buffer *record,
         const int result)
 {
     TrunkMakerThreadInfo *thread;
 
-    thread = (TrunkMakerThreadInfo *)record->notify.arg;
-    PTHREAD_MUTEX_LOCK(&thread->allocate.lcp.lock);
-    thread->allocate.result = result >= 0 ? result : -1 * result;
-    pthread_cond_signal(&thread->allocate.lcp.cond);
-    PTHREAD_MUTEX_UNLOCK(&thread->allocate.lcp.lock);
+    thread = record->notify.arg1;
+    PTHREAD_MUTEX_LOCK(&thread->notify.lcp.lock);
+    thread->notify.finished = true;
+    thread->notify.result = result >= 0 ? result : -1 * result;
+    pthread_cond_signal(&thread->notify.lcp.cond);
+    PTHREAD_MUTEX_UNLOCK(&thread->notify.lcp.lock);
 }
 
 static int prealloc_trunk_finish(DATrunkAllocator *allocator,
@@ -176,10 +172,10 @@ static int prealloc_trunk_finish(DATrunkAllocator *allocator,
     time_t last_stat_time;
     DATrunkFileInfo *trunk_info;
 
-    result = storage_allocator_add_trunk_ex(space->store->index,
-            &space->id_info, space->size, &trunk_info);
+    result = da_storage_allocator_add_trunk_ex(allocator->path_info->ctx,
+            space->store->index, &space->id_info, space->size, &trunk_info);
     if (result == 0) {
-        *freelist_type = trunk_allocator_add_to_freelist(allocator, trunk_info);
+        *freelist_type = da_trunk_allocator_add_to_freelist(allocator, trunk_info);
     }
 
     __sync_add_and_fetch(&allocator->path_info->
@@ -200,29 +196,30 @@ static int do_prealloc_trunk(TrunkMakerThreadInfo *thread,
     DATrunkSpaceInfo space;
 
     space.store = &task->allocator->path_info->store;
-    if ((result=trunk_id_info_generate(space.store->index,
-                    &space.id_info)) != 0)
+    if ((result=da_trunk_id_info_generate(task->allocator->path_info->ctx,
+                    space.store->index, &space.id_info)) != 0)
     {
         return result;
     }
     space.offset = 0;
-    space.size = DA_STORE_CFG.trunk_file_size;
-
-    if ((result=trunk_write_thread_push_trunk_op(DA_IO_TYPE_CREATE_TRUNK,
+    space.size = task->allocator->path_info->
+        ctx->storage.cfg.trunk_file_size;
+    if ((result=da_trunk_write_thread_push_trunk_op(task->allocator->
+                    path_info->ctx, DA_IO_TYPE_CREATE_TRUNK,
                     &space, create_trunk_done, thread)) == 0)
     {
-        PTHREAD_MUTEX_LOCK(&thread->allocate.lcp.lock);
-        while (thread->allocate.result == -1 && SF_G_CONTINUE_FLAG) {
-            pthread_cond_wait(&thread->allocate.lcp.cond,
-                    &thread->allocate.lcp.lock);
+        PTHREAD_MUTEX_LOCK(&thread->notify.lcp.lock);
+        while (!thread->notify.finished && SF_G_CONTINUE_FLAG) {
+            pthread_cond_wait(&thread->notify.lcp.cond,
+                    &thread->notify.lcp.lock);
         }
-        result = thread->allocate.result;
-        thread->allocate.result = -1;  /* reset for next */
-        PTHREAD_MUTEX_UNLOCK(&thread->allocate.lcp.lock);
-
-        if (result == -1) {
-            return EINTR;
+        if (thread->notify.finished) {
+            result = thread->notify.result;
+            thread->notify.finished = false;  /* reset for next */
+        } else {
+            result = EINTR;
         }
+        PTHREAD_MUTEX_UNLOCK(&thread->notify.lcp.lock);
     }
 
     if (result != 0) {
@@ -238,10 +235,14 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     double ratio_thredhold;
     DATrunkFileInfo *trunk;
     int64_t used_bytes;
+    int64_t current_bytes;
     int64_t time_used;
-    char bytes_buff[64];
+    char last_bytes_buff[32];
+    char current_bytes_buff[32];
+    char migrage_bytes_buff[32];
     char time_buff[64];
     char time_prompt[64];
+    int used_count;
     int result;
 
     if (task->urgent || g_current_time - task->allocator->
@@ -257,16 +258,21 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
         return ENOENT;
     }
 
-    used_bytes = __sync_fetch_and_add(&trunk->used.bytes, 0);
-    if ((int64_t)trunk->size - used_bytes < DA_FILE_BLOCK_SIZE) {
+    used_bytes = FC_ATOMIC_GET(trunk->used.bytes);
+    if (used_bytes < 0) {
+        used_bytes = 0;
+    }
+    if ((int64_t)trunk->size - used_bytes < task->allocator->
+            path_info->ctx->storage.file_block_size)
+    {
         return ENOENT;
     }
 
-    ratio_thredhold = trunk_allocator_calc_reclaim_ratio_thredhold(
+    ratio_thredhold = da_trunk_allocator_calc_reclaim_ratio_thredhold(
             task->allocator);
 
     /*
-    logDebug("file: "__FILE__", line: %d, "
+    logInfo("file: "__FILE__", line: %d, "
             "path index: %d, trunk id: %"PRId64", "
             "usage ratio: %.2f%%, ratio_thredhold: %.2f%%",
             __LINE__, task->allocator->path_info->store.index,
@@ -277,46 +283,77 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     if ((double)used_bytes / (double)trunk->size >= ratio_thredhold) {
         return ENOENT;
     }
+    used_count = trunk->used.count;
 
     if (used_bytes > 0) {
         int64_t start_time_us;
         start_time_us = get_current_time_us();
         da_set_trunk_status(trunk, DA_TRUNK_STATUS_RECLAIMING);
-        result = trunk_reclaim(task->allocator, trunk,
-                &thread->reclaim_ctx);
+        result = da_trunk_reclaim(&thread->reclaim_ctx,
+                task->allocator, trunk);
         time_used = (get_current_time_us() - start_time_us) / 1000;
     } else {
         time_used = 0;
         result = 0;
     }
 
-    long_to_comma_str(used_bytes, bytes_buff);
+    current_bytes = FC_ATOMIC_GET(trunk->used.bytes);
+    /*
+    if (current_bytes < 0) {
+        current_bytes = 0;
+    }
+    */
+    long_to_comma_str(used_bytes, last_bytes_buff);
+    long_to_comma_str(current_bytes, current_bytes_buff);
+    long_to_comma_str(thread->reclaim_ctx.migrage_bytes, migrage_bytes_buff);
     long_to_comma_str(time_used, time_buff);
     sprintf(time_prompt, "time used: %s ms", time_buff);
-    logInfo("file: "__FILE__", line: %d, "
-            "path index: %d, reclaimed trunk id: %u, "
-            "migrate block count: %d, "
+    logInfo("file: "__FILE__", line: %d, %s "
+            "path index: %d, reclaimed trunk id: %"PRId64", "
+            "migrate block count: %d, migrage bytes: %s, "
             "slice counts {total: %d, skip: %d, ignore: %d}, "
-            "used bytes {last: %s, current: %u}, "
+            "trunk used count {last: %d, current: %d}, "
+            "trunk used bytes {last: %s, current: %s}, "
             "last usage ratio: %.2f%%, result: %d, %s", __LINE__,
+            task->allocator->path_info->ctx->module_name,
             task->allocator->path_info->store.index, trunk->id_info.id,
-            thread->reclaim_ctx.barray.count,
+            thread->reclaim_ctx.barray.count, migrage_bytes_buff,
             thread->reclaim_ctx.slice_counts.total,
             thread->reclaim_ctx.slice_counts.skip,
             thread->reclaim_ctx.slice_counts.ignore,
-            bytes_buff, trunk->used.bytes,
+            used_count, trunk->used.count,
+            last_bytes_buff, current_bytes_buff,
             100.00 * (double)used_bytes / (double)trunk->size,
             result, time_prompt);
 
     if (result == 0) {
-        da_trunk_space_log_unlink(trunk->id_info.id);
+        da_trunk_space_log_push_unlink_binlog(task->allocator->path_info->
+                ctx, trunk, da_trunk_space_log_current_version(
+                    task->allocator->path_info->ctx), &thread->notify);
 
-        PTHREAD_MUTEX_LOCK(&task->allocator->freelist.lcp.lock);
-        trunk->free_start = 0;
-        PTHREAD_MUTEX_UNLOCK(&task->allocator->freelist.lcp.lock);
+        PTHREAD_MUTEX_LOCK(&thread->notify.lcp.lock);
+        while (!thread->notify.finished && SF_G_CONTINUE_FLAG) {
+            pthread_cond_wait(&thread->notify.lcp.cond,
+                    &thread->notify.lcp.lock);
+        }
+        if (thread->notify.finished) {
+            result = thread->notify.result;
+            thread->notify.finished = false;  /* reset for next */
+        } else {
+            result = EINTR;
+        }
+        PTHREAD_MUTEX_UNLOCK(&thread->notify.lcp.lock);
 
-        uniq_skiplist_delete(task->allocator->trunks.by_size.skiplist, trunk);
-        *freelist_type = trunk_allocator_add_to_freelist(task->allocator, trunk);
+        if (result == 0) {
+            PTHREAD_MUTEX_LOCK(&task->allocator->freelist.lcp.lock);
+            trunk->free_start = 0;
+            PTHREAD_MUTEX_UNLOCK(&task->allocator->freelist.lcp.lock);
+
+            uniq_skiplist_delete(task->allocator->
+                    trunks.by_size.skiplist, trunk);
+            *freelist_type = da_trunk_allocator_add_to_freelist(
+                    task->allocator, trunk);
+        }
     } else {
         da_set_trunk_status(trunk, DA_TRUNK_STATUS_NONE); //rollback status
     }
@@ -333,17 +370,18 @@ static int do_allocate_trunk(TrunkMakerThreadInfo *thread, TrunkMakerTask *task,
 
     *freelist_type = da_freelist_type_none;
     *is_new_trunk = false;
-    if ((result=storage_config_calc_path_avail_space(task->
+    if ((result=da_storage_config_calc_path_avail_space(task->
                     allocator->path_info)) != 0)
     {
         return result;
     }
 
     avail_enough = task->allocator->path_info->space_stat.avail -
-        DA_STORE_CFG.trunk_file_size > task->allocator->
-        path_info->reserved_space.value;
+        task->allocator->path_info->ctx->storage.cfg.trunk_file_size >
+        task->allocator->path_info->reserved_space.value;
     if (task->allocator->path_info->space_stat.used_ratio <=
-            DA_STORE_CFG.reclaim_trunks_on_path_usage)
+            task->allocator->path_info->ctx->storage.
+            cfg.reclaim_trunks_on_path_usage)
     {
         need_reclaim = !avail_enough;
     } else {
@@ -381,7 +419,7 @@ static void deal_allocate_task(TrunkMakerThreadInfo *thread,
         }
     } while (result == 0 && freelist_type == da_freelist_type_reclaim);
 
-    trunk_allocator_after_make_trunk(task->allocator, result);
+    da_trunk_allocator_after_make_trunk(task->allocator, result);
     fast_mblock_free_object(&thread->task_allocator, task);
 }
 
@@ -398,7 +436,7 @@ static inline void deal_allocate_requests(TrunkMakerThreadInfo *thread,
     }
 }
 
-static void *trunk_maker_thread_func(void *arg)
+static void *da_trunk_maker_thread_func(void *arg)
 {
     TrunkMakerThreadInfo *thread;
     TrunkMakerTask *head;
@@ -414,6 +452,14 @@ static void *trunk_maker_thread_func(void *arg)
         prctl(PR_SET_NAME, thread_name);
     }
 #endif
+
+    if (thread->reclaim_ctx.ctx->slice_load_done_callback != NULL) {
+        while (SF_G_CONTINUE_FLAG && !thread->reclaim_ctx.
+                ctx->slice_load_done_callback())
+        {
+            fc_sleep_ms(10);
+        }
+    }
 
     while (SF_G_CONTINUE_FLAG) {
         head = (TrunkMakerTask *)fc_queue_pop_all(&thread->queue);
@@ -434,28 +480,32 @@ static int maker_task_alloc_init(void *element, void *args)
     return 0;
 }
 
-int trunk_maker_init()
+int da_trunk_maker_init(DAContext *ctx)
 {
     int result;
+    int count;
     int bytes;
     TrunkMakerThreadInfo *thread;
     TrunkMakerThreadInfo *end;
 
-    tmaker_ctx.thread_array.count = DA_STORE_CFG.trunk_prealloc_threads;
-    bytes = sizeof(TrunkMakerThreadInfo) * tmaker_ctx.thread_array.count;
-    tmaker_ctx.thread_array.threads =
-        (TrunkMakerThreadInfo *)fc_malloc(bytes);
-    if (tmaker_ctx.thread_array.threads == NULL) {
+    count = ctx->storage.cfg.trunk_prealloc_threads;
+    bytes = sizeof(TrunkMakerContext) + sizeof(TrunkMakerThreadInfo) * count;
+    ctx->trunk_maker_ctx = fc_malloc(bytes);
+    if (ctx->trunk_maker_ctx == NULL) {
         return ENOMEM;
     }
-    memset(tmaker_ctx.thread_array.threads, 0, bytes);
+    memset(ctx->trunk_maker_ctx, 0, bytes);
+    ctx->trunk_maker_ctx->thread_array.count = count;
+    ctx->trunk_maker_ctx->thread_array.threads = (TrunkMakerThreadInfo *)
+        (ctx->trunk_maker_ctx + 1);
 
-    end = tmaker_ctx.thread_array.threads +
-        tmaker_ctx.thread_array.count;
-    for (thread=tmaker_ctx.thread_array.threads; thread<end; thread++) {
-        thread->index = thread - tmaker_ctx.thread_array.threads;
-        thread->allocate.result = -1;
-        if ((result=init_pthread_lock_cond_pair(&thread->allocate.lcp)) != 0) {
+    end = ctx->trunk_maker_ctx->thread_array.threads +
+        ctx->trunk_maker_ctx->thread_array.count;
+    for (thread=ctx->trunk_maker_ctx->thread_array.threads;
+            thread<end; thread++)
+    {
+        thread->index = thread - ctx->trunk_maker_ctx->thread_array.threads;
+        if ((result=sf_synchronize_ctx_init(&thread->notify)) != 0) {
             return result;
         }
 
@@ -471,11 +521,13 @@ int trunk_maker_init()
             return result;
         }
 
-        if ((result=trunk_reclaim_init_ctx(&thread->reclaim_ctx)) != 0) {
+        if ((result=da_trunk_reclaim_init_ctx(&thread->
+                        reclaim_ctx, ctx)) != 0)
+        {
             return result;
         }
 
-        if ((result=fc_create_thread(&thread->tid, trunk_maker_thread_func,
+        if ((result=fc_create_thread(&thread->tid, da_trunk_maker_thread_func,
                         thread, SF_G_THREAD_STACK_SIZE)) != 0)
         {
             return result;
@@ -485,14 +537,15 @@ int trunk_maker_init()
     return 0;
 }
 
-int trunk_maker_allocate_ex(DATrunkAllocator *allocator, const bool urgent,
-        const bool need_lock, trunk_allocate_done_callback callback, void *arg)
+int da_trunk_maker_allocate_ex(DATrunkAllocator *allocator, const bool urgent,
+        const bool need_lock, da_trunk_allocate_done_callback callback, void *arg)
 {
     TrunkMakerThreadInfo *thread;
     TrunkMakerTask *task;
 
-    thread = tmaker_ctx.thread_array.threads + allocator->path_info->
-        store.index % tmaker_ctx.thread_array.count;
+    thread = allocator->path_info->ctx->trunk_maker_ctx->thread_array.threads +
+        allocator->path_info->store.index % allocator->path_info->
+        ctx->trunk_maker_ctx->thread_array.count;
     if ((task=(TrunkMakerTask *)fast_mblock_alloc_object(
                     &thread->task_allocator)) == NULL)
     {
@@ -503,7 +556,7 @@ int trunk_maker_allocate_ex(DATrunkAllocator *allocator, const bool urgent,
     task->allocator = allocator;
     task->notify.callback = callback;
     task->notify.arg = arg;
-    trunk_allocator_before_make_trunk(allocator, need_lock);
+    da_trunk_allocator_before_make_trunk(allocator, need_lock);
     fc_queue_push(&thread->queue, task);
     return 0;
 }

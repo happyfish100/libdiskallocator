@@ -18,32 +18,19 @@
 #define _SPACE_LOG_READER_H
 
 #include "fastcommon/uniq_skiplist.h"
-
-typedef struct da_space_log_reader {
-    struct fast_mblock_man record_allocator;
-    UniqSkiplistFactory factory;
-} DASpaceLogReader;
+#include "../../storage_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int da_space_log_reader_init(DASpaceLogReader *reader,
+    int da_space_log_reader_init(DASpaceLogReader *reader, DAContext *ctx,
             const int alloc_skiplist_once, const bool use_lock);
 
     void da_space_log_reader_destroy(DASpaceLogReader *reader);
 
-    int da_space_log_reader_load_ex(DASpaceLogReader *reader,
-            const uint32_t trunk_id, UniqSkiplist **skiplist,
-            const bool ignore_enoent);
-
-    static inline int da_space_log_reader_load(DASpaceLogReader *reader,
-            const uint32_t trunk_id, UniqSkiplist **skiplist)
-    {
-        const bool ignore_enoent = false;
-        return da_space_log_reader_load_ex(reader,
-                trunk_id, skiplist, ignore_enoent);
-    }
+    int da_space_log_reader_load(DASpaceLogReader *reader,
+            const uint64_t trunk_id, UniqSkiplist **skiplist);
 
     int da_space_log_reader_load_to_chain(DASpaceLogReader *reader,
             const char *space_log_filename, struct fc_queue_info *chain);

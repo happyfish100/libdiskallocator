@@ -26,7 +26,7 @@
 #include "store_path_index.h"
 #include "storage_config.h"
 
-static int load_one_path(DAStorageConfig *storage_cfg,
+static int load_one_path(DAContext *ctx, DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx, string_t *path)
 {
     int result;
@@ -37,16 +37,17 @@ static int load_one_path(DAStorageConfig *storage_cfg,
     path_str = iniGetStrValue(ini_ctx->section_name,
             "path", ini_ctx->context);
     if (path_str == NULL) {
-        path_str = DA_DATA_PATH_STR;
+        path_str = ctx->data.path.str;
     } else if (*path_str == '\0') {
-        logError("file: "__FILE__", line: %d, "
+        logError("file: "__FILE__", line: %d, %s "
                 "config file: %s, section: %s, item: path is empty",
-                __LINE__, ini_ctx->filename, ini_ctx->section_name);
+                __LINE__, ctx->module_name, ini_ctx->filename,
+                ini_ctx->section_name);
         return ENOENT;
     } else {
         if (*path_str != '/') {
             snprintf(tmp_filename, sizeof(tmp_filename),
-                    "%s/dummy.tmp", DA_DATA_PATH_STR);
+                    "%s/dummy.tmp", ctx->data.path.str);
             resolve_path(tmp_filename, path_str,
                     full_path, sizeof(full_path));
             path_str = full_path;
@@ -55,27 +56,28 @@ static int load_one_path(DAStorageConfig *storage_cfg,
 
     if (access(path_str, F_OK) == 0) {
         if (!isDir(path_str)) {
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "config file: %s, section: %s, item: path, "
-                    "%s is NOT a path", __LINE__, ini_ctx->filename,
-                    ini_ctx->section_name, path_str);
+                    "%s is NOT a path", __LINE__, ctx->module_name,
+                    ini_ctx->filename, ini_ctx->section_name, path_str);
             return EINVAL;
         }
     } else {
         result = errno != 0 ? errno : EPERM;
         if (result != ENOENT) {
-            logError("file: "__FILE__", line: %d, "
+            logError("file: "__FILE__", line: %d, %s "
                     "config file: %s, section: %s, access path %s fail, "
-                    "errno: %d, error info: %s", __LINE__, ini_ctx->filename,
-                    ini_ctx->section_name, path_str, result, STRERROR(result));
+                    "errno: %d, error info: %s", __LINE__, ctx->module_name,
+                    ini_ctx->filename, ini_ctx->section_name, path_str,
+                    result, STRERROR(result));
             return result;
         }
 
         if (mkdir(path_str, 0775) != 0) {
             result = errno != 0 ? errno : EPERM;
-            logError("file: "__FILE__", line: %d, "
-                    "mkdir %s fail, errno: %d, error info: %s",
-                    __LINE__, path_str, result, STRERROR(result));
+            logError("file: "__FILE__", line: %d, %s "
+                    "mkdir %s fail, errno: %d, error info: %s", __LINE__,
+                    ctx->module_name, path_str, result, STRERROR(result));
             return result;
         }
         
@@ -93,14 +95,15 @@ static int load_one_path(DAStorageConfig *storage_cfg,
     return 0;
 }
 
-static int storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
+static int da_storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
 {
     struct statvfs sbuf;
 
     if (statvfs(path_info->store.path.str, &sbuf) != 0) {
-        logError("file: "__FILE__", line: %d, "
-                "statvfs path %s fail, errno: %d, error info: %s.",
-                __LINE__, path_info->store.path.str, errno, STRERROR(errno));
+        logError("file: "__FILE__", line: %d, %s "
+                "statvfs path %s fail, errno: %d, error info: %s",
+                __LINE__, path_info->ctx->module_name, path_info->
+                store.path.str, errno, STRERROR(errno));
         return errno != 0 ? errno : EPERM;
     }
 
@@ -111,17 +114,17 @@ static int storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
     path_info->prealloc_space.value = path_info->space_stat.total *
         path_info->prealloc_space.ratio;
     path_info->prealloc_space.trunk_count = (path_info->prealloc_space.
-            value + DA_STORE_CFG.trunk_file_size - 1) / (int64_t)
-        DA_STORE_CFG.trunk_file_size;
+            value + path_info->ctx->storage.cfg.trunk_file_size - 1) /
+        (int64_t)path_info->ctx->storage.cfg.trunk_file_size;
     if (sbuf.f_blocks > 0) {
         path_info->space_stat.used_ratio = (double)(sbuf.f_blocks -
                 sbuf.f_bavail) / (double)sbuf.f_blocks;
     }
 
     /*
-    logInfo("used ratio: %.2f%%, prealloc_space.trunk_count: %d",
-            100 * path_info->space_stat.used_ratio,
-            path_info->prealloc_space.trunk_count);
+    logInfo("%s used ratio: %.2f%%, prealloc_space.trunk_count: %d",
+            path_info->ctx->module_name, 100 * path_info->space_stat.
+            used_ratio, path_info->prealloc_space.trunk_count);
             */
 
     __sync_bool_compare_and_swap(&path_info->space_stat.
@@ -129,7 +132,7 @@ static int storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
     return 0;
 }
 
-int storage_config_calc_path_avail_space(DAStoragePathInfo *path_info)
+int da_storage_config_calc_path_avail_space(DAStoragePathInfo *path_info)
 {
     struct statvfs sbuf;
     time_t last_stat_time;
@@ -143,9 +146,10 @@ int storage_config_calc_path_avail_space(DAStoragePathInfo *path_info)
             last_stat_time, last_stat_time, g_current_time);
 
     if (statvfs(path_info->store.path.str, &sbuf) != 0) {
-        logError("file: "__FILE__", line: %d, "
-                "statvfs path %s fail, errno: %d, error info: %s.",
-                __LINE__, path_info->store.path.str, errno, STRERROR(errno));
+        logError("file: "__FILE__", line: %d, %s "
+                "statvfs path %s fail, errno: %d, error info: %s",
+                __LINE__, path_info->ctx->module_name, path_info->
+                store.path.str, errno, STRERROR(errno));
         return errno != 0 ? errno : EPERM;
     }
 
@@ -158,7 +162,7 @@ int storage_config_calc_path_avail_space(DAStoragePathInfo *path_info)
     return 0;
 }
 
-void storage_config_stat_path_spaces(SFSpaceStat *ss)
+void da_storage_config_stat_path_spaces(DAContext *ctx, SFSpaceStat *ss)
 {
     DAStoragePathInfo **pp;
     DAStoragePathInfo **end;
@@ -166,13 +170,14 @@ void storage_config_stat_path_spaces(SFSpaceStat *ss)
     int64_t disk_avail;
 
     stat.total = stat.used = stat.avail = 0;
-    end = DA_STORE_CFG.paths_by_index.paths + DA_STORE_CFG.paths_by_index.count;
-    for (pp=DA_STORE_CFG.paths_by_index.paths; pp<end; pp++) {
+    end = ctx->storage.cfg.paths_by_index.paths +
+        ctx->storage.cfg.paths_by_index.count;
+    for (pp=ctx->storage.cfg.paths_by_index.paths; pp<end; pp++) {
         if (*pp == NULL) {
             continue;
         }
 
-        storage_config_calc_path_avail_space(*pp);
+        da_storage_config_calc_path_avail_space(*pp);
         disk_avail = (*pp)->space_stat.avail  - (*pp)->reserved_space.value;
         if (disk_avail < 0) {
             disk_avail = 0;
@@ -182,11 +187,11 @@ void storage_config_stat_path_spaces(SFSpaceStat *ss)
         stat.used += (*pp)->trunk_stat.used;
 
         /*
-        logInfo("trunk {total: %"PRId64" MB, avail: %"PRId64" MB, "
+        logInfo("%s trunk {total: %"PRId64" MB, avail: %"PRId64" MB, "
                 "used: %"PRId64" MB, reserved: %"PRId64" MB}, "
                 "disk_avail: %"PRId64" MB, sum {total: %"PRId64" MB, "
                 "avail: %"PRId64" MB, used: %"PRId64" MB}",
-                (*pp)->trunk_stat.total / (1024 * 1024),
+                ctx->module_name, (*pp)->trunk_stat.total / (1024 * 1024),
                 (*pp)->trunk_stat.avail / (1024 * 1024),
                 (*pp)->trunk_stat.used / (1024 * 1024),
                 (*pp)->reserved_space.value / (1024 * 1024),
@@ -198,9 +203,10 @@ void storage_config_stat_path_spaces(SFSpaceStat *ss)
     *ss = stat;
 }
 
-static int load_paths(DAStorageConfig *storage_cfg, IniFullContext *ini_ctx,
-        const char *section_name_prefix, const char *item_name,
-        DAStoragePathArray *parray, const bool required)
+static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
+        IniFullContext *ini_ctx, const char *section_name_prefix,
+        const char *item_name, DAStoragePathArray *parray,
+        const bool required)
 {
     int result;
     int count;
@@ -212,9 +218,9 @@ static int load_paths(DAStorageConfig *storage_cfg, IniFullContext *ini_ctx,
     count = iniGetIntValue(NULL, item_name, ini_ctx->context, 0);
     if (count <= 0) {
         if (required) {
-            logError("file: "__FILE__", line: %d, "
-                    "config file: %s, item \"%s\" "
-                    "not exist or invalid", __LINE__,
+            logError("file: "__FILE__", line: %d, %s "
+                    "config file: %s, item \"%s\" not exist "
+                    "or invalid", __LINE__, ctx->module_name,
                     ini_ctx->filename, item_name);
             return ENOENT;
         } else {
@@ -234,7 +240,8 @@ static int load_paths(DAStorageConfig *storage_cfg, IniFullContext *ini_ctx,
     ini_ctx->section_name = section_name;
     for (i=0; i<count; i++) {
         sprintf(section_name, "%s-%d", section_name_prefix, i + 1);
-        if ((result=load_one_path(storage_cfg, ini_ctx,
+        parray->paths[i].ctx = ctx;
+        if ((result=load_one_path(ctx, storage_cfg, ini_ctx,
                         &parray->paths[i].store.path)) != 0)
         {
             return result;
@@ -261,6 +268,21 @@ static int load_paths(DAStorageConfig *storage_cfg, IniFullContext *ini_ctx,
             parray->paths[i].read_io_depth = 64;
         }
 
+#ifdef OS_LINUX
+        parray->paths[i].read_direct_io = iniGetBoolValue(
+                section_name, "read_direct_io", ini_ctx->context,
+                storage_cfg->read_direct_io);
+        if (parray->paths[i].read_direct_io) {
+            ++ctx->storage.read_direct_io_paths;
+        }
+#else
+        parray->paths[i].read_direct_io = false;
+#endif
+
+        parray->paths[i].fsync_every_n_writes = iniGetIntValue(section_name,
+                "fsync_every_n_writes", ini_ctx->context,
+                storage_cfg->fsync_every_n_writes);
+
         if ((result=iniGetPercentValue(ini_ctx, "prealloc_space",
                         &parray->paths[i].prealloc_space.ratio,
                         storage_cfg->prealloc_space.ratio_per_path)) != 0)
@@ -275,7 +297,7 @@ static int load_paths(DAStorageConfig *storage_cfg, IniFullContext *ini_ctx,
             return result;
         }
 
-        if ((result=storage_config_calc_path_spaces(
+        if ((result=da_storage_config_calc_path_spaces(
                         parray->paths + i)) != 0)
         {
             return result;
@@ -338,7 +360,8 @@ static int load_aio_read_buffer_params(DAStorageConfig *storage_cfg,
 }
 #endif
 
-static int load_global_items(DAStorageConfig *storage_cfg,
+static int load_global_items(DAContext *ctx,
+        DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx)
 {
     int result;
@@ -372,6 +395,16 @@ static int load_global_items(DAStorageConfig *storage_cfg,
     if (storage_cfg->io_depth_per_read_thread <= 0) {
         storage_cfg->io_depth_per_read_thread = 64;
     }
+
+#ifdef OS_LINUX
+    storage_cfg->read_direct_io = iniGetBoolValue(NULL,
+            "read_direct_io", ini_ctx->context, false);
+#else
+    storage_cfg->read_direct_io = false;
+#endif
+
+    storage_cfg->fsync_every_n_writes = iniGetIntValue(NULL,
+            "fsync_every_n_writes", ini_ctx->context, 0);
 
     if ((result=iniGetPercentValue(ini_ctx, "prealloc_space_per_path",
                     &storage_cfg->prealloc_space.ratio_per_path, 0.05)) != 0)
@@ -407,15 +440,15 @@ static int load_global_items(DAStorageConfig *storage_cfg,
     storage_cfg->trunk_file_size = iniGetByteCorrectValue(ini_ctx,
             "trunk_file_size", DA_DEFAULT_TRUNK_FILE_SIZE,
             DA_TRUNK_FILE_MIN_SIZE, DA_TRUNK_FILE_MAX_SIZE);
-    if (storage_cfg->trunk_file_size <= DA_FILE_BLOCK_SIZE) {
-        logError("file: "__FILE__", line: %d, "
-                "trunk_file_size: %u is too small, "
-                "<= block size %d", __LINE__, storage_cfg->
-                trunk_file_size, DA_FILE_BLOCK_SIZE);
+    if (storage_cfg->trunk_file_size <= ctx->storage.file_block_size) {
+        logError("file: "__FILE__", line: %d, %s "
+                "trunk_file_size: %u is too small, which <= block size %d",
+                __LINE__, ctx->module_name, storage_cfg->trunk_file_size,
+                ctx->storage.file_block_size);
         return EINVAL;
     }
 
-    storage_cfg->discard_remain_space_size = iniGetInt64CorrectValue(
+    storage_cfg->discard_remain_space_size = iniGetByteCorrectValue(
             ini_ctx, "discard_remain_space_size",
             DA_DEFAULT_DISCARD_REMAIN_SPACE_SIZE,
             DA_DISCARD_REMAIN_SPACE_MIN_SIZE,
@@ -462,11 +495,12 @@ static int load_global_items(DAStorageConfig *storage_cfg,
     return 0;
 }
 
-static int load_from_config_file(DAStorageConfig *storage_cfg,
+static int load_from_config_file(DAContext *ctx,
+        DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx)
 {
     int result;
-    if ((result=load_global_items(storage_cfg, ini_ctx)) != 0) {
+    if ((result=load_global_items(ctx, storage_cfg, ini_ctx)) != 0) {
         return result;
     }
   
@@ -476,14 +510,14 @@ static int load_from_config_file(DAStorageConfig *storage_cfg,
     }
 #endif
 
-    if ((result=load_paths(storage_cfg, ini_ctx,
+    if ((result=load_paths(ctx, storage_cfg, ini_ctx,
                     "store-path", "store_path_count",
                     &storage_cfg->store_path, true)) != 0)
     {
         return result;
     }
 
-    if ((result=load_paths(storage_cfg, ini_ctx,
+    if ((result=load_paths(ctx, storage_cfg, ini_ctx,
                     "write-cache-path", "write_cache_path_count",
                     &storage_cfg->write_cache, false)) != 0)
     {
@@ -493,28 +527,30 @@ static int load_from_config_file(DAStorageConfig *storage_cfg,
     return 0;
 }
 
-static int load_path_indexes(DAStoragePathArray *parray, const char *caption,
-        int *change_count)
+static int load_path_indexes(DAContext *ctx, DAStoragePathArray *parray,
+        const char *caption, int *change_count)
 {
     int result;
     bool regenerated;
     DAStoragePathInfo *p;
     DAStoragePathInfo *end;
-    StorePathEntry *pentry;
+    DAStorePathEntry *pentry;
 
     end = parray->paths + parray->count;
     for (p=parray->paths; p<end; p++) {
-        pentry = store_path_index_get(p->store.path.str);
+        pentry = da_store_path_index_get(ctx, p->store.path.str);
         if (pentry != NULL) {
             p->store.index = pentry->index;
-            if ((result=store_path_check_mark(pentry, &regenerated)) != 0) {
+            if ((result=store_path_check_mark(ctx, pentry,
+                            &regenerated)) != 0)
+            {
                 return result;
             }
             if (regenerated) {
                 ++(*change_count);
             }
         } else {
-            if ((result=store_path_index_add(p->store.path.str,
+            if ((result=da_store_path_index_add(ctx, p->store.path.str,
                             &p->store.index)) != 0)
             {
                 return result;
@@ -523,7 +559,7 @@ static int load_path_indexes(DAStoragePathArray *parray, const char *caption,
         }
 
 #ifdef OS_LINUX
-        if (DA_READ_BY_DIRECT_IO && (result=get_path_block_size(
+        if (p->read_direct_io && (result=get_path_block_size(
                         p->store.path.str, &p->block_size)) != 0)
         {
             return result;
@@ -563,26 +599,26 @@ static int set_paths_by_index(DAStorageConfig *storage_cfg)
     return 0;
 }
 
-static int load_store_path_indexes(DAStorageConfig *storage_cfg,
-        const char *storage_filename)
+static int load_store_path_indexes(DAContext *ctx, DAStorageConfig *storage_cfg,
+        const char *storage_filename, const bool destroy_store_path_index)
 {
     int result;
     int old_count;
     int change_count;
 
-    if ((result=store_path_index_init()) != 0) {
+    if ((result=da_store_path_index_init(ctx)) != 0) {
         return result;
     }
 
-    old_count = store_path_index_count();
+    old_count = da_store_path_index_count(ctx);
     change_count = 0;
     do {
-        if ((result=load_path_indexes(&storage_cfg->write_cache,
+        if ((result=load_path_indexes(ctx, &storage_cfg->write_cache,
                         "write cache paths", &change_count)) != 0)
         {
             break;
         }
-        if ((result=load_path_indexes(&storage_cfg->store_path,
+        if ((result=load_path_indexes(ctx, &storage_cfg->store_path,
                         "store paths", &change_count)) != 0)
         {
             break;
@@ -590,10 +626,10 @@ static int load_store_path_indexes(DAStorageConfig *storage_cfg,
 
     } while (0);
 
-    storage_cfg->max_store_path_index = store_path_index_max();
+    storage_cfg->max_store_path_index = da_store_path_index_max(ctx);
     if (change_count > 0) {
         int r;
-        r = store_path_index_save();
+        r = da_store_path_index_save(ctx);
         if (result == 0) {
             result = r;
         }
@@ -604,15 +640,17 @@ static int load_store_path_indexes(DAStorageConfig *storage_cfg,
 
     logDebug("old_count: %d, new_count: %d, change_count: %d, "
             "max_store_path_index: %d", old_count,
-            store_path_index_count(), change_count,
+            da_store_path_index_count(ctx), change_count,
             storage_cfg->max_store_path_index);
 
-    store_path_index_destroy();
+    if (destroy_store_path_index) {
+        da_store_path_index_destroy(ctx);
+    }
     return result;
 }
 
-int storage_config_load(DAStorageConfig *storage_cfg,
-        const char *storage_filename)
+int da_storage_config_load(DAContext *ctx, DAStorageConfig *storage_cfg,
+        const char *storage_filename, const bool destroy_store_path_index)
 {
     IniContext ini_context;
     IniFullContext ini_ctx;
@@ -620,22 +658,24 @@ int storage_config_load(DAStorageConfig *storage_cfg,
 
     memset(storage_cfg, 0, sizeof(DAStorageConfig));
     if ((result=iniLoadFromFile(storage_filename, &ini_context)) != 0) {
-        logError("file: "__FILE__", line: %d, "
-                "load conf file \"%s\" fail, ret code: %d",
-                __LINE__, storage_filename, result);
+        logError("file: "__FILE__", line: %d, %s "
+                "load conf file \"%s\" fail, ret code: %d", __LINE__,
+                ctx->module_name, storage_filename, result);
         return result;
     }
 
     FAST_INI_SET_FULL_CTX_EX(ini_ctx, storage_filename, NULL, &ini_context);
-    result = load_from_config_file(storage_cfg, &ini_ctx);
+    result = load_from_config_file(ctx, storage_cfg, &ini_ctx);
     iniFreeContext(&ini_context);
     if (result == 0) {
-        result = load_store_path_indexes(storage_cfg, storage_filename);
+        result = load_store_path_indexes(ctx, storage_cfg,
+                storage_filename, destroy_store_path_index);
     }
     return result;
 }
 
-static void log_paths(DAStoragePathArray *parray, const char *caption)
+static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
+        const char *caption)
 {
     DAStoragePathInfo *p;
     DAStoragePathInfo *end;
@@ -647,7 +687,7 @@ static void log_paths(DAStoragePathArray *parray, const char *caption)
         return;
     }
 
-    logInfo("%s count: %d", caption, parray->count);
+    logInfo("%s %s count: %d", ctx->module_name, caption, parray->count);
     end = parray->paths + parray->count;
     for (p=parray->paths; p<end; p++) {
         long_to_comma_str(p->space_stat.avail /
@@ -658,6 +698,7 @@ static void log_paths(DAStoragePathArray *parray, const char *caption)
                 (1024 * 1024), prealloc_space_buff);
         logInfo("  path %d: %s, index: %d, write_threads: %d, "
                 "read_threads: %d, read_io_depth: %d, "
+                "read_direct_io: %d, fsync_every_n_writes: %d, "
                 "prealloc_space ratio: %.2f%%, "
                 "reserved_space ratio: %.2f%%, "
                 "avail_space: %s MB, prealloc_space: %s MB, "
@@ -670,6 +711,7 @@ static void log_paths(DAStoragePathArray *parray, const char *caption)
                 (int)(p - parray->paths + 1), p->store.path.str,
                 p->store.index, p->write_thread_count,
                 p->read_thread_count, p->read_io_depth,
+                p->read_direct_io, p->fsync_every_n_writes,
                 p->prealloc_space.ratio * 100.00,
                 p->reserved_space.ratio * 100.00,
                 avail_space_buff, prealloc_space_buff,
@@ -683,11 +725,12 @@ static void log_paths(DAStoragePathArray *parray, const char *caption)
     }
 }
 
-void storage_config_to_log(DAStorageConfig *storage_cfg)
+void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
 {
-    logInfo("storage config, write_threads_per_path: %d, "
+    logInfo("%s storage config, write_threads_per_path: %d, "
             "read_threads_per_path: %d, "
-            "io_depth_per_read_thread: %d, "
+            "io_depth_per_read_thread: %d, read_direct_io: %d, "
+            "fsync_every_n_writes: %d, "
             "fd_cache_capacity_per_read_thread: %d, "
             "fd_cache_capacity_per_write_thread: %d, "
             "prealloc_space: {ratio_per_path: %.2f%%, "
@@ -711,9 +754,12 @@ void storage_config_to_log(DAStorageConfig *storage_cfg)
 #else
             "never_reclaim_on_trunk_usage: %.2f%%",
 #endif
+            ctx->module_name,
             storage_cfg->write_threads_per_path,
             storage_cfg->read_threads_per_path,
             storage_cfg->io_depth_per_read_thread,
+            storage_cfg->read_direct_io,
+            storage_cfg->fsync_every_n_writes,
             storage_cfg->fd_cache_capacity_per_read_thread,
             storage_cfg->fd_cache_capacity_per_write_thread,
             storage_cfg->prealloc_space.ratio_per_path * 100.00,
@@ -745,6 +791,6 @@ void storage_config_to_log(DAStorageConfig *storage_cfg)
 #endif
             );
 
-    log_paths(&storage_cfg->write_cache, "write cache paths");
-    log_paths(&storage_cfg->store_path, "store paths");
+    log_paths(ctx, &storage_cfg->write_cache, "write cache paths");
+    log_paths(ctx, &storage_cfg->store_path, "store paths");
 }

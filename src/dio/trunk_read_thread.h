@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _TRUNK_READ_THREAD_H
-#define _TRUNK_READ_THREAD_H
+#ifndef _DA_TRUNK_READ_THREAD_H
+#define _DA_TRUNK_READ_THREAD_H
 
 #include "fastcommon/common_define.h"
 #ifdef OS_LINUX
@@ -30,7 +30,7 @@
 struct da_trunk_read_io_buffer;
 
 //Note: the record can NOT be persisted
-typedef void (*trunk_read_io_notify_func)(struct da_trunk_read_io_buffer
+typedef void (*da_trunk_read_io_notify_func)(struct da_trunk_read_io_buffer
         *record, const int result);
 
 typedef struct da_trunk_read_io_buffer {
@@ -43,7 +43,7 @@ typedef struct da_trunk_read_io_buffer {
 #endif
 
     struct {
-        trunk_read_io_notify_func func;
+        da_trunk_read_io_notify_func func;
         void *arg;
     } notify;
 
@@ -59,32 +59,37 @@ typedef struct da_synchronized_read_context {
 extern "C" {
 #endif
 
-    int trunk_read_thread_init();
-    void trunk_read_thread_terminate();
-
-    static inline int da_init_op_ctx(DASliceOpContext *op_ctx)
-    {
-        const int alloc_size = 64 * 1024;
-
-        op_ctx->storage = NULL;
+    int da_trunk_read_thread_init(DAContext *ctx);
+    void da_trunk_read_thread_terminate(DAContext *ctx);
 
 #ifdef OS_LINUX
-        if (DA_READ_BY_DIRECT_IO) {
-            op_ctx->rb.aio_buffer = NULL;
-            return 0;
+    static inline DAAlignedReadBuffer *da_aligned_buffer_new(
+            DAContext *ctx, const short pindex, const int offset,
+            const int length, const int read_bytes)
+    {
+        DAAlignedReadBuffer *aligned_buffer;
+
+        aligned_buffer = da_read_buffer_pool_alloc(ctx, pindex, read_bytes);
+        if (aligned_buffer == NULL) {
+            return NULL;
         }
+
+        aligned_buffer->offset = offset;
+        aligned_buffer->length = length;
+        aligned_buffer->read_bytes = read_bytes;
+        return aligned_buffer;
+    }
 #endif
 
-        return fc_init_buffer(&op_ctx->rb.buffer, alloc_size);
-    }
-
-    int trunk_read_thread_push(const DATrunkSpaceInfo *space,
+    /* MUST set rb->type in Linux before call this function */
+    int da_trunk_read_thread_push(DAContext *ctx,
+            const DATrunkSpaceInfo *space,
             const int read_bytes, DATrunkReadBuffer *rb,
-            trunk_read_io_notify_func notify_func, void *notify_arg);
+            da_trunk_read_io_notify_func notify_func, void *notify_arg);
 
-    int da_init_read_context(DASynchronizedReadContext *ctx);
+    int da_init_read_context(DASynchronizedReadContext *rctx);
 
-    int da_slice_read(DASynchronizedReadContext *ctx);
+    int da_slice_read(DAContext *ctx, DASynchronizedReadContext *rctx);
 
 #ifdef __cplusplus
 }

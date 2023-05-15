@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _TRUNK_RECLAIM_H
-#define _TRUNK_RECLAIM_H
+#ifndef _DA_TRUNK_RECLAIM_H
+#define _DA_TRUNK_RECLAIM_H
 
 #include "fastcommon/uniq_skiplist.h"
 #include "../storage_config.h"
@@ -23,38 +23,52 @@
 #include "../dio/trunk_read_thread.h"
 #include "trunk_allocator.h"
 
-typedef struct trunk_reclaim_block_info {
+typedef struct da_trunk_reclaim_block_info {
     DATrunkSpaceLogRecord *head;
     int total_size;
-} TrunkReclaimBlockInfo;
+} DATrunkReclaimBlockInfo;
 
-typedef struct trunk_reclaim_block_array {
+typedef struct da_trunk_reclaim_block_array {
     int count;
     int alloc;
-    TrunkReclaimBlockInfo *blocks;
-} TrunkReclaimBlockArray;
+    DATrunkReclaimBlockInfo *blocks;
+} DATrunkReclaimBlockArray;
 
-typedef struct trunk_reclaim_context {
+typedef struct da_trunk_reclaim_space_alloc_info {
+    DATrunkFileInfo *trunk;
+    int alloc_count;
+} DATrunkReclaimSpaceAllocInfo;
+
+typedef struct da_trunk_reclaim_space_alloc_array {
+    int count;
+    int alloc;
+    DATrunkReclaimSpaceAllocInfo *spaces;
+} DATrunkReclaimSpaceAllocArray;
+
+typedef struct da_trunk_reclaim_context {
     DASpaceLogReader reader;
     UniqSkiplist *skiplist;
-    TrunkReclaimBlockArray barray;
+    DATrunkReclaimBlockArray barray;
+    DATrunkReclaimSpaceAllocArray sarray;
     DASynchronizedReadContext read_ctx;
     struct {
         int total;
         int skip;   //do NOT need migrate
         int ignore; //object/inode not exist
     } slice_counts;
+    int64_t migrage_bytes;
     SFSynchronizeContext log_notify;  //for binlog
-} TrunkReclaimContext;
+    DAContext *ctx;
+} DATrunkReclaimContext;
 
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-    int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx);
+    int da_trunk_reclaim_init_ctx(DATrunkReclaimContext *rctx, DAContext *ctx);
 
-    int trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
-            TrunkReclaimContext *rctx);
+    int da_trunk_reclaim(DATrunkReclaimContext *rctx, DATrunkAllocator
+            *allocator, DATrunkFileInfo *trunk);
 
 #ifdef __cplusplus
 }

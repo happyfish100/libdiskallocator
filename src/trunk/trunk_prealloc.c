@@ -53,9 +53,10 @@ typedef struct trunk_prealloc_thread_arg {
     int result;
     bool is_new_trunk;
     pthread_lock_cond_pair_t lcp; //for allocate done notify
+    struct da_trunk_prealloc_context *prealloc_ctx;
 } TrunkPreallocThreadArg;
 
-typedef struct trunk_prealloc_context {
+typedef struct da_trunk_prealloc_context {
     TrunkPreallocatorArray preallocator_array;
     pthread_lock_cond_pair_t lcp; //for task alloc notify
     struct fast_mblock_man task_allocator;
@@ -65,9 +66,8 @@ typedef struct trunk_prealloc_context {
     time_t prealloc_end_time;
     bool in_progress;
     volatile bool finished;
-} TrunkPreallocContext;
-
-static TrunkPreallocContext prealloc_ctx;
+    DAContext *ctx;
+} DATrunkPreallocContext;
 
 static void allocate_done_callback(DATrunkAllocator *allocator,
         const int result, const bool is_new_trunk, void *arg)
@@ -89,20 +89,21 @@ static void prealloc_thread_pool_run(void *arg, void *thread_data)
     int result;
 
     thread_arg = (TrunkPreallocThreadArg *)arg;
-    while (!prealloc_ctx.finished) {
-        task = (TrunkPreallocTask *)fc_queue_try_pop(&prealloc_ctx.queue);
+    while (!thread_arg->prealloc_ctx->finished) {
+        task = fc_queue_try_pop(&thread_arg->prealloc_ctx->queue);
         if (task == NULL) {
             sleep(1);
             continue;
         }
 
         /*
-        logInfo("prealloc task: %p, store path: %s", task,
-                task->preallocator->allocator->path_info->store.path.str);
+        logInfo("%s prealloc task: %p, store path: %s", task->preallocator->
+                allocator->path_info->ctx->module_name, task, task->
+                preallocator->allocator->path_info->store.path.str);
                 */
 
         thread_arg->is_new_trunk = false;
-        if ((result=trunk_maker_allocate_ex(task->preallocator->allocator,
+        if ((result=da_trunk_maker_allocate_ex(task->preallocator->allocator,
                         false, true, allocate_done_callback, thread_arg)) == 0)
         {
             PTHREAD_MUTEX_LOCK(&thread_arg->lcp.lock);
@@ -121,8 +122,10 @@ static void prealloc_thread_pool_run(void *arg, void *thread_data)
         }
 
         /*
-        logInfo("task: %p, store path: %s, prealloc result: %d", task,
-                task->preallocator->allocator->path_info->store.path.str, result);
+        logInfo("%s task: %p, store path: %s, prealloc result: %d", task->
+                preallocator->allocator->path_info->ctx->module_name, task,
+                task->preallocator->allocator->path_info->store.path.str,
+                result);
                 */
 
         if (thread_arg->is_new_trunk) {
@@ -134,14 +137,14 @@ static void prealloc_thread_pool_run(void *arg, void *thread_data)
             __sync_sub_and_fetch(&task->preallocator->stat.dealings, 1);
         }
 
-        fast_mblock_free_object(&prealloc_ctx.task_allocator, task);
-        PTHREAD_MUTEX_LOCK(&prealloc_ctx.lcp.lock);
-        pthread_cond_signal(&prealloc_ctx.lcp.cond);
-        PTHREAD_MUTEX_UNLOCK(&prealloc_ctx.lcp.lock);
+        fast_mblock_free_object(&thread_arg->prealloc_ctx->task_allocator, task);
+        PTHREAD_MUTEX_LOCK(&thread_arg->prealloc_ctx->lcp.lock);
+        pthread_cond_signal(&thread_arg->prealloc_ctx->lcp.cond);
+        PTHREAD_MUTEX_UNLOCK(&thread_arg->prealloc_ctx->lcp.lock);
     }
 }
 
-static int init_preallocator_array(
+static int init_preallocator_array(DAContext *ctx,
         TrunkPreallocatorArray *preallocator_array)
 {
     int bytes;
@@ -149,19 +152,20 @@ static int init_preallocator_array(
     DATrunkAllocator **end;
     TrunkPreallocatorInfo *preallocator;
 
-    bytes = sizeof(TrunkPreallocatorInfo) *
-        g_allocator_mgr->allocator_ptr_array.count;
-    preallocator_array->preallocators = (TrunkPreallocatorInfo *)
-        fc_malloc(bytes);
+    bytes = sizeof(TrunkPreallocatorInfo) * ctx->
+        store_allocator_mgr->allocator_ptr_array.count;
+    preallocator_array->preallocators = fc_malloc(bytes);
     if (preallocator_array->preallocators == NULL) {
         return ENOMEM;
     }
     memset(preallocator_array->preallocators, 0, bytes);
 
     preallocator = preallocator_array->preallocators;
-    end = g_allocator_mgr->allocator_ptr_array.allocators +
-        g_allocator_mgr->allocator_ptr_array.count;
-    for (pp=g_allocator_mgr->allocator_ptr_array.allocators; pp<end; pp++) {
+    end = ctx->store_allocator_mgr->allocator_ptr_array.allocators +
+        ctx->store_allocator_mgr->allocator_ptr_array.count;
+    for (pp=ctx->store_allocator_mgr->allocator_ptr_array.
+            allocators; pp<end; pp++)
+    {
         if (*pp != NULL) {
             preallocator->allocator = *pp;
             preallocator++;
@@ -171,7 +175,10 @@ static int init_preallocator_array(
     preallocator_array->count = preallocator -
         preallocator_array->preallocators;
 
-    //logInfo("preallocator_array->count: %d", preallocator_array->count);
+    /*
+    logInfo("%s preallocator_array->count: %d", ctx->module_name,
+            preallocator_array->count);
+            */
     return 0;
 }
 
@@ -187,7 +194,7 @@ static TrunkPreallocatorInfo *make_preallocator_chain(
     head = previous = NULL;
     end = preallocator_array->preallocators + preallocator_array->count;
     for (p=preallocator_array->preallocators; p<end; p++) {
-        if (trunk_allocator_get_freelist_count(p->allocator) <
+        if (da_trunk_allocator_get_freelist_count(p->allocator) <
                 p->allocator->path_info->prealloc_space.trunk_count)
         {
             p->stat.total = 0;
@@ -211,7 +218,7 @@ static TrunkPreallocatorInfo *make_preallocator_chain(
     return head;
 }
 
-static void log_and_reset_preallocators(
+static void log_and_reset_preallocators(DAContext *ctx,
         TrunkPreallocatorArray *preallocator_array)
 {
     TrunkPreallocatorInfo *p;
@@ -220,27 +227,28 @@ static void log_and_reset_preallocators(
     end = preallocator_array->preallocators + preallocator_array->count;
     for (p=preallocator_array->preallocators; p<end; p++) {
         if (p->stat.total > 0) {
-            logInfo("file: "__FILE__", line: %d, "
+            logInfo("file: "__FILE__", line: %d, %s "
                     "store path: %s, prealloc trunk result => "
                     "{total : %d, success: %d}, trunk type => "
-                    "{create: %d, reclaim: %d}", __LINE__,
-                    p->allocator->path_info->store.path.str,
-                    p->stat.total, p->stat.success, p->stat.create,
+                    "{create: %d, reclaim: %d}", __LINE__, ctx->module_name,
+                    p->allocator->path_info->store.path.str, p->stat.total,
+                    p->stat.success, p->stat.create,
                     p->stat.total - p->stat.create);
         }
     }
 }
 
-static int prealloc_trunk(TrunkPreallocatorInfo *preallocator)
+static int prealloc_trunk(DATrunkPreallocContext *prealloc_ctx,
+        TrunkPreallocatorInfo *preallocator)
 {
     TrunkPreallocTask *task;
 
     while ((task=(TrunkPreallocTask *)fast_mblock_alloc_object(
-                    &prealloc_ctx.task_allocator)) == NULL &&
+                    &prealloc_ctx->task_allocator)) == NULL &&
             SF_G_CONTINUE_FLAG && g_current_time <
-            prealloc_ctx.prealloc_end_time)
+            prealloc_ctx->prealloc_end_time)
     {
-        lcp_timedwait_sec(&prealloc_ctx.lcp, 60);
+        lcp_timedwait_sec(&prealloc_ctx->lcp, 60);
     }
 
     if (task == NULL) {
@@ -250,11 +258,13 @@ static int prealloc_trunk(TrunkPreallocatorInfo *preallocator)
     task->preallocator = preallocator;
     preallocator->stat.total++;
     __sync_add_and_fetch(&preallocator->stat.dealings, 1);
-    fc_queue_push_silence(&prealloc_ctx.queue, task);
+    fc_queue_push_silence(&prealloc_ctx->queue, task);
     return 0;
 }
 
-static TrunkPreallocatorInfo *prealloc_trunks(TrunkPreallocatorInfo *head)
+static TrunkPreallocatorInfo *prealloc_trunks(
+        DATrunkPreallocContext *prealloc_ctx,
+        TrunkPreallocatorInfo *head)
 {
     TrunkPreallocatorInfo *p;
     TrunkPreallocatorInfo *previous;
@@ -262,11 +272,11 @@ static TrunkPreallocatorInfo *prealloc_trunks(TrunkPreallocatorInfo *head)
     p = head;
     head = previous = NULL;
     while (p != NULL && SF_G_CONTINUE_FLAG) {
-        if (trunk_allocator_get_freelist_count(p->allocator) +
+        if (da_trunk_allocator_get_freelist_count(p->allocator) +
                 __sync_add_and_fetch(&p->stat.dealings, 0) <
                 p->allocator->path_info->prealloc_space.trunk_count)
         {
-            if (prealloc_trunk(p) != 0) {
+            if (prealloc_trunk(prealloc_ctx, p) != 0) {
                 break;
             }
 
@@ -288,7 +298,7 @@ static TrunkPreallocatorInfo *prealloc_trunks(TrunkPreallocatorInfo *head)
     return head;
 }
 
-static int do_prealloc_trunks()
+static int do_prealloc_trunks(DATrunkPreallocContext *prealloc_ctx)
 {
     TrunkPreallocatorInfo *head;
     struct tm tm_end;
@@ -299,101 +309,116 @@ static int do_prealloc_trunks()
 
     current_time = g_current_time;
     localtime_r(&current_time, &tm_end);
-    tm_end.tm_hour = DA_STORE_CFG.prealloc_space.end_time.hour;
-    tm_end.tm_min = DA_STORE_CFG.prealloc_space.end_time.minute;
-    prealloc_ctx.prealloc_end_time = mktime(&tm_end);
-    if (g_current_time > prealloc_ctx.prealloc_end_time) {
-        logWarning("file: "__FILE__", line: %d, "
+    tm_end.tm_hour = prealloc_ctx->ctx->storage.
+        cfg.prealloc_space.end_time.hour;
+    tm_end.tm_min = prealloc_ctx->ctx->storage.
+        cfg.prealloc_space.end_time.minute;
+    prealloc_ctx->prealloc_end_time = mktime(&tm_end);
+    if (g_current_time > prealloc_ctx->prealloc_end_time) {
+        logWarning("file: "__FILE__", line: %d, %s "
                 "current time: %ld > end time: %ld, skip prealloc trunks!",
-                __LINE__, (long)g_current_time,
-                (long)prealloc_ctx.prealloc_end_time);
+                __LINE__, prealloc_ctx->ctx->module_name, (long)g_current_time,
+                (long)prealloc_ctx->prealloc_end_time);
         return 0;
     }
 
-    if ((head=make_preallocator_chain(&prealloc_ctx.
+    if ((head=make_preallocator_chain(&prealloc_ctx->
                     preallocator_array, &count)) == NULL)
     {
-        logInfo("file: "__FILE__", line: %d, "
+        logInfo("file: "__FILE__", line: %d, %s "
                 "do NOT need prealloc trunks because "
-                "all freelists are enough", __LINE__);
+                "all freelists are enough", __LINE__,
+                prealloc_ctx->ctx->module_name);
         return 0;
     }
 
-    thread_count = FC_MIN(count, DA_STORE_CFG.trunk_prealloc_threads);
-    prealloc_ctx.finished = false;
+    thread_count = FC_MIN(count, prealloc_ctx->ctx->
+            storage.cfg.trunk_prealloc_threads);
+    prealloc_ctx->finished = false;
     for (i=0; i<thread_count; i++) {
-        fc_thread_pool_run(&prealloc_ctx.thread_pool,
-                prealloc_thread_pool_run, prealloc_ctx.thread_args + i);
+        fc_thread_pool_run(&prealloc_ctx->thread_pool,
+                prealloc_thread_pool_run, prealloc_ctx->thread_args + i);
     }
 
     do {
-        head = prealloc_trunks(head);
+        head = prealloc_trunks(prealloc_ctx, head);
     } while (head != NULL && SF_G_CONTINUE_FLAG &&
-            g_current_time < prealloc_ctx.prealloc_end_time);
+            g_current_time < prealloc_ctx->prealloc_end_time);
 
     if (SF_G_CONTINUE_FLAG && g_current_time <
-                prealloc_ctx.prealloc_end_time)
+                prealloc_ctx->prealloc_end_time)
     {
         i = 0;
-        while (!fc_queue_empty(&prealloc_ctx.queue) && i++ < 300) {
+        while (!fc_queue_empty(&prealloc_ctx->queue) && i++ < 300) {
             sleep(1);
         }
     }
-    prealloc_ctx.finished = true;
+    prealloc_ctx->finished = true;
 
     i = 0;
-    while (fc_thread_pool_dealing_count(&prealloc_ctx.thread_pool) > 0) {
+    while (fc_thread_pool_dealing_count(&prealloc_ctx->thread_pool) > 0) {
         sleep(1);
     }
 
-    log_and_reset_preallocators(&prealloc_ctx.preallocator_array);
+    log_and_reset_preallocators(prealloc_ctx->ctx,
+            &prealloc_ctx->preallocator_array);
     return 0;
 }
 
 static int prealloc_trunks_func(void *args)
 {
+    DATrunkPreallocContext *prealloc_ctx;
     int result;
 
-    if (prealloc_ctx.in_progress) {
-        logWarning("file: "__FILE__", line: %d, "
-                "prealloc trunks in progress!", __LINE__);
+    prealloc_ctx = args;
+    if (prealloc_ctx->in_progress) {
+        logWarning("file: "__FILE__", line: %d, %s "
+                "prealloc trunks in progress!", __LINE__,
+                prealloc_ctx->ctx->module_name);
         return EINPROGRESS;
     }
 
-    prealloc_ctx.in_progress = true;
-    result = do_prealloc_trunks();
-    prealloc_ctx.in_progress = false;
+    prealloc_ctx->in_progress = true;
+    result = do_prealloc_trunks(prealloc_ctx);
+    prealloc_ctx->in_progress = false;
     return result;
 }
 
-static int trunk_prealloc_setup_schedule()
+static int trunk_prealloc_setup_schedule(DAContext *ctx)
 {
     ScheduleArray scheduleArray;
     ScheduleEntry scheduleEntry;
 
     INIT_SCHEDULE_ENTRY_EX1(scheduleEntry, sched_generate_next_id(),
-            DA_STORE_CFG.prealloc_space.start_time, 86400,
-            prealloc_trunks_func, NULL, true);
+            ctx->storage.cfg.prealloc_space.start_time, 86400,
+            prealloc_trunks_func, ctx->trunk_prealloc_ctx, true);
     scheduleArray.entries = &scheduleEntry;
     scheduleArray.count = 1;
     return sched_add_entries(&scheduleArray);
 }
 
-static int init_thread_args()
+static int init_thread_args(DAContext *ctx)
 {
+    int result;
+    int bytes;
     TrunkPreallocThreadArg *p;
     TrunkPreallocThreadArg *end;
-    int result;
 
-    prealloc_ctx.thread_args = (TrunkPreallocThreadArg *)fc_malloc(
-            sizeof(TrunkPreallocThreadArg) *
-            DA_STORE_CFG.trunk_prealloc_threads);
-    if (prealloc_ctx.thread_args == NULL) {
+    bytes = sizeof(DATrunkPreallocContext) + sizeof(TrunkPreallocThreadArg) *
+        ctx->storage.cfg.trunk_prealloc_threads;
+    ctx->trunk_prealloc_ctx = fc_malloc(bytes);
+    if (ctx->trunk_prealloc_ctx == NULL) {
         return ENOMEM;
     }
+    memset(ctx->trunk_prealloc_ctx, 0, bytes);
+    ctx->trunk_prealloc_ctx->thread_args = (TrunkPreallocThreadArg *)
+        (ctx->trunk_prealloc_ctx + 1);
+    ctx->trunk_prealloc_ctx->ctx = ctx;
 
-    end = prealloc_ctx.thread_args + DA_STORE_CFG.trunk_prealloc_threads;
-    for (p=prealloc_ctx.thread_args; p<end; p++) {
+    end = ctx->trunk_prealloc_ctx->thread_args +
+        ctx->storage.cfg.trunk_prealloc_threads;
+    for (p=ctx->trunk_prealloc_ctx->thread_args; p<end; p++) {
+        p->prealloc_ctx = ctx->trunk_prealloc_ctx;
         p->result = -1;
         if ((result=init_pthread_lock_cond_pair(&p->lcp)) != 0) {
             return result;
@@ -403,7 +428,7 @@ static int init_thread_args()
     return 0;
 }
 
-int trunk_prealloc_init()
+int da_trunk_prealloc_init(DAContext *ctx)
 {
     int result;
     int limit;
@@ -412,39 +437,42 @@ int trunk_prealloc_init()
     int alloc_elements_once;
     int alloc_elements_limit;
 
-    alloc_elements_once = DA_STORE_CFG.trunk_prealloc_threads * 2;
+    if ((result=init_thread_args(ctx)) != 0) {
+        return result;
+    }
+
+    alloc_elements_once = ctx->storage.cfg.trunk_prealloc_threads * 2;
     alloc_elements_limit = alloc_elements_once;
-    if ((result=fast_mblock_init_ex1(&prealloc_ctx.task_allocator,
+    if ((result=fast_mblock_init_ex1(&ctx->trunk_prealloc_ctx->task_allocator,
                     "prealloc_task", sizeof(TrunkPreallocTask),
                     alloc_elements_once, alloc_elements_limit,
                     NULL, NULL, true)) != 0)
     {
         return result;
     }
-    prealloc_ctx.task_allocator.alloc_elements.exceed_log_level = LOG_NOTHING;
+    ctx->trunk_prealloc_ctx->task_allocator.alloc_elements.
+        exceed_log_level = LOG_NOTHING;
 
-    if ((result=init_pthread_lock_cond_pair(&prealloc_ctx.lcp)) != 0) {
+    if ((result=init_pthread_lock_cond_pair(&ctx->
+                    trunk_prealloc_ctx->lcp)) != 0)
+    {
         return result;
     }
 
-    if ((result=fc_queue_init(&prealloc_ctx.queue, (long)
+    if ((result=fc_queue_init(&ctx->trunk_prealloc_ctx->queue, (long)
                     (&((TrunkPreallocTask *)NULL)->next))) != 0)
     {
         return result;
     }
 
-    if ((result=init_thread_args()) != 0) {
-        return result;
-    }
-
-    if ((result=init_preallocator_array(&prealloc_ctx.
+    if ((result=init_preallocator_array(ctx, &ctx->trunk_prealloc_ctx->
                     preallocator_array)) != 0)
     {
         return result;
     }
 
-    limit = DA_STORE_CFG.trunk_prealloc_threads;
-    if ((result=fc_thread_pool_init(&prealloc_ctx.thread_pool,
+    limit = ctx->storage.cfg.trunk_prealloc_threads;
+    if ((result=fc_thread_pool_init(&ctx->trunk_prealloc_ctx->thread_pool,
                     "prealloc", limit, SF_G_THREAD_STACK_SIZE,
                     max_idle_time, min_idle_count,
                     (bool *)&SF_G_CONTINUE_FLAG)) != 0)
@@ -452,5 +480,5 @@ int trunk_prealloc_init()
         return result;
     }
 
-    return trunk_prealloc_setup_schedule();
+    return trunk_prealloc_setup_schedule(ctx);
 }

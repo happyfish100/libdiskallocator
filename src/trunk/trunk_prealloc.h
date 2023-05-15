@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _TRUNK_RPEALLOC_H
-#define _TRUNK_RPEALLOC_H
+#ifndef _DA_TRUNK_RPEALLOC_H
+#define _DA_TRUNK_RPEALLOC_H
 
 #include "../storage_config.h"
 #include "trunk_allocator.h"
@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-    int trunk_prealloc_init();
+    int da_trunk_prealloc_init(DAContext *ctx);
 
 #ifdef __cplusplus
 }

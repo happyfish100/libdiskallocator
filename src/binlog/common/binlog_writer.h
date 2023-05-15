@@ -24,7 +24,7 @@
 #include "../common/binlog_types.h"
 
 typedef struct {
-    DABinlogIdTypePair key;
+    uint64_t id;
     char buff[16 * 1024];
     char *current;
     char *buff_end;
@@ -37,8 +37,7 @@ extern "C" {
 
 static inline void da_binlog_writer_cache_init(DABinlogWriterCache *cache)
 {
-    cache->key.id = 0;
-    cache->key.type = 0;
+    cache->id = 0;
     cache->fd = -1;
     cache->current = cache->buff;
     cache->buff_end = cache->buff + sizeof(cache->buff);
@@ -49,17 +48,17 @@ int da_binlog_writer_cache_write(DABinlogWriterCache *cache, const bool flush);
 
 int da_binlog_writer_global_init();
 
-int da_binlog_writer_init(DABinlogWriter *writer, const int type,
+int da_binlog_writer_init(DABinlogWriter *writer,
         const int max_record_size);
 
 int da_binlog_writer_start();
 
-int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t binlog_id,
+int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t id,
         const BufferInfo *buffer);
 
 int da_binlog_writer_synchronize(DABinlogWriter *writer);
 
-int da_binlog_writer_shrink(DABinlogWriter *writer, const int64_t id,
+int da_binlog_writer_shrink(DABinlogWriter *writer, const uint64_t id,
         const time_t last_shrink_time, void *args);
 
 int da_binlog_writer_clear_fd_cache();

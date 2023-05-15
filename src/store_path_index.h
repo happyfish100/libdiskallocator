@@ -14,37 +14,34 @@
  */
 
 
-#ifndef _STORE_PATH_INDEX_H
-#define _STORE_PATH_INDEX_H
+#ifndef _DA_STORE_PATH_INDEX_H
+#define _DA_STORE_PATH_INDEX_H
 
 #include <limits.h>
 #include "storage_config.h"
-
-typedef struct {
-    int index;
-    char path[PATH_MAX];
-    char mark[64];
-} StorePathEntry;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int store_path_index_init();
+    int da_store_path_index_init(DAContext *ctx);
 
-    void store_path_index_destroy();
+    void da_store_path_index_destroy(DAContext *ctx);
 
-    int store_path_index_count();
+    int da_store_path_index_count(DAContext *ctx);
 
-    int store_path_index_max();
+    int da_store_path_index_max(DAContext *ctx);
 
-    int store_path_check_mark(StorePathEntry *pentry, bool *regenerated);
+    int store_path_check_mark(DAContext *ctx, DAStorePathEntry *pentry,
+            bool *regenerated);
 
-    StorePathEntry *store_path_index_get(const char *path);
+    DAStorePathEntry *da_store_path_index_get(
+            DAContext *ctx, const char *path);
 
-    int store_path_index_add(const char *path, int *index);
+    int da_store_path_index_add(DAContext *ctx,
+            const char *path, int *index);
 
-    int store_path_index_save();
+    int da_store_path_index_save(DAContext *ctx);
 
 #ifdef __cplusplus
 }

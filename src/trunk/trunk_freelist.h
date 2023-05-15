@@ -14,8 +14,8 @@
  */
 
 
-#ifndef _TRUNK_FREELIST_H
-#define _TRUNK_FREELIST_H
+#ifndef _DA_TRUNK_FREELIST_H
+#define _DA_TRUNK_FREELIST_H
 
 #include "../storage_types.h"
 
@@ -28,21 +28,27 @@ typedef struct {
     pthread_lock_cond_pair_t lcp;  //for lock and notify
 } DATrunkFreelist;
 
+#define da_trunk_freelist_decrease_writing_count(trunk_info) \
+    da_trunk_freelist_decrease_writing_count_ex(trunk_info, 1)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int trunk_freelist_init(DATrunkFreelist *freelist);
+    int da_trunk_freelist_init(DATrunkFreelist *freelist);
 
-    void trunk_freelist_keep_water_mark(struct da_trunk_allocator
+    void da_trunk_freelist_keep_water_mark(struct da_trunk_allocator
             *allocator);
 
-    void trunk_freelist_add(DATrunkFreelist *freelist,
+    void da_trunk_freelist_add(DATrunkFreelist *freelist,
             DATrunkFileInfo *trunk_info);
 
-    int trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
+    int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
             DATrunkFreelist *freelist, const uint64_t blk_hc, const int size,
-            DATrunkSpaceInfo *spaces, int *count, const bool is_normal);
+            DATrunkSpaceWithVersion *spaces, int *count, const bool is_normal);
+
+    void da_trunk_freelist_decrease_writing_count_ex(DATrunkFileInfo *trunk,
+            const int dec_count);
 
 #ifdef __cplusplus
 }

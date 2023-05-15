@@ -14,14 +14,15 @@
  */
 
 
-#ifndef _READ_BUFFER_POOL_H
-#define _READ_BUFFER_POOL_H
+#ifndef _DA_READ_BUFFER_POOL_H
+#define _DA_READ_BUFFER_POOL_H
 
 #include "fastcommon/fc_list.h"
 #include "sf/sf_types.h"
 #include "sf/sf_global.h"
 
-typedef struct aligned_read_buffer {
+struct da_context;
+typedef struct da_aligned_read_buffer {
     char *buff;  //aligned by device block size
     int offset;  //data offset
     int length;  //data length
@@ -33,24 +34,26 @@ typedef struct aligned_read_buffer {
     } indexes;
     time_t last_access_time;
     struct fc_list_head dlink;  //for freelist
-} AlignedReadBuffer;
+} DAAlignedReadBuffer;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    int read_buffer_pool_init(const int path_count,
+    int da_read_buffer_pool_init(struct da_context *ctx, const int path_count,
             const SFMemoryWatermark *watermark);
 
-    int read_buffer_pool_start(const int max_idle_time,
-            const int reclaim_interval);
+    int da_read_buffer_pool_start(struct da_context *ctx,
+            const int max_idle_time, const int reclaim_interval);
 
-    int read_buffer_pool_create(const short path_index, const int block_size);
+    int da_read_buffer_pool_create(struct da_context *ctx,
+            const short path_index, const int block_size);
 
-    AlignedReadBuffer *read_buffer_pool_alloc(
+    DAAlignedReadBuffer *da_read_buffer_pool_alloc(struct da_context *ctx,
             const short path_index, const int size);
 
-    void read_buffer_pool_free(AlignedReadBuffer *buffer);
+    void da_read_buffer_pool_free(struct da_context *ctx,
+            DAAlignedReadBuffer *buffer);
 
 #ifdef __cplusplus
 }

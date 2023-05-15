@@ -15,38 +15,38 @@
 
 //trunk_index.h
 
-#ifndef _TRUNK_INDEX_H_
-#define _TRUNK_INDEX_H_
+#ifndef _DA_TRUNK_INDEX_H_
+#define _DA_TRUNK_INDEX_H_
 
-#include "sf/sf_binlog_index.h"
 #include "../../storage_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-extern SFBinlogIndexContext g_trunk_index_ctx;
+void da_trunk_index_init(DAContext *ctx);
 
-void trunk_index_init();
+const char *da_trunk_index_get_filename(DAContext *ctx,
+        char *filename, const int size);
 
-static inline int trunk_index_load()
+static inline int da_trunk_index_load(DAContext *ctx)
 {
-    return sf_binlog_index_load(&g_trunk_index_ctx);
+    return sf_binlog_index_load(&ctx->trunk_index_ctx);
 }
 
-static inline int trunk_index_save()
+static inline int da_trunk_index_save(DAContext *ctx)
 {
-    return sf_binlog_index_save(&g_trunk_index_ctx);
+    return sf_binlog_index_save(&ctx->trunk_index_ctx);
 }
 
-static inline int trunk_index_expand()
+static inline int da_trunk_index_expand(DAContext *ctx)
 {
-    return sf_binlog_index_expand(&g_trunk_index_ctx);
+    return sf_binlog_index_expand(&ctx->trunk_index_ctx);
 }
 
-static inline void trunk_index_free()
+static inline void da_trunk_index_free(DAContext *ctx)
 {
-    sf_binlog_index_free(&g_trunk_index_ctx);
+    sf_binlog_index_free(&ctx->trunk_index_ctx);
 }
 
 #ifdef __cplusplus

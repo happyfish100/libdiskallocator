@@ -27,10 +27,11 @@
 typedef struct {
     int size;
     pthread_mutex_t lock;
-    struct fc_list_head freelist;  //element: AlignedReadBuffer
+    struct fc_list_head freelist;  //element: DAAlignedReadBuffer
 } ReadBufferAllocator;
 
 typedef struct {
+    DAContext *ctx;
     int block_size;
     short path_index;
 
@@ -39,7 +40,7 @@ typedef struct {
         volatile int64_t used;
     } memory;
 
-    struct fast_mblock_man mblock;  //element: AlignedReadBuffer
+    struct fast_mblock_man mblock;  //element: DAAlignedReadBuffer
     struct {
         ReadBufferAllocator *allocators;
         ReadBufferAllocator *middle;
@@ -50,8 +51,7 @@ typedef struct {
 
 } ReadBufferPool;
 
-
-static struct {
+typedef struct da_read_buffer_pool_context {
     struct {
         ReadBufferPool *pools;
         int count;
@@ -66,33 +66,34 @@ static struct {
     int max_idle_time;
     int sleep_ms;
     SFMemoryWatermark watermark;
-} rbpool_ctx = {
-    {NULL, 0}, {NULL, NULL, 0}, 0, 0
-};
+} ReadBufferPoolContext;
 
-int read_buffer_pool_init(const int path_count,
+int da_read_buffer_pool_init(DAContext *ctx, const int path_count,
         const SFMemoryWatermark *watermark)
 {
-    int bytes;
+    int total_bytes;
+    int bytes1;
+    int bytes2;
+    char *buff;
 
-    bytes = sizeof(ReadBufferPool) * path_count;
-    rbpool_ctx.array.pools = (ReadBufferPool *)fc_malloc(bytes);
-    if (rbpool_ctx.array.pools == NULL) {
+    bytes1 = sizeof(ReadBufferPool) * path_count;
+    bytes2 = sizeof(ReadBufferPool *) * path_count;
+    total_bytes = sizeof(ReadBufferPoolContext) + bytes1 + bytes2;
+    buff = fc_malloc(total_bytes);
+    if (buff == NULL) {
         return ENOMEM;
     }
-    memset(rbpool_ctx.array.pools, 0, bytes);
+    memset(buff, 0, total_bytes);
 
-    bytes = sizeof(ReadBufferPool *) * path_count;
-    rbpool_ctx.ptr_array.pools = (ReadBufferPool **)fc_malloc(bytes);
-    if (rbpool_ctx.ptr_array.pools == NULL) {
-        return ENOMEM;
-    }
-    memset(rbpool_ctx.ptr_array.pools, 0, bytes);
-    rbpool_ctx.watermark = *watermark;
+    ctx->rbpool_ctx = (ReadBufferPoolContext *)buff;
+    ctx->rbpool_ctx->array.pools = (ReadBufferPool *)(ctx->rbpool_ctx + 1);
+    ctx->rbpool_ctx->ptr_array.pools = (ReadBufferPool **)(buff +
+            sizeof(ReadBufferPoolContext) + bytes1);
+    ctx->rbpool_ctx->watermark = *watermark;
     return 0;
 }
 
-static int aligned_buffer_alloc_init(AlignedReadBuffer *buffer,
+static int aligned_buffer_alloc_init(DAAlignedReadBuffer *buffer,
         ReadBufferPool *pool)
 {
     buffer->indexes.path = pool->path_index;
@@ -100,7 +101,7 @@ static int aligned_buffer_alloc_init(AlignedReadBuffer *buffer,
     return 0;
 }
 
-static int init_allocators(ReadBufferPool *pool)
+static int init_allocators(DAContext *ctx, ReadBufferPool *pool)
 {
     int result;
     int size;
@@ -109,7 +110,7 @@ static int init_allocators(ReadBufferPool *pool)
 
     size = pool->block_size;
     pool->mpool.count = 1;
-    while (size <= DA_FILE_BLOCK_SIZE) {
+    while (size <= ctx->storage.file_block_size) {
         pool->mpool.count++;
         size *= 2;
     }
@@ -147,7 +148,7 @@ static int init_allocators(ReadBufferPool *pool)
     }
 
     if ((result=fast_mblock_init_ex1(&pool->mblock, "aligned-rdbuffer",
-                    sizeof(AlignedReadBuffer), 8192, 0,
+                    sizeof(DAAlignedReadBuffer), 8192, 0,
                     (fast_mblock_object_init_func)aligned_buffer_alloc_init,
                     pool, true)) != 0)
     {
@@ -157,24 +158,26 @@ static int init_allocators(ReadBufferPool *pool)
     return 0;
 }
 
-int read_buffer_pool_create(const short path_index, const int block_size)
+int da_read_buffer_pool_create(DAContext *ctx, const short path_index,
+        const int block_size)
 {
     ReadBufferPool *pool;
     int result;
 
-    pool = rbpool_ctx.array.pools + path_index;
+    pool = ctx->rbpool_ctx->array.pools + path_index;
+    pool->ctx = ctx;
     pool->path_index = path_index;
     pool->block_size = block_size;
     pool->memory.alloc = 0;
     pool->memory.used = 0;
 
-    if ((result=init_allocators(pool)) != 0) {
+    if ((result=init_allocators(ctx, pool)) != 0) {
         return result;
     }
 
-    rbpool_ctx.ptr_array.pools[rbpool_ctx.ptr_array.count++] = pool;
-    rbpool_ctx.ptr_array.end = rbpool_ctx.ptr_array.pools +
-        rbpool_ctx.ptr_array.count;
+    ctx->rbpool_ctx->ptr_array.pools[ctx->rbpool_ctx->ptr_array.count++] = pool;
+    ctx->rbpool_ctx->ptr_array.end = ctx->rbpool_ctx->ptr_array.pools +
+        ctx->rbpool_ctx->ptr_array.count;
     return 0;
 }
 
@@ -201,14 +204,14 @@ static inline ReadBufferAllocator *get_allocator(
         }
     }
 
-    logError("file: "__FILE__", line: %d, "
-            "alloc size: %d is too large, exceed: %d",
-            __LINE__, size, (end-1)->size);
+    logError("file: "__FILE__", line: %d, %s "
+            "alloc size: %d is too large, exceed: %d", __LINE__,
+            pool->ctx->module_name, size, (end-1)->size);
     return NULL;
 }
 
 static inline void free_aligned_buffer(ReadBufferPool *pool,
-        AlignedReadBuffer *buffer)
+        DAAlignedReadBuffer *buffer)
 {
     free(buffer->buff);
     buffer->buff = NULL;
@@ -223,12 +226,12 @@ static int reclaim_allocator_by_size(ReadBufferPool *pool,
 {
     int result;
     struct fc_list_head *pos;
-    AlignedReadBuffer *buffer;
+    DAAlignedReadBuffer *buffer;
 
     result = EAGAIN;
     PTHREAD_MUTEX_LOCK(&allocator->lock);
     fc_list_for_each_prev(pos, &allocator->freelist) {
-        buffer = fc_list_entry(pos, AlignedReadBuffer, dlink);
+        buffer = fc_list_entry(pos, DAAlignedReadBuffer, dlink);
         *reclaim_bytes += buffer->size;
         free_aligned_buffer(pool, buffer);
         if (*reclaim_bytes >= target_size) {
@@ -270,13 +273,13 @@ static int reclaim(ReadBufferPool *pool, const int target_size,
     return EAGAIN;
 }
 
-static inline AlignedReadBuffer *do_aligned_alloc(ReadBufferPool *pool,
+static inline DAAlignedReadBuffer *do_aligned_alloc(ReadBufferPool *pool,
         ReadBufferAllocator *allocator)
 {
     int result;
-    AlignedReadBuffer *buffer;
+    DAAlignedReadBuffer *buffer;
 
-    if ((buffer=(AlignedReadBuffer *)fast_mblock_alloc_object(
+    if ((buffer=(DAAlignedReadBuffer *)fast_mblock_alloc_object(
                     &pool->mblock)) == NULL)
     {
         return NULL;
@@ -285,9 +288,9 @@ static inline AlignedReadBuffer *do_aligned_alloc(ReadBufferPool *pool,
     if ((result=posix_memalign((void **)&buffer->buff,
                     pool->block_size, allocator->size)) != 0)
     {
-        logError("file: "__FILE__", line: %d, "
-                "posix_memalign %d bytes fail, "
-                "errno: %d, error info: %s", __LINE__,
+        logError("file: "__FILE__", line: %d, %s "
+                "posix_memalign %d bytes fail, errno: %d, "
+                "error info: %s", __LINE__, pool->ctx->module_name,
                 allocator->size, result, STRERROR(result));
         fast_mblock_free_object(&pool->mblock, buffer);
         return NULL;
@@ -298,16 +301,16 @@ static inline AlignedReadBuffer *do_aligned_alloc(ReadBufferPool *pool,
     return buffer;
 }
 
-AlignedReadBuffer *read_buffer_pool_alloc(
+DAAlignedReadBuffer *da_read_buffer_pool_alloc(DAContext *ctx,
         const short path_index, const int size)
 {
     ReadBufferPool *pool;
     ReadBufferAllocator *allocator;
-    AlignedReadBuffer *buffer;
+    DAAlignedReadBuffer *buffer;
     int64_t total_alloc;
     int reclaim_bytes;
 
-    pool = rbpool_ctx.array.pools + path_index;
+    pool = ctx->rbpool_ctx->array.pools + path_index;
     if ((allocator=get_allocator(pool, size +
                     DA_SPACE_ALIGN_SIZE)) == NULL)
     {
@@ -316,7 +319,7 @@ AlignedReadBuffer *read_buffer_pool_alloc(
 
     PTHREAD_MUTEX_LOCK(&allocator->lock);
     if ((buffer=fc_list_first_entry(&allocator->freelist,
-                    AlignedReadBuffer, dlink)) != NULL)
+                    DAAlignedReadBuffer, dlink)) != NULL)
     {
         fc_list_del_init(&buffer->dlink);
     }
@@ -324,19 +327,19 @@ AlignedReadBuffer *read_buffer_pool_alloc(
 
     if (buffer == NULL) {
         total_alloc = FC_ATOMIC_GET(pool->memory.alloc);
-        if (total_alloc + allocator->size > rbpool_ctx.watermark.high) {
+        if (total_alloc + allocator->size > ctx->rbpool_ctx->watermark.high) {
             if (total_alloc - FC_ATOMIC_GET(pool->memory.used) >
-                    DA_FILE_BLOCK_SIZE)
+                    ctx->storage.file_block_size)
             {
-                reclaim(pool, DA_FILE_BLOCK_SIZE, &reclaim_bytes);
-                logInfo("file: "__FILE__", line: %d, "
+                reclaim(pool, ctx->storage.file_block_size, &reclaim_bytes);
+                logInfo("file: "__FILE__", line: %d, %s "
                         "reach max memory limit, reclaim %d bytes",
-                        __LINE__, reclaim_bytes);
+                        __LINE__, ctx->module_name, reclaim_bytes);
             } else {
-                logWarning("file: "__FILE__", line: %d, "
+                logWarning("file: "__FILE__", line: %d, %s "
                         "reach max memory limit of pool: %"PRId64 " MB",
-                        __LINE__, rbpool_ctx.watermark.high /
-                        (1024 * 1024));
+                        __LINE__, ctx->module_name, ctx->rbpool_ctx->
+                        watermark.high / (1024 * 1024));
             }
         }
 
@@ -349,12 +352,12 @@ AlignedReadBuffer *read_buffer_pool_alloc(
     return buffer;
 }
 
-void read_buffer_pool_free(AlignedReadBuffer *buffer)
+void da_read_buffer_pool_free(DAContext *ctx, DAAlignedReadBuffer *buffer)
 {
     ReadBufferPool *pool;
     ReadBufferAllocator *allocator;
 
-    pool = rbpool_ctx.array.pools + buffer->indexes.path;
+    pool = ctx->rbpool_ctx->array.pools + buffer->indexes.path;
     allocator = pool->mpool.allocators + buffer->indexes.allocator;
     PTHREAD_MUTEX_LOCK(&allocator->lock);
     buffer->last_access_time = g_current_time;
@@ -364,17 +367,17 @@ void read_buffer_pool_free(AlignedReadBuffer *buffer)
     FC_ATOMIC_DEC_EX(pool->memory.used, allocator->size);
 }
 
-static void reclaim_allocator_by_ttl(ReadBufferPool *pool,
-        ReadBufferAllocator *allocator)
+static void reclaim_allocator_by_ttl(DAContext *ctx,
+        ReadBufferPool *pool, ReadBufferAllocator *allocator)
 {
     struct fc_list_head *pos;
-    AlignedReadBuffer *buffer;
+    DAAlignedReadBuffer *buffer;
 
     PTHREAD_MUTEX_LOCK(&allocator->lock);
     fc_list_for_each_prev(pos, &allocator->freelist) {
-        buffer = fc_list_entry(pos, AlignedReadBuffer, dlink);
+        buffer = fc_list_entry(pos, DAAlignedReadBuffer, dlink);
         if (g_current_time - buffer->last_access_time <=
-                rbpool_ctx.max_idle_time)
+                ctx->rbpool_ctx->max_idle_time)
         {
             break;
         }
@@ -383,47 +386,50 @@ static void reclaim_allocator_by_ttl(ReadBufferPool *pool,
     PTHREAD_MUTEX_UNLOCK(&allocator->lock);
 }
 
-static void pool_reclaim(ReadBufferPool *pool)
+static void pool_reclaim(DAContext *ctx, ReadBufferPool *pool)
 {
     ReadBufferAllocator *allocator;
 
     /*
-    logInfo("memory alloc: %"PRId64", watermark {low: %"PRId64", high: %"PRId64"}",
-            FC_ATOMIC_GET(pool->memory.alloc), rbpool_ctx.watermark.low,
-            rbpool_ctx.watermark.high);
+    logInfo("%s memory alloc: %"PRId64", watermark {low: %"PRId64", "
+            "high: %"PRId64"}", ctx->module_name, FC_ATOMIC_GET(pool->
+                memory.alloc), ctx->rbpool_ctx->watermark.low,
+            ctx->rbpool_ctx->watermark.high);
             */
 
     if (FC_ATOMIC_GET(pool->memory.alloc) <=
-            rbpool_ctx.watermark.low)
+            ctx->rbpool_ctx->watermark.low)
     {
-        fc_sleep_ms(rbpool_ctx.sleep_ms * pool->mpool.count);
+        fc_sleep_ms(ctx->rbpool_ctx->sleep_ms * pool->mpool.count);
         return;
     }
 
     for (allocator=pool->mpool.allocators;
             allocator<pool->mpool.end; allocator++)
     {
-        fc_sleep_ms(rbpool_ctx.sleep_ms);
-        reclaim_allocator_by_ttl(pool, allocator);
+        fc_sleep_ms(ctx->rbpool_ctx->sleep_ms);
+        reclaim_allocator_by_ttl(ctx, pool, allocator);
     }
 }
 
 static void *reclaim_thread_entrance(void *arg)
 {
+    DAContext *ctx;
     ReadBufferPool **pool;
 
+    ctx = arg;
     while (SF_G_CONTINUE_FLAG) {
-        for (pool = rbpool_ctx.ptr_array.pools; pool <
-                rbpool_ctx.ptr_array.end; pool++)
+        for (pool = ctx->rbpool_ctx->ptr_array.pools; pool <
+                ctx->rbpool_ctx->ptr_array.end; pool++)
         {
-            pool_reclaim(*pool);
+            pool_reclaim(ctx, *pool);
         }
     }
 
     return NULL;
 }
 
-int read_buffer_pool_start(const int max_idle_time,
+int da_read_buffer_pool_start(DAContext *ctx, const int max_idle_time,
         const int reclaim_interval)
 {
     ReadBufferPool **pool;
@@ -431,20 +437,21 @@ int read_buffer_pool_start(const int max_idle_time,
     pthread_t tid;
 
     allocator_count = 0;
-    for (pool = rbpool_ctx.ptr_array.pools; pool <
-            rbpool_ctx.ptr_array.end; pool++)
+    for (pool = ctx->rbpool_ctx->ptr_array.pools; pool <
+            ctx->rbpool_ctx->ptr_array.end; pool++)
     {
         allocator_count += (*pool)->mpool.count;
     }
 
     if (allocator_count == 0) {
-        logError("file: "__FILE__", line: %d, "
-                "pool array is empty!", __LINE__);
+        logError("file: "__FILE__", line: %d, %s "
+                "pool array is empty!", __LINE__,
+                ctx->module_name);
         return EINVAL;
     }
 
-    rbpool_ctx.max_idle_time = max_idle_time;
-    rbpool_ctx.sleep_ms = reclaim_interval * 1000 / allocator_count;
+    ctx->rbpool_ctx->max_idle_time = max_idle_time;
+    ctx->rbpool_ctx->sleep_ms = reclaim_interval * 1000 / allocator_count;
     return fc_create_thread(&tid, reclaim_thread_entrance,
-            NULL, SF_G_THREAD_STACK_SIZE);
+            ctx, SF_G_THREAD_STACK_SIZE);
 }

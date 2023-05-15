@@ -14,7 +14,6 @@
  */
 
 #include <limits.h>
-#include <assert.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include "fastcommon/shared_func.h"
@@ -31,13 +30,14 @@
 #include "../binlog/trunk/trunk_space_log.h"
 #include "trunk_reclaim.h"
 
-int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
+int da_trunk_reclaim_init_ctx(DATrunkReclaimContext *rctx, DAContext *ctx)
 {
     const int alloc_skiplist_once = 1;
     const bool allocator_use_lock = false;
     int result;
 
-    if ((result=da_space_log_reader_init(&rctx->reader,
+    rctx->ctx = ctx;
+    if ((result=da_space_log_reader_init(&rctx->reader, ctx,
                     alloc_skiplist_once, allocator_use_lock)) != 0)
     {
         return result;
@@ -54,15 +54,15 @@ int trunk_reclaim_init_ctx(TrunkReclaimContext *rctx)
     return 0;
 }
 
-static int realloc_rb_array(TrunkReclaimBlockArray *array)
+static int realloc_rb_array(DATrunkReclaimBlockArray *array)
 {
-    TrunkReclaimBlockInfo *blocks;
+    DATrunkReclaimBlockInfo *blocks;
     int new_alloc;
     int bytes;
 
     new_alloc = (array->alloc > 0) ? 2 * array->alloc : 1024;
-    bytes = sizeof(TrunkReclaimBlockInfo) * new_alloc;
-    blocks = (TrunkReclaimBlockInfo *)fc_malloc(bytes);
+    bytes = sizeof(DATrunkReclaimBlockInfo) * new_alloc;
+    blocks = (DATrunkReclaimBlockInfo *)fc_malloc(bytes);
     if (blocks == NULL) {
         return ENOMEM;
     }
@@ -70,7 +70,7 @@ static int realloc_rb_array(TrunkReclaimBlockArray *array)
     if (array->blocks != NULL) {
         if (array->count > 0) {
             memcpy(blocks, array->blocks, array->count *
-                    sizeof(TrunkReclaimBlockInfo));
+                    sizeof(DATrunkReclaimBlockInfo));
         }
         free(array->blocks);
     }
@@ -80,20 +80,53 @@ static int realloc_rb_array(TrunkReclaimBlockArray *array)
     return 0;
 }
 
-static int combine_to_rb_array(TrunkReclaimContext *rctx,
-        TrunkReclaimBlockArray *barray)
+static int realloc_space_array(DATrunkReclaimSpaceAllocArray *array)
+{
+    DATrunkReclaimSpaceAllocInfo *spaces;
+    int new_alloc;
+    int bytes;
+
+    new_alloc = (array->alloc > 0) ? 2 * array->alloc : 64;
+    bytes = sizeof(DATrunkReclaimSpaceAllocInfo) * new_alloc;
+    spaces = (DATrunkReclaimSpaceAllocInfo *)fc_malloc(bytes);
+    if (spaces == NULL) {
+        return ENOMEM;
+    }
+
+    if (array->spaces != NULL) {
+        if (array->count > 0) {
+            memcpy(spaces, array->spaces, array->count *
+                    sizeof(DATrunkReclaimSpaceAllocInfo));
+        }
+        free(array->spaces);
+    }
+
+    array->alloc = new_alloc;
+    array->spaces = spaces;
+    return 0;
+}
+
+static int combine_to_rb_array(DATrunkReclaimContext *rctx,
+        DATrunkReclaimBlockArray *barray)
 {
     int result;
+    DASliceType slice_type;
     UniqSkiplistIterator it;
     DATrunkSpaceLogRecord *record;
     DATrunkSpaceLogRecord *tail;
-    TrunkReclaimBlockInfo *block;
+    DATrunkReclaimBlockInfo *block;
 
-    rctx->slice_counts.total = 0;
     uniq_skiplist_iterator(rctx->skiplist, &it);
     block = barray->blocks;
     record = uniq_skiplist_next(&it);
     while (record != NULL) {
+        while (record->slice_type == DA_SLICE_TYPE_CACHE) {
+            if ((record=uniq_skiplist_next(&it)) == NULL) {
+                barray->count = block - barray->blocks;
+                return 0;
+            }
+        }
+
         if (barray->alloc <= block - barray->blocks) {
             barray->count = block - barray->blocks;
             if ((result=realloc_rb_array(barray)) != 0) {
@@ -103,12 +136,14 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
         }
         rctx->slice_counts.total++;
 
+        slice_type = record->slice_type;
         block->total_size = record->storage.size;
         block->head = tail = record;
         while ((record=uniq_skiplist_next(&it)) != NULL &&
-                (tail->storage.offset + tail->storage.size ==
-                 record->storage.offset) && (block->total_size +
-                     record->storage.size <= DA_FILE_BLOCK_SIZE))
+                record->slice_type == slice_type && (tail->storage.offset +
+                 tail->storage.size == record->storage.offset) &&
+                (block->total_size + record->storage.size <=
+                 rctx->ctx->storage.file_block_size))
         {
             block->total_size += record->storage.size;
             tail->next = record;
@@ -124,69 +159,84 @@ static int combine_to_rb_array(TrunkReclaimContext *rctx,
     return 0;
 }
 
-static inline void log_rw_error(DASliceOpContext *op_ctx,
+static inline void log_rw_error(DAContext *ctx, DASliceOpContext *op_ctx,
         const int result, const int ignore_errno, const char *caption)
 {
     int log_level;
     log_level = (result == ignore_errno) ? LOG_DEBUG : LOG_ERR;
     log_it_ex(&g_log_context, log_level,
-            "file: "__FILE__", line: %d, %s slice fail, "
-            "trunk id: %u, offset: %u, length: %u, size: %u, "
-            "errno: %d, error info: %s", __LINE__, caption,
-            op_ctx->storage->trunk_id, op_ctx->storage->offset,
+            "file: "__FILE__", line: %d, %s %s slice fail, "
+            "trunk id: %"PRId64", offset: %u, length: %u, size: %u, "
+            "errno: %d, error info: %s", __LINE__, ctx->module_name,
+            caption, op_ctx->storage->trunk_id, op_ctx->storage->offset,
             op_ctx->storage->length, op_ctx->storage->size,
             result, STRERROR(result));
 }
 
-static int slice_write(TrunkReclaimContext *rctx,
-        const uint64_t oid, DATrunkSpaceInfo *space)
+static int migrate_one_slice(DATrunkReclaimContext *rctx,
+        DATrunkSpaceLogRecord *record, DATrunkFileInfo **trunk)
 {
-    int count;
     int result;
+    int count;
+    DATrunkSpaceWithVersion space_info;
 
     count = 1;
-    if ((result=storage_allocator_reclaim_alloc(oid, rctx->read_ctx.
-                    op_ctx.storage->length, space, &count)) != 0)
+    if ((result=da_storage_allocator_reclaim_alloc(rctx->ctx,
+                    record->oid, record->storage.length,
+                    &space_info, &count)) != 0)
     {
-        logError("file: "__FILE__", line: %d, "
-                "alloc disk space %d bytes fail, "
-                "errno: %d, error info: %s", __LINE__,
-                rctx->read_ctx.op_ctx.storage->length,
-                result, STRERROR(result));
+        logError("file: "__FILE__", line: %d, %s "
+                "alloc disk space %d bytes fail, errno: %d, "
+                "error info: %s", __LINE__, rctx->ctx->module_name,
+                record->storage.length, result, STRERROR(result));
         return result;
     }
 
-    return trunk_write_thread_by_buff_synchronize(space,
-            DA_OP_CTX_BUFFER_PTR(rctx->read_ctx.op_ctx),
-            &rctx->read_ctx.sctx);
-}
+    if (record->slice_type == DA_SLICE_TYPE_FILE) {
+        rctx->read_ctx.op_ctx.storage = &record->storage;
+        if ((result=da_slice_read(rctx->ctx, &rctx->read_ctx)) != 0) {
+            log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
+                    result, ENOENT, "read");
+            return result == ENOENT ? 0 : result;
+        }
 
-static int migrate_one_slice(TrunkReclaimContext *rctx,
-        DATrunkSpaceLogRecord *record)
-{
-    int result;
-    DATrunkSpaceInfo space;
+        if ((result=da_trunk_write_thread_by_buff_synchronize(rctx->ctx,
+                        &space_info, DA_OP_CTX_BUFFER_PTR(rctx->read_ctx.
+                            op_ctx), &rctx->read_ctx.sctx)) != 0)
+        {
+            log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
+                    result, 0, "write");
+            return result;
+        }
 
-    rctx->read_ctx.op_ctx.storage = &record->storage;
-    if ((result=da_slice_read(&rctx->read_ctx)) != 0) {
-        log_rw_error(&rctx->read_ctx.op_ctx, result, ENOENT, "read");
-        return result == ENOENT ? 0 : result;
+        rctx->migrage_bytes += record->storage.length;
     }
 
-    if ((result=slice_write(rctx, record->oid, &space)) != 0) {
-        log_rw_error(&rctx->read_ctx.op_ctx, result, 0, "write");
-        return result;
+    *trunk = space_info.ts.trunk;
+    if (rctx->sarray.count == 0 || rctx->sarray.spaces[rctx->
+            sarray.count - 1].trunk != *trunk)
+    {
+        if (rctx->sarray.alloc <= rctx->sarray.count) {
+            if ((result=realloc_space_array(&rctx->sarray)) != 0) {
+                return result;
+            }
+        }
+
+        rctx->sarray.spaces[rctx->sarray.count].trunk = *trunk;
+        rctx->sarray.spaces[rctx->sarray.count].alloc_count = 1;
+        rctx->sarray.count++;
+    } else {
+        rctx->sarray.spaces[rctx->sarray.count - 1].alloc_count++;
     }
 
-    record->storage.trunk_id = space.id_info.id;
-    record->storage.offset = space.offset;
-    record->storage.size = space.size;
-
+    record->storage.trunk_id = space_info.ts.space.id_info.id;
+    record->storage.offset = space_info.ts.space.offset;
+    record->storage.size = space_info.ts.space.size;
     return 0;
 }
 
-static int migrate_one_block(TrunkReclaimContext *rctx,
-        TrunkReclaimBlockInfo *block)
+static int migrate_one_block(DATrunkReclaimContext *rctx,
+        DATrunkReclaimBlockInfo *block)
 {
     DATrunkSpaceLogRecord holder;
     DATrunkSpaceLogRecord *record;
@@ -195,38 +245,41 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
     int result;
     int flags;
     uint32_t offset;
+    DATrunkFileInfo *trunk;
     DAPieceFieldInfo field;
     struct fc_queue_info space_chain;
 
     holder = *(block->head);
     holder.storage.length = holder.storage.size = block->total_size;
-    if ((result=migrate_one_slice(rctx, &holder)) != 0) {
+    if ((result=migrate_one_slice(rctx, &holder, &trunk)) != 0) {
         return result;
     }
 
     offset = holder.storage.offset;
     record = block->head;
     while (record != NULL) {
-        old_record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &rctx->reader.record_allocator);
+        old_record = da_trunk_space_log_alloc_record(rctx->ctx);
         if (old_record == NULL) {
             return ENOMEM;
         }
 
-        new_record = (DATrunkSpaceLogRecord *)fast_mblock_alloc_object(
-                &rctx->reader.record_allocator);
+        new_record = da_trunk_space_log_alloc_record(rctx->ctx);
         if (new_record == NULL) {
             return ENOMEM;
         }
 
         old_record->oid = record->oid;
         old_record->fid = record->fid;
+        old_record->extra = record->extra;
         old_record->op_type = da_binlog_op_type_reclaim_space;
+        old_record->slice_type = record->slice_type;
         old_record->storage = record->storage;
 
         new_record->oid = record->oid;
         new_record->fid = record->fid;
+        new_record->extra = record->extra;
         new_record->op_type = da_binlog_op_type_consume_space;
+        new_record->slice_type = record->slice_type;
         new_record->storage.version = record->storage.version;
         new_record->storage.trunk_id = holder.storage.trunk_id;
         new_record->storage.offset = offset;
@@ -240,11 +293,12 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
 
         field.oid = record->oid;
         field.fid = record->fid;
+        field.extra = record->extra;
         field.source = DA_FIELD_UPDATE_SOURCE_RECLAIM;
         field.op_type = da_binlog_op_type_update;
         field.storage = new_record->storage;
-        if ((result=DA_REDO_QUEUE_PUSH_FUNC(&field, &space_chain,
-                        &rctx->log_notify, &flags)) != 0)
+        if ((result=rctx->ctx->slice_migrate_done_callback(trunk, &field,
+                        &space_chain, &rctx->log_notify, &flags)) != 0)
         {
             return result;
         }
@@ -262,15 +316,22 @@ static int migrate_one_block(TrunkReclaimContext *rctx,
     return 0;
 }
 
-static int migrate_blocks(TrunkReclaimContext *rctx)
+static int migrate_blocks(DATrunkReclaimContext *rctx, DATrunkFileInfo *trunk)
 {
-    TrunkReclaimBlockInfo *block;
-    TrunkReclaimBlockInfo *bend;
+    DATrunkReclaimBlockInfo *block;
+    DATrunkReclaimBlockInfo *bend;
+    DATrunkReclaimSpaceAllocInfo *space;
+    DATrunkReclaimSpaceAllocInfo *send;
     int result;
+
+    if (rctx->barray.count == 0) {
+        return 0;
+    }
 
     __sync_add_and_fetch(&rctx->log_notify.waiting_count,
             rctx->slice_counts.total);
 
+    rctx->sarray.count = 0;
     bend = rctx->barray.blocks + rctx->barray.count;
     for (block=rctx->barray.blocks; block<bend; block++) {
         if ((result=migrate_one_block(rctx, block)) != 0) {
@@ -278,31 +339,46 @@ static int migrate_blocks(TrunkReclaimContext *rctx)
         }
     }
 
+    if (rctx->ctx->trunk_migrate_done_callback != NULL) {
+        rctx->ctx->trunk_migrate_done_callback(trunk);
+    }
     sf_synchronize_counter_wait(&rctx->log_notify);
+
+    if (rctx->sarray.count == 1) {  //fast path
+        da_trunk_freelist_decrease_writing_count_ex(rctx->sarray.spaces[0].
+                trunk, rctx->sarray.spaces[0].alloc_count);
+    } else {
+        send = rctx->sarray.spaces + rctx->sarray.count;
+        for (space=rctx->sarray.spaces; space<send; space++) {
+            da_trunk_freelist_decrease_writing_count_ex(
+                    space->trunk, space->alloc_count);
+        }
+    }
+
     return 0;
 }
 
-int trunk_reclaim(DATrunkAllocator *allocator, DATrunkFileInfo *trunk,
-        TrunkReclaimContext *rctx)
+int da_trunk_reclaim(DATrunkReclaimContext *rctx, DATrunkAllocator
+        *allocator, DATrunkFileInfo *trunk)
 {
     int result;
 
-    rctx->slice_counts.skip = rctx->slice_counts.ignore = 0;
-    if ((result=da_space_log_reader_load(&rctx->reader,
-                    trunk->id_info.id, &rctx->skiplist)) != 0)
+    rctx->migrage_bytes = 0;
+    rctx->slice_counts.total = 0;
+    rctx->slice_counts.skip = 0;
+    rctx->slice_counts.ignore = 0;
+    if ((result=da_space_log_reader_load(&rctx->reader, trunk->
+                    id_info.id, &rctx->skiplist)) != 0)
     {
+        rctx->barray.count = 0;
         return result;
     }
 
-    do {
-        if ((result=combine_to_rb_array(rctx, &rctx->barray)) != 0) {
-            break;
+    if (!uniq_skiplist_empty(rctx->skiplist)) {
+        if ((result=combine_to_rb_array(rctx, &rctx->barray)) == 0) {
+            result = migrate_blocks(rctx, trunk);
         }
-
-        if ((result=migrate_blocks(rctx)) != 0) {
-            break;
-        }
-    } while (0);
+    }
 
     uniq_skiplist_free(rctx->skiplist);
     return result;
