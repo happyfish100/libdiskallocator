@@ -245,7 +245,7 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
     int result;
     int flags;
     uint32_t offset;
-    DATrunkFileInfo *trunk;
+    DATrunkFileInfo *trunk = NULL;
     DAPieceFieldInfo field;
     struct fc_queue_info space_chain;
 
