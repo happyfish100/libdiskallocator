@@ -3,7 +3,7 @@
 %define CommitVersion %(echo $COMMIT_VERSION)
 
 Name: libdiskallocator
-Version: 2.0.0
+Version: 1.1.0
 Release: 1%{?dist}
 Summary: rapid disk allocator
 License: AGPL
