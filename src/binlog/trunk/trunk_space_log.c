@@ -452,7 +452,7 @@ static int deal_sorted_array(DAContext *ctx,
             ++start;
         }
 
-        if (start >= end) {
+        if (start == end) {
             return 0;
         }
 

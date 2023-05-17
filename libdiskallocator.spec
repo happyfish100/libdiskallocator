@@ -4,7 +4,7 @@
 
 Name: libdiskallocator
 Version: 1.1.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: rapid disk allocator
 License: AGPL
 Group: Arch/Tech
