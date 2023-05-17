@@ -425,6 +425,8 @@ static inline int unlink_space_log(DAContext *ctx,
                 "%"PRId64" != 0", __LINE__, ctx->module_name,
                 trunk->id_info.id, trunk->used.count,
                 used_bytes);
+        trunk->used.count = 0;
+        FC_ATOMIC_SET(trunk->used.bytes, 0);
     } else {
         result = da_trunk_space_log_unlink(ctx, trunk->id_info.id);
     }
