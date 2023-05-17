@@ -309,11 +309,19 @@ static int write_to_log_file(DAContext *ctx,
             }
 
             if ((*current)->version <= trunk->start_version) {
-                logWarning("file: "__FILE__", line: %d, %s "
-                        "trunk id: %"PRId64", record version: %"PRId64" <= "
-                        "trunk start version: %"PRId64", skip!", __LINE__,
-                        ctx->module_name, trunk->id_info.id,
-                        (*current)->version, trunk->start_version);
+                int log_level;
+                if ((*current)->op_type == da_binlog_op_type_consume_space) {
+                    log_level = LOG_ERR;
+                } else {
+                    log_level = LOG_WARNING;
+                }
+                log_it_ex(&g_log_context, log_level,
+                        "file: "__FILE__", line: %d, %s "
+                        "trunk id: %"PRId64", op type: %c, record version: "
+                        "%"PRId64" <= trunk start version: %"PRId64", skip!",
+                        __LINE__, ctx->module_name, trunk->id_info.id,
+                        (*current)->op_type, (*current)->version,
+                        trunk->start_version);
                 ++skip_count;
                 continue;
             }
@@ -389,6 +397,7 @@ static inline int deal_trunk_records(DAContext *ctx,
         DATrunkSpaceLogRecord **end)
 {
     int result;
+    int64_t used_bytes;
     DATrunkFileInfo *trunk;
 
     if ((*start)->op_type == da_binlog_op_type_unlink_binlog) {
@@ -397,20 +406,28 @@ static inline int deal_trunk_records(DAContext *ctx,
 
         trunk->start_version = (*start)->storage.version;
         da_trunk_fd_cache_delete(&FD_CACHE_CTX, trunk->id_info.id);
-        if (FC_ATOMIC_GET(trunk->used.bytes) != 0) {
+        if ((used_bytes=FC_ATOMIC_GET(trunk->used.bytes)) != 0) {
             char space_log_filename[PATH_MAX];
             char bak_filename[PATH_MAX];
+            int log_level;
 
-            dio_get_space_log_filename(ctx, trunk->id_info.id,
-                    space_log_filename, sizeof(space_log_filename));
-            snprintf(bak_filename, sizeof(bak_filename), "%s.%ld",
-                    space_log_filename, (long)g_current_time);
-            result = fc_check_rename(space_log_filename, bak_filename);
-            logWarning("file: "__FILE__", line: %d, %s "
+            if (used_bytes < 0) {
+                dio_get_space_log_filename(ctx, trunk->id_info.id,
+                        space_log_filename, sizeof(space_log_filename));
+                snprintf(bak_filename, sizeof(bak_filename), "%s.%ld",
+                        space_log_filename, (long)g_current_time);
+                result = fc_check_rename(space_log_filename, bak_filename);
+                log_level = LOG_ERR;
+            } else {
+                result = da_trunk_space_log_unlink(ctx, trunk->id_info.id);
+                log_level = LOG_WARNING;
+            }
+            log_it_ex(&g_log_context, log_level,
+                    "file: "__FILE__", line: %d, %s "
                     "trunk id: %"PRId64", slice count: %d, used bytes: "
                     "%"PRId64" != 0", __LINE__, ctx->module_name,
                     trunk->id_info.id, trunk->used.count,
-                    FC_ATOMIC_GET(trunk->used.bytes));
+                    used_bytes);
         } else {
             result = da_trunk_space_log_unlink(ctx, trunk->id_info.id);
         }
