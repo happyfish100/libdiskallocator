@@ -392,50 +392,44 @@ static inline int da_trunk_space_log_unlink(DAContext *ctx,
     return fc_delete_file_ex(space_log_filename, "trunk space log");
 }
 
-static inline int deal_trunk_records(DAContext *ctx,
-        DATrunkSpaceLogRecord **start,
-        DATrunkSpaceLogRecord **end)
+static inline int unlink_space_log(DAContext *ctx,
+        DATrunkSpaceLogRecord *record)
 {
     int result;
     int64_t used_bytes;
     DATrunkFileInfo *trunk;
 
-    if ((*start)->op_type == da_binlog_op_type_unlink_binlog) {
-        trunk = (*start)->trunk;
-        (*start)->trunk = NULL;
+    trunk = record->trunk;
+    record->trunk = NULL;
+    trunk->start_version = record->storage.version;
+    da_trunk_fd_cache_delete(&FD_CACHE_CTX, trunk->id_info.id);
+    if ((used_bytes=FC_ATOMIC_GET(trunk->used.bytes)) != 0) {
+        char space_log_filename[PATH_MAX];
+        char bak_filename[PATH_MAX];
+        int log_level;
 
-        trunk->start_version = (*start)->storage.version;
-        da_trunk_fd_cache_delete(&FD_CACHE_CTX, trunk->id_info.id);
-        if ((used_bytes=FC_ATOMIC_GET(trunk->used.bytes)) != 0) {
-            char space_log_filename[PATH_MAX];
-            char bak_filename[PATH_MAX];
-            int log_level;
-
-            if (used_bytes < 0) {
-                dio_get_space_log_filename(ctx, trunk->id_info.id,
-                        space_log_filename, sizeof(space_log_filename));
-                snprintf(bak_filename, sizeof(bak_filename), "%s.%ld",
-                        space_log_filename, (long)g_current_time);
-                result = fc_check_rename(space_log_filename, bak_filename);
-                log_level = LOG_ERR;
-            } else {
-                result = da_trunk_space_log_unlink(ctx, trunk->id_info.id);
-                log_level = LOG_WARNING;
-            }
-            log_it_ex(&g_log_context, log_level,
-                    "file: "__FILE__", line: %d, %s "
-                    "trunk id: %"PRId64", slice count: %d, used bytes: "
-                    "%"PRId64" != 0", __LINE__, ctx->module_name,
-                    trunk->id_info.id, trunk->used.count,
-                    used_bytes);
+        if (used_bytes < 0) {
+            dio_get_space_log_filename(ctx, trunk->id_info.id,
+                    space_log_filename, sizeof(space_log_filename));
+            snprintf(bak_filename, sizeof(bak_filename), "%s.%ld",
+                    space_log_filename, (long)g_current_time);
+            result = fc_check_rename(space_log_filename, bak_filename);
+            log_level = LOG_ERR;
         } else {
             result = da_trunk_space_log_unlink(ctx, trunk->id_info.id);
+            log_level = LOG_WARNING;
         }
-        sf_synchronize_finished_notify((*start)->sctx, result);
-        return result;
+        log_it_ex(&g_log_context, log_level,
+                "file: "__FILE__", line: %d, %s "
+                "trunk id: %"PRId64", slice count: %d, used bytes: "
+                "%"PRId64" != 0", __LINE__, ctx->module_name,
+                trunk->id_info.id, trunk->used.count,
+                used_bytes);
     } else {
-        return write_to_log_file(ctx, start, end);
+        result = da_trunk_space_log_unlink(ctx, trunk->id_info.id);
     }
+    sf_synchronize_finished_notify(record->sctx, result);
+    return result;
 }
 
 static int deal_sorted_array(DAContext *ctx,
@@ -447,20 +441,37 @@ static int deal_sorted_array(DAContext *ctx,
     DATrunkSpaceLogRecord **current;
 
     start = array->records;
-    current = start;
     end = array->records + array->count;
-    while (++current < end) {
-        if ((*current)->storage.trunk_id != (*start)->storage.trunk_id ||
-                (*current)->op_type == da_binlog_op_type_unlink_binlog)
+    while (1) {
+        while (start < end && (*start)->op_type ==
+                da_binlog_op_type_unlink_binlog)
         {
-            if ((result=deal_trunk_records(ctx, start, current)) != 0) {
+            if ((result=unlink_space_log(ctx, *start)) != 0) {
                 return result;
             }
-            start = current;
+            ++start;
         }
+
+        if (start >= end) {
+            return 0;
+        }
+
+        current = start;
+        while (++current < end) {
+            if ((*current)->storage.trunk_id != (*start)->storage.trunk_id ||
+                    (*current)->op_type == da_binlog_op_type_unlink_binlog)
+            {
+                break;
+            }
+        }
+
+        if ((result=write_to_log_file(ctx, start, current)) != 0) {
+            return result;
+        }
+        start = current;
     }
 
-    return deal_trunk_records(ctx, start, current);
+    return 0;
 }
 
 static int deal_all_records(DAContext *ctx, DATrunkSpaceLogRecord *head)
