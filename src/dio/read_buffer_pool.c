@@ -417,6 +417,10 @@ static void *reclaim_thread_entrance(void *arg)
     DAContext *ctx;
     ReadBufferPool **pool;
 
+#ifdef OS_LINUX
+    prctl(PR_SET_NAME, "bufpool-reclaim");
+#endif
+
     ctx = arg;
     while (SF_G_CONTINUE_FLAG) {
         for (pool = ctx->rbpool_ctx->ptr_array.pools; pool <
