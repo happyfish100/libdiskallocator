@@ -71,6 +71,12 @@ static inline void da_binlog_writer_inc_waiting_count(
     sf_synchronize_counter_add(&writer->notify, count);
 }
 
+static inline void da_binlog_writer_dec_waiting_count(
+        DABinlogWriter *writer, const int count)
+{
+    sf_synchronize_counter_sub(&writer->notify, count);
+}
+
 static inline int da_binlog_writer_get_waiting_count(
         DABinlogWriter *writer)
 {
