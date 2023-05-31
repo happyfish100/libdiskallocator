@@ -360,7 +360,10 @@ static void *binlog_writer_func(void *arg)
     bool blocked;
 
 #ifdef OS_LINUX
-    prctl(PR_SET_NAME, "inode-binlog-writer");
+    char thread_name[16];
+    snprintf(thread_name, sizeof(thread_name),
+            "%s-binlog-writer", (const char *)arg);
+    prctl(PR_SET_NAME, thread_name);
 #endif
 
     binlog_writer_ctx.running = true;
@@ -423,12 +426,12 @@ int da_binlog_writer_global_init()
     return 0;
 }
 
-int da_binlog_writer_start()
+int da_binlog_writer_start(const char *name)
 {
     pthread_t tid;
 
     return fc_create_thread(&tid, binlog_writer_func,
-            NULL, SF_G_THREAD_STACK_SIZE);
+            (void *)name, SF_G_THREAD_STACK_SIZE);
 }
 
 static int binlog_record_alloc_init(DABinlogRecord *record,

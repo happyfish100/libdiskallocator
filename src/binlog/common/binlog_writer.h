@@ -51,7 +51,7 @@ int da_binlog_writer_global_init();
 int da_binlog_writer_init(DABinlogWriter *writer,
         const int max_record_size);
 
-int da_binlog_writer_start();
+int da_binlog_writer_start(const char *name);
 
 int da_binlog_writer_log(DABinlogWriter *writer, const uint64_t id,
         const BufferInfo *buffer);

@@ -682,6 +682,7 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
     char avail_space_buff[32];
     char reserved_space_buff[32];
     char prealloc_space_buff[32];
+    char block_size_buff[64];
 
     if (parray->count == 0) {
         return;
@@ -690,6 +691,16 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
     logInfo("%s %s count: %d", ctx->module_name, caption, parray->count);
     end = parray->paths + parray->count;
     for (p=parray->paths; p<end; p++) {
+#ifdef OS_LINUX
+        if (p->block_size > 0) {
+            sprintf(block_size_buff, ", device block size: %d",
+                    p->block_size);
+        } else {
+            *block_size_buff = '\0';
+        }
+#else
+        *block_size_buff = '\0';
+#endif
         long_to_comma_str(p->space_stat.avail /
                 (1024 * 1024), avail_space_buff);
         long_to_comma_str(p->reserved_space.value /
@@ -702,12 +713,7 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
                 "prealloc_space ratio: %.2f%%, "
                 "reserved_space ratio: %.2f%%, "
                 "avail_space: %s MB, prealloc_space: %s MB, "
-#ifdef OS_LINUX
-                "reserved_space: %s MB, "
-                "device block size: %d",
-#else
-                "reserved_space: %s MB",
-#endif
+                "reserved_space: %s MB%s",
                 (int)(p - parray->paths + 1), p->store.path.str,
                 p->store.index, p->write_thread_count,
                 p->read_thread_count, p->read_io_depth,
@@ -715,12 +721,7 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
                 p->prealloc_space.ratio * 100.00,
                 p->reserved_space.ratio * 100.00,
                 avail_space_buff, prealloc_space_buff,
-#ifdef OS_LINUX
-                reserved_space_buff,
-                p->block_size
-#else
-                reserved_space_buff
-#endif
+                reserved_space_buff, block_size_buff
                 );
     }
 }

@@ -697,7 +697,8 @@ static void *da_trunk_read_thread_func(void *arg)
 
 #ifdef OS_LINUX
     len = snprintf(thread_name, sizeof(thread_name),
-            "dio-p%02d-r", thread->indexes.path);
+            "%.*s-dio-p%02d-r", 3, thread->path_info->
+                ctx->module_name, thread->indexes.path);
     if (thread->indexes.thread >= 0) {
         snprintf(thread_name + len, sizeof(thread_name) - len,
                 "[%d]", thread->indexes.thread);

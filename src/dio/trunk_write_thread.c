@@ -879,7 +879,8 @@ static void *da_trunk_write_thread_func(void *arg)
         char thread_name[16];
 
         len = snprintf(thread_name, sizeof(thread_name),
-                "dio-p%02d-w", thread->indexes.path);
+                "%.*s-dio-p%02d-w", 3, thread->path_info->
+                ctx->module_name, thread->indexes.path);
         if (thread->indexes.thread >= 0) {
             snprintf(thread_name + len, sizeof(thread_name) - len,
                     "[%d]", thread->indexes.thread);
