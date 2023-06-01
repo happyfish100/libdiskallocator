@@ -690,15 +690,21 @@ static void *da_trunk_read_thread_func(void *arg)
     TrunkReadThreadContext *thread;
 #ifdef OS_LINUX
     int len;
+    const char *module_name;
     char thread_name[16];
 #endif
 
     thread = (TrunkReadThreadContext *)arg;
 
 #ifdef OS_LINUX
+    if (thread->path_info->ctx->module_name[0] == '[') {
+        module_name = thread->path_info->ctx->module_name + 1;
+    } else {
+        module_name = thread->path_info->ctx->module_name;
+    }
     len = snprintf(thread_name, sizeof(thread_name),
-            "%.*s-dio-p%02d-r", 3, thread->path_info->
-                ctx->module_name, thread->indexes.path);
+            "%.*s-dio-p%d-r", 3, module_name,
+            thread->indexes.path);
     if (thread->indexes.thread >= 0) {
         snprintf(thread_name + len, sizeof(thread_name) - len,
                 "[%d]", thread->indexes.thread);
