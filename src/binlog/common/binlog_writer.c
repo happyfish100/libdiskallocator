@@ -128,7 +128,7 @@ static int do_log(DABinlogRecord *record, DABinlogWriterCache *cache)
 
     if (record->id != cache->id || cache->fd < 0) {
         if (cache->fd >= 0 && (result=da_binlog_writer_cache_write(
-                        cache, true)) != 0)
+                        cache, false)) != 0)
         {
             return result;
         }
@@ -165,7 +165,7 @@ static int deal_sorted_record(DABinlogRecordPtrArray *array)
         }
     }
 
-    return da_binlog_writer_cache_write(&cache, true);
+    return da_binlog_writer_cache_write(&cache, false);
 }
 
 static int record_compare(const DABinlogRecord **record1,
