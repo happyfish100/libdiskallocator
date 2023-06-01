@@ -238,7 +238,7 @@ static int get_write_fd(DAContext *ctx, const uint64_t trunk_id, int *fd)
 }
 
 static int do_write_to_file(DAContext *ctx, const uint64_t trunk_id,
-        int fd, char *buff, const int len, const bool flush)
+        int fd, char *buff, const int len)
 {
     int result;
     char space_log_filename[PATH_MAX];
@@ -252,24 +252,6 @@ static int do_write_to_file(DAContext *ctx, const uint64_t trunk_id,
                 "errno: %d, error info: %s", __LINE__, ctx->module_name,
                 space_log_filename, result, STRERROR(result));
         return result;
-    }
-
-    ctx->space_log_ctx.written_count++;
-    if (flush && (ctx->storage.cfg.fsync_every_n_writes > 0 && ctx->
-                space_log_ctx.written_count >= ctx->storage.cfg.
-                fsync_every_n_writes))
-    {
-        ctx->space_log_ctx.written_count = 0;
-        if (fsync(fd) != 0) {
-            result = errno != 0 ? errno : EIO;
-            dio_get_space_log_filename(ctx, trunk_id, space_log_filename,
-                    sizeof(space_log_filename));
-            logError("file: "__FILE__", line: %d, %s "
-                    "fsync to space log file \"%s\" fail, "
-                    "errno: %d, error info: %s", __LINE__, ctx->module_name,
-                    space_log_filename, result, STRERROR(result));
-            return result;
-        }
     }
 
     return 0;
@@ -331,8 +313,7 @@ static int write_to_log_file(DAContext *ctx,
             {
                 if ((result=do_write_to_file(ctx, (*start)->storage.trunk_id,
                                 fd, ctx->space_log_ctx.buffer.data,
-                                ctx->space_log_ctx.buffer.length,
-                                false)) != 0)
+                                ctx->space_log_ctx.buffer.length)) != 0)
                 {
                     break;
                 }
@@ -347,7 +328,7 @@ static int write_to_log_file(DAContext *ctx,
         if (ctx->space_log_ctx.buffer.length > 0 && (result=do_write_to_file(
                         ctx, (*start)->storage.trunk_id, fd, ctx->
                         space_log_ctx.buffer.data, ctx->space_log_ctx.
-                        buffer.length, true)) != 0)
+                        buffer.length)) != 0)
         {
             break;
         }

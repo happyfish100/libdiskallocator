@@ -229,9 +229,9 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
                     result = EAGAIN;
                     break;
                 }
-                
+
                 if (remain_bytes <= 0) {
-                    logInfo("%s allocator: %p, trunk_info: %p, "
+                    logError("%s allocator: %p, trunk_info: %p, "
                             "trunk size: %u, free start: %u, "
                             "remain_bytes: %u", trunk_info->allocator->
                             path_info->ctx->module_name,

@@ -579,14 +579,6 @@ static int do_write_slices(TrunkWriteThreadContext *thread)
             thread->iob_array.success = 0;
             return result;
         }
-
-        /*
-        dio_get_trunk_filename(&first->space, trunk_filename,
-                sizeof(trunk_filename));
-        logInfo("%s trunk file: %s, lseek to offset: %u",
-                thread->path_info->ctx->module_name,
-                trunk_filename, first->space.offset);
-                */
     }
 
     remain_bytes = thread->iovec_bytes;
