@@ -34,7 +34,6 @@
 #include "binlog_reader.h"
 #include "binlog_writer.h"
 
-#define BINLOG_RECORD_BATCH_SIZE  1024
 #define BINLOG_RECORD_MAX_WRITERS    2
 
 #define BINLOG_WRITER_TASK_TYPE_SHRINK_BINLOG   1
@@ -414,8 +413,7 @@ int da_binlog_writer_global_init()
         return result;
     }
 
-    RECORD_PTR_ARRAY.alloc = BINLOG_RECORD_MAX_WRITERS *
-        BINLOG_RECORD_BATCH_SIZE;
+    RECORD_PTR_ARRAY.alloc = BINLOG_RECORD_MAX_WRITERS * 8192;
     RECORD_PTR_ARRAY.records = (DABinlogRecord **)fc_malloc(
             sizeof(DABinlogRecord *) * RECORD_PTR_ARRAY.alloc);
     if (RECORD_PTR_ARRAY.records == NULL) {
@@ -445,6 +443,8 @@ static int binlog_record_alloc_init(DABinlogRecord *record,
 
 int da_binlog_writer_init(DABinlogWriter *writer, const int max_record_size)
 {
+    const int alloc_elements_once = 8 * 1024;
+    const int64_t alloc_elements_limit = 0;
     int result;
     int element_size;
     char name[32];
@@ -454,14 +454,16 @@ int da_binlog_writer_init(DABinlogWriter *writer, const int max_record_size)
             WRITER_CHAIN_ARRAY.count);
     element_size = sizeof(DABinlogRecord) + max_record_size;
     if ((result=fast_mblock_init_ex1(&writer->record_allocator,
-                    name, element_size, BINLOG_RECORD_BATCH_SIZE,
-                    BINLOG_RECORD_BATCH_SIZE, (fast_mblock_object_init_func)
+                    name, element_size, alloc_elements_once,
+                    alloc_elements_limit, (fast_mblock_object_init_func)
                     binlog_record_alloc_init, writer, true)) != 0)
     {
         return result;
     }
+    /*
     fast_mblock_set_need_wait(&writer->record_allocator,
             true, (bool *)&SF_G_CONTINUE_FLAG);
+            */
 
     if ((result=sf_synchronize_ctx_init(&writer->notify)) != 0) {
         return result;
