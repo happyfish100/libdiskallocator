@@ -101,11 +101,17 @@ extern "C" {
         int result;
 
         do {
-            avail_array = (DATrunkAllocatorPtrArray *)
-                ctx->store_allocator_mgr->store_path.avail;
-            if (avail_array->count == 0) {
-                result = ENOSPC;
-                break;
+            while (SF_G_CONTINUE_FLAG) {
+                avail_array = (DATrunkAllocatorPtrArray *)
+                    ctx->store_allocator_mgr->store_path.avail;
+                if (avail_array->count > 0) {
+                    break;
+                }
+                fc_sleep_ms(1);
+            }
+
+            if (!SF_G_CONTINUE_FLAG) {
+                return ENOSPC;
             }
 
             allocator = avail_array->allocators +
@@ -113,7 +119,8 @@ extern "C" {
             result = da_trunk_freelist_alloc_space(*allocator,
                     &(*allocator)->freelist, blk_hc, size,
                     spaces, count, is_normal);
-        } while ((result == ENOSPC || result == EAGAIN) && is_normal);
+        } while ((result == ENOSPC || result == EAGAIN) &&
+                is_normal && SF_G_CONTINUE_FLAG);
 
         return result;
     }
