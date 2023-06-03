@@ -101,14 +101,14 @@ extern "C" {
         int result;
 
         do {
-            while (SF_G_CONTINUE_FLAG) {
+            do {
                 avail_array = (DATrunkAllocatorPtrArray *)
                     ctx->store_allocator_mgr->store_path.avail;
                 if (avail_array->count > 0) {
                     break;
                 }
                 fc_sleep_ms(1);
-            }
+            } while (SF_G_CONTINUE_FLAG);
 
             if (!SF_G_CONTINUE_FLAG) {
                 return ENOSPC;
