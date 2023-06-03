@@ -91,7 +91,7 @@ extern "C" {
                 allocator_ptr_array.allocators[path_index], id_info->id);
     }
 
-    static inline int da_storage_allocator_normal_alloc_ex(
+    static inline int da_storage_allocator_alloc_space(
             DAContext *ctx, const uint64_t blk_hc,
             const int size, DATrunkSpaceWithVersion *spaces,
             int *count, const bool is_normal)
@@ -140,7 +140,7 @@ extern "C" {
         const bool is_normal = false;
         int result;
 
-        if ((result=da_storage_allocator_normal_alloc_ex(ctx, blk_hc,
+        if ((result=da_storage_allocator_alloc_space(ctx, blk_hc,
                         size, spaces, count, is_normal)) == 0)
         {
             return result;
@@ -152,7 +152,7 @@ extern "C" {
     }
 
 #define da_storage_allocator_normal_alloc(ctx, blk_hc, size, spaces, count) \
-    da_storage_allocator_normal_alloc_ex(ctx, blk_hc, size, spaces, count, true)
+    da_storage_allocator_alloc_space(ctx, blk_hc, size, spaces, count, true)
 
     int da_move_allocator_ptr_array(DAContext *ctx, DATrunkAllocatorPtrArray
             **src_array, DATrunkAllocatorPtrArray **dest_array,
