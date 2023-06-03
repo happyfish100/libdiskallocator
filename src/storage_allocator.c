@@ -377,9 +377,13 @@ static int check_trunk_avail_func(void *args)
 
     ctx->check_trunk_avail_in_progress = true;
     if (ctx->store_allocator_mgr->store_path.full->count > 0) {
-        logInfo("%s store_path full count: %d", ctx->module_name,
+        logInfo("file: "__FILE__", line: %d, %s "
+                "store path counts {total: %d, full: %d}",
+                __LINE__, ctx->module_name,
+                ctx->store_allocator_mgr->allocator_ptr_array.count,
                 ctx->store_allocator_mgr->store_path.full->count);
-        result = check_trunk_avail(ctx, &ctx->store_allocator_mgr->store_path);
+        result = check_trunk_avail(ctx, &ctx->
+                store_allocator_mgr->store_path);
     } else {
         result = 0;
     }
