@@ -175,26 +175,39 @@ int da_trunk_allocator_deal_space_changes(DAContext *ctx,
 {
     DATrunkSpaceLogRecord **record;
     DATrunkSpaceLogRecord **end;
+    int64_t changed_bytes;
+    int64_t positive_bytes;
 
     if (count <= 0) {
         return 0;
     }
 
-    PTHREAD_MUTEX_LOCK(&trunk->allocator->freelist.lcp.lock);
+    changed_bytes = 0;
     end = records + count;
+    PTHREAD_MUTEX_LOCK(&trunk->allocator->freelist.lcp.lock);
     for (record=records; record<end; record++) {
         if ((*record)->op_type == da_binlog_op_type_consume_space) {
-            __sync_add_and_fetch(&trunk->used.bytes, (*record)->storage.size);
+            changed_bytes += (*record)->storage.size;
             trunk->used.count++;
         } else {
-            __sync_sub_and_fetch(&trunk->used.bytes, (*record)->storage.size);
+            changed_bytes -= (*record)->storage.size;
             trunk->used.count--;
-
-            push_trunk_util_change_event(trunk->allocator, trunk,
-                    DA_TRUNK_UTIL_EVENT_UPDATE);
         }
     }
     PTHREAD_MUTEX_UNLOCK(&trunk->allocator->freelist.lcp.lock);
+
+    if (changed_bytes > 0) {
+        __sync_add_and_fetch(&trunk->used.bytes, changed_bytes);
+        __sync_add_and_fetch(&trunk->allocator->path_info->
+                trunk_stat.used, changed_bytes);
+    } else {
+        positive_bytes = -1 * changed_bytes;
+        __sync_sub_and_fetch(&trunk->used.bytes, positive_bytes);
+        __sync_sub_and_fetch(&trunk->allocator->path_info->
+                trunk_stat.used, positive_bytes);
+        push_trunk_util_change_event(trunk->allocator, trunk,
+                DA_TRUNK_UTIL_EVENT_UPDATE);
+    }
 
     return 0;
 }

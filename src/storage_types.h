@@ -237,7 +237,7 @@ typedef struct {
     volatile int64_t total;
     volatile int64_t avail;  //current available space
     volatile int64_t used;
-    int64_t last_used;      //for avail allocator check
+    int64_t last_used;       //for avail allocator check
 } DATrunkSpaceStat;
 
 struct da_context;

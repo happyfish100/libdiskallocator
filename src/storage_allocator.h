@@ -17,6 +17,7 @@
 #ifndef _DA_STORAGE_ALLOCATOR_H
 #define _DA_STORAGE_ALLOCATOR_H
 
+#include "fastcommon/fc_atomic.h"
 #include "sf/sf_binlog_index.h"
 #include "trunk/trunk_id_info.h"
 #include "trunk/trunk_freelist.h"
@@ -192,8 +193,8 @@ extern "C" {
                         (DATrunkAllocatorPtrArray **)&allocator_ctx->full,
                         allocator)) == 0)
         {
-            allocator->path_info->trunk_stat.last_used = __sync_add_and_fetch(
-                    &allocator->path_info->trunk_stat.used, 0);
+            allocator->path_info->trunk_stat.last_used =
+                FC_ATOMIC_GET(allocator->path_info->trunk_stat.used);
             logWarning("file: "__FILE__", line: %d, %s "
                     "path: %s is full", __LINE__, ctx->module_name,
                     allocator->path_info->store.path.str);

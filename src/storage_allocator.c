@@ -305,9 +305,10 @@ int init_allocator_ptr_array(DAContext *ctx,
         if (da_trunk_allocator_is_available(allocator)) {
             aptr_array = (DATrunkAllocatorPtrArray *)allocator_ctx->avail;
         } else {
-            allocator->path_info->trunk_stat.last_used = __sync_add_and_fetch(
-                    &allocator->path_info->trunk_stat.used, 0) +
-                ctx->storage.cfg.trunk_file_size;  //for trigger check trunk avail
+            /* for trigger check trunk avail */
+            allocator->path_info->trunk_stat.last_used =
+                FC_ATOMIC_GET(allocator->path_info->trunk_stat.used) +
+                ctx->storage.cfg.trunk_file_size;
             aptr_array = (DATrunkAllocatorPtrArray *)allocator_ctx->full;
         }
         add_to_aptr_array(aptr_array, allocator);
@@ -344,8 +345,7 @@ static int check_trunk_avail(DAContext *ctx,
                 result = r;
             }
         } else {
-            used_bytes = __sync_add_and_fetch(&(*pp)->
-                    path_info->trunk_stat.used, 0);
+            used_bytes = FC_ATOMIC_GET((*pp)->path_info->trunk_stat.used);
             if ((*pp)->path_info->trunk_stat.last_used - used_bytes >=
                     ctx->storage.cfg.trunk_file_size)
             {
