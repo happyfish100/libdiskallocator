@@ -204,11 +204,12 @@ static int trunk_binlog_load(DAContext *ctx)
 
 int da_trunk_binlog_init(DAContext *ctx)
 {
+    const int max_delay = 1;
     int result;
 
     if ((result=sf_binlog_writer_init(&ctx->trunk_binlog_writer,
                     ctx->data.path.str, DA_TRUNK_BINLOG_SUBDIR_NAME,
-                    ctx->data.binlog_buffer_size,
+                    ctx->data.binlog_buffer_size, max_delay,
                     DA_TRUNK_BINLOG_MAX_RECORD_SIZE)) != 0)
     {
         return result;
@@ -236,7 +237,7 @@ int da_trunk_binlog_write(DAContext *ctx, const char op_type,
 
     wbuffer->bf.length = da_trunk_binlog_log_to_buff(op_type,
             path_index, id_info, file_size, wbuffer->bf.buff);
-    sf_push_to_binlog_thread_queue(&ctx->trunk_binlog_writer.thread, wbuffer);
+    sf_push_to_binlog_write_queue(&ctx->trunk_binlog_writer.writer, wbuffer);
     return 0;
 }
 
