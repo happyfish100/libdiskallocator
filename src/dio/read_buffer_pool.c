@@ -308,12 +308,12 @@ DAAlignedReadBuffer *da_read_buffer_pool_alloc(DAContext *ctx,
     ReadBufferAllocator *allocator;
     DAAlignedReadBuffer *buffer;
     int64_t total_alloc;
+    int aligned_size;
     int reclaim_bytes;
 
+    aligned_size = MEM_ALIGN_CEIL(size, ctx->storage.cfg.max_align_size);
     pool = ctx->rbpool_ctx->array.pools + path_index;
-    if ((allocator=get_allocator(pool, size +
-                    DA_SPACE_ALIGN_SIZE)) == NULL)
-    {
+    if ((allocator=get_allocator(pool, aligned_size)) == NULL) {
         return NULL;
     }
 

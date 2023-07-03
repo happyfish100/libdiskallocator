@@ -203,6 +203,31 @@ void da_storage_config_stat_path_spaces(DAContext *ctx, SFSpaceStat *ss)
     *ss = stat;
 }
 
+static int load_write_align_size_from_config(DAContext *ctx,
+        IniFullContext *ini_ctx, const int default_value,
+        int *write_align_size)
+{
+    *write_align_size = iniGetIntValue(ini_ctx->section_name,
+            "write_align_size", ini_ctx->context, default_value);
+    if (*write_align_size < 0) {
+        logError("file: "__FILE__", line: %d, %s "
+                "config file: %s, invalid write_align_size: %d < 0!",
+                __LINE__, ctx->module_name, ini_ctx->filename,
+                *write_align_size);
+        return EINVAL;
+    } else if (*write_align_size > 0) {
+        if (!is_power2(*write_align_size)) {
+            logError("file: "__FILE__", line: %d, %s "
+                    "config file: %s, invalid write_align_size: %d "
+                    "which is NOT power 2!", __LINE__, ctx->module_name,
+                    ini_ctx->filename, *write_align_size);
+            return EINVAL;
+        }
+    }
+
+    return 0;
+}
+
 static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx, const char *section_name_prefix,
         const char *item_name, DAStoragePathArray *parray,
@@ -269,6 +294,9 @@ static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
         }
 
 #ifdef OS_LINUX
+        parray->paths[i].write_direct_io = iniGetBoolValue(
+                section_name, "write_direct_io", ini_ctx->context,
+                storage_cfg->write_direct_io);
         parray->paths[i].read_direct_io = iniGetBoolValue(
                 section_name, "read_direct_io", ini_ctx->context,
                 storage_cfg->read_direct_io);
@@ -276,8 +304,16 @@ static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
             ++ctx->storage.read_direct_io_paths;
         }
 #else
+        parray->paths[i].write_direct_io = false;
         parray->paths[i].read_direct_io = false;
 #endif
+
+        if ((result=load_write_align_size_from_config(ctx, ini_ctx,
+                        storage_cfg->write_align_size, &parray->
+                        paths[i].write_align_size)) != 0)
+        {
+            return result;
+        }
 
         parray->paths[i].fsync_every_n_writes = iniGetIntValue(section_name,
                 "fsync_every_n_writes", ini_ctx->context,
@@ -397,11 +433,20 @@ static int load_global_items(DAContext *ctx,
     }
 
 #ifdef OS_LINUX
+    storage_cfg->write_direct_io = iniGetBoolValue(NULL,
+            "write_direct_io", ini_ctx->context, false);
     storage_cfg->read_direct_io = iniGetBoolValue(NULL,
             "read_direct_io", ini_ctx->context, false);
 #else
+    storage_cfg->write_direct_io = false;
     storage_cfg->read_direct_io = false;
 #endif
+
+    if ((result=load_write_align_size_from_config(ctx, ini_ctx, 0,
+                    &storage_cfg->write_align_size)) != 0)
+    {
+        return result;
+    }
 
     storage_cfg->fsync_every_n_writes = iniGetIntValue(NULL,
             "fsync_every_n_writes", ini_ctx->context, 0);
@@ -527,8 +572,8 @@ static int load_from_config_file(DAContext *ctx,
     return 0;
 }
 
-static int load_path_indexes(DAContext *ctx, DAStoragePathArray *parray,
-        const char *caption, int *change_count)
+static int load_path_indexes(DAContext *ctx, DAStorageConfig *storage_cfg,
+        DAStoragePathArray *parray, const char *caption, int *change_count)
 {
     int result;
     bool regenerated;
@@ -559,12 +604,33 @@ static int load_path_indexes(DAContext *ctx, DAStoragePathArray *parray,
         }
 
 #ifdef OS_LINUX
-        if (p->read_direct_io && (result=get_path_block_size(
-                        p->store.path.str, &p->block_size)) != 0)
-        {
-            return result;
+        if (p->write_direct_io || p->read_direct_io) {
+            if ((result=get_path_block_size(p->store.path.str,
+                            &p->block_size)) != 0)
+            {
+                return result;
+            }
+
+            if (p->write_align_size == 0) {
+                if (p->write_direct_io) {
+                    p->write_align_size = p->block_size;
+                } else {
+                    p->write_align_size = 8;
+                }
+            }
         }
 #endif
+
+        if (p->write_align_size == 0) {
+            p->write_align_size = 8;
+        }
+
+        if (storage_cfg->max_align_size < p->write_align_size) {
+            storage_cfg->max_align_size = p->write_align_size;
+        }
+        if (storage_cfg->discard_remain_space_size < p->write_align_size) {
+            storage_cfg->discard_remain_space_size = p->write_align_size;
+        }
     }
 
     return 0;
@@ -613,13 +679,13 @@ static int load_store_path_indexes(DAContext *ctx, DAStorageConfig *storage_cfg,
     old_count = da_store_path_index_count(ctx);
     change_count = 0;
     do {
-        if ((result=load_path_indexes(ctx, &storage_cfg->write_cache,
-                        "write cache paths", &change_count)) != 0)
+        if ((result=load_path_indexes(ctx, storage_cfg, &storage_cfg->
+                        write_cache, "write cache paths", &change_count)) != 0)
         {
             break;
         }
-        if ((result=load_path_indexes(ctx, &storage_cfg->store_path,
-                        "store paths", &change_count)) != 0)
+        if ((result=load_path_indexes(ctx, storage_cfg, &storage_cfg->
+                        store_path, "store paths", &change_count)) != 0)
         {
             break;
         }
@@ -709,7 +775,8 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
                 (1024 * 1024), prealloc_space_buff);
         logInfo("  path %d: %s, index: %d, write_threads: %d, "
                 "read_threads: %d, read_io_depth: %d, "
-                "read_direct_io: %d, fsync_every_n_writes: %d, "
+                "write_direct_io: %d, read_direct_io: %d, "
+                "write_align_size: %d, fsync_every_n_writes: %d, "
                 "prealloc_space ratio: %.2f%%, "
                 "reserved_space ratio: %.2f%%, "
                 "avail_space: %s MB, prealloc_space: %s MB, "
@@ -717,7 +784,8 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
                 (int)(p - parray->paths + 1), p->store.path.str,
                 p->store.index, p->write_thread_count,
                 p->read_thread_count, p->read_io_depth,
-                p->read_direct_io, p->fsync_every_n_writes,
+                p->write_direct_io, p->read_direct_io,
+                p->write_align_size, p->fsync_every_n_writes,
                 p->prealloc_space.ratio * 100.00,
                 p->reserved_space.ratio * 100.00,
                 avail_space_buff, prealloc_space_buff,
@@ -730,8 +798,9 @@ void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
 {
     logInfo("%s storage config, write_threads_per_path: %d, "
             "read_threads_per_path: %d, "
-            "io_depth_per_read_thread: %d, read_direct_io: %d, "
-            "fsync_every_n_writes: %d, "
+            "io_depth_per_read_thread: %d, "
+            "write_direct_io: %d, read_direct_io: %d, "
+            "write_align_size: %d, fsync_every_n_writes: %d, "
             "fd_cache_capacity_per_read_thread: %d, "
             "fd_cache_capacity_per_write_thread: %d, "
             "prealloc_space: {ratio_per_path: %.2f%%, "
@@ -759,7 +828,9 @@ void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
             storage_cfg->write_threads_per_path,
             storage_cfg->read_threads_per_path,
             storage_cfg->io_depth_per_read_thread,
+            storage_cfg->write_direct_io,
             storage_cfg->read_direct_io,
+            storage_cfg->write_align_size,
             storage_cfg->fsync_every_n_writes,
             storage_cfg->fd_cache_capacity_per_read_thread,
             storage_cfg->fd_cache_capacity_per_write_thread,

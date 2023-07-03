@@ -29,7 +29,6 @@
 #include "dio/read_buffer_pool.h"
 #endif
 
-#define DA_SPACE_ALIGN_SIZE  8
 #define DA_TRUNK_BINLOG_MAX_RECORD_SIZE    128
 #define DA_TRUNK_BINLOG_SUBDIR_NAME      "trunk"
 
@@ -250,7 +249,9 @@ typedef struct {
     int read_thread_count;
     int prealloc_trunks;
     int read_io_depth;
+    bool write_direct_io;
     bool read_direct_io;
+    int write_align_size;
     int fsync_every_n_writes;
     struct {
         int64_t value;
@@ -299,7 +300,10 @@ typedef struct da_storage_config {
     int write_threads_per_path;
     int read_threads_per_path;
     int io_depth_per_read_thread;
+    bool write_direct_io;
     bool read_direct_io;
+    int write_align_size;
+    int max_align_size;
     int fsync_every_n_writes;
     double reserved_space_per_disk;
     int max_trunk_files_per_subdir;

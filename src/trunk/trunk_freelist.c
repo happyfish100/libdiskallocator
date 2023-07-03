@@ -216,7 +216,8 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
     DATrunkSpaceWithVersion *space_info;
     DATrunkFileInfo *trunk_info;
 
-    aligned_size = MEM_ALIGN_CEIL(size, DA_SPACE_ALIGN_SIZE);
+    aligned_size = MEM_ALIGN_CEIL(size, allocator->
+            path_info->write_align_size);
     space_info = spaces;
 
     PTHREAD_MUTEX_LOCK(&freelist->lcp.lock);
