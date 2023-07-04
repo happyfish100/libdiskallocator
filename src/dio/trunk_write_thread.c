@@ -840,6 +840,12 @@ static int align_write_buffer(TrunkWriteThreadContext *thread,
         return result;
     }
 
+    /*
+    logInfo("trunk id: %"PRId64", offset: %u, read bytes: %d",
+            iob->space.id_info.id, thread->direct_io.file.
+            first_offset, thread->path_info->block_size);
+            */
+
     read_bytes = pread(fd, thread->direct_io.buffer.buff, thread->
             path_info->block_size, thread->direct_io.file.first_offset);
     if (read_bytes == thread->path_info->block_size) {
@@ -849,8 +855,9 @@ static int align_write_buffer(TrunkWriteThreadContext *thread,
         logError("file: "__FILE__", line: %d, %s "
                 "trunk file: %s, offset: %u, read %d bytes fail, errno: %d, "
                 "error info: %s", __LINE__, thread->path_info->ctx->
-                module_name, trunk_filename, iob->space.offset - padding_bytes,
-                thread->path_info->block_size, result, STRERROR(result));
+                module_name, trunk_filename, thread->direct_io.file.
+                first_offset, thread->path_info->block_size,
+                result, STRERROR(result));
     }
 
     close(fd);
@@ -867,7 +874,6 @@ static void deal_write_request(TrunkWriteThreadContext *thread,
     struct iovec *dest;
     int total;
     int padding;
-    int remain_bytes;
     int padding_bytes;
     int inc_count;
 
@@ -885,13 +891,12 @@ static void deal_write_request(TrunkWriteThreadContext *thread,
 
     if (thread->path_info->write_direct_io) {
         if (thread->iob_array.count == 0) {
-            remain_bytes = (iob->space.offset & thread->
+            padding_bytes = (iob->space.offset & thread->
                     path_info->block_align_mask);
-            if (remain_bytes == 0) {
+            if (padding_bytes == 0) {
                 thread->direct_io.file.first_offset = iob->space.offset;
                 thread->direct_io.buffer.last = thread->direct_io.buffer.buff;
             } else {
-                padding_bytes = thread->path_info->block_size - remain_bytes;
                 thread->direct_io.file.first_offset =
                     iob->space.offset - padding_bytes;
                 if (align_write_buffer(thread, iob, padding_bytes) != 0) {
