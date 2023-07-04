@@ -610,6 +610,7 @@ static int load_path_indexes(DAContext *ctx, DAStorageConfig *storage_cfg,
             {
                 return result;
             }
+            p->block_align_mask = p->block_size - 1;
 
             if (p->write_align_size == 0) {
                 if (p->write_direct_io) {

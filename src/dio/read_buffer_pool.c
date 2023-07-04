@@ -289,9 +289,9 @@ static inline DAAlignedReadBuffer *do_aligned_alloc(ReadBufferPool *pool,
                     pool->block_size, allocator->size)) != 0)
     {
         logError("file: "__FILE__", line: %d, %s "
-                "posix_memalign %d bytes fail, errno: %d, "
+                "posix_memalign %d bytes fail, block size: %d, errno: %d, "
                 "error info: %s", __LINE__, pool->ctx->module_name,
-                allocator->size, result, STRERROR(result));
+                allocator->size, pool->block_size, result, STRERROR(result));
         fast_mblock_free_object(&pool->mblock, buffer);
         return NULL;
     }

@@ -241,9 +241,8 @@ typedef struct {
 
 struct da_context;
 typedef struct {
-#ifdef OS_LINUX
     int block_size;
-#endif
+    int block_align_mask;
     DAStorePath store;
     int write_thread_count;
     int read_thread_count;
