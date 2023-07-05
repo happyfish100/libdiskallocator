@@ -257,6 +257,8 @@ void da_trunk_write_thread_terminate(DAContext *ctx)
             if ((iob=fast_mblock_alloc_object(&thread_ctx->mblock)) != NULL) {
                 memset(iob, 0, sizeof(*iob));
                 iob->op_type = DA_IO_TYPE_QUIT;
+                iob->version = __sync_add_and_fetch(
+                        &thread_ctx->current_version, 1);
                 fc_queue_push(&thread_ctx->queue, iob);
             }
         }
