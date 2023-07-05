@@ -68,6 +68,82 @@ typedef struct da_trunk_write_io_buffer {
     struct da_trunk_write_io_buffer *next;
 } TrunkWriteIOBuffer;
 
+typedef struct da_trunk_write_thread_context {
+    DAContext *ctx;
+    const DAStoragePathInfo *path_info;
+    struct {
+        short path;
+        short thread;
+    } indexes;
+    volatile int64_t current_version; //for write in order
+    struct fc_queue queue;
+    struct fast_mblock_man mblock;
+
+    struct {
+        int write_flags;
+        uint64_t trunk_id;
+        uint32_t offset;
+        int fd;
+    } file_handle;
+
+    UniqSkiplistPair *sl_pair;
+
+    struct {
+        int count;
+        struct iovec *iovs;
+    };
+
+    int iovec_bytes;
+    iovec_array_t iovec_array;
+
+    struct {
+        struct {
+            char *buff;
+            char *last;
+            int alloc_size;
+        } buffer;
+
+        struct {
+            int read_flags;
+            uint64_t trunk_id;
+            uint32_t first_offset;
+            uint32_t last_offset;
+        } file;
+    } direct_io;
+
+    int write_bytes_max;
+
+    struct {
+        int alloc;
+        int count;
+        int success; //write success count
+        TrunkWriteIOBuffer **iobs;
+    } iob_array;
+
+    int64_t written_count;  //for fsync
+
+} TrunkWriteThreadContext;
+
+typedef struct da_trunk_write_thread_context_array {
+    int count;
+    TrunkWriteThreadContext *contexts;
+} TrunkWriteThreadContextArray;
+
+typedef struct trunk_write_path_context {
+    TrunkWriteThreadContextArray writes;
+} TrunkWritePathContext;
+
+typedef struct trunk_write_path_contexts_array {
+    int count;
+    TrunkWritePathContext *paths;
+} TrunkWritePathContextArray;
+
+typedef struct da_trunk_write_context {
+    TrunkWritePathContextArray path_ctx_array;
+    UniqSkiplistFactory factory;
+    volatile int running_threads;
+} TrunkWriteContext;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -75,6 +151,26 @@ extern "C" {
 
     int da_trunk_write_thread_init(DAContext *ctx);
     void da_trunk_write_thread_terminate(DAContext *ctx);
+
+    static inline TrunkWriteThreadContext *da_trunk_write_thread_get(
+            DAContext *ctx, const DATrunkSpaceInfo *space)
+    {
+        TrunkWritePathContext *path_ctx;
+
+        path_ctx = ctx->trunk_write_ctx->path_ctx_array.
+            paths + space->store->index;
+        return path_ctx->writes.contexts + space->
+            id_info.id % path_ctx->writes.count;
+    }
+
+    static inline int64_t da_trunk_write_thread_next_version(
+            DAContext *ctx, const DATrunkSpaceInfo *space)
+    {
+        TrunkWriteThreadContext *thread;
+
+        thread = da_trunk_write_thread_get(ctx, space);
+        return __sync_add_and_fetch(&thread->current_version, 1);
+    }
 
     int da_trunk_write_thread_push(DAContext *ctx, const int op_type,
             const int64_t version, const DATrunkSpaceInfo *space,
@@ -85,12 +181,9 @@ extern "C" {
             const int op_type, const DATrunkSpaceInfo *space,
             da_trunk_write_io_notify_func notify_func, void *notify_arg)
     {
-        DATrunkAllocator *allocator;
-        allocator = ctx->store_allocator_mgr->allocator_ptr_array.
-            allocators[space->store->index];
-        return da_trunk_write_thread_push(ctx, op_type, __sync_add_and_fetch(
-                    &allocator->allocate.current_version, 1), space,
-                NULL, notify_func, notify_arg, NULL);
+        return da_trunk_write_thread_push(ctx, op_type,
+                da_trunk_write_thread_next_version(ctx, space),
+                space, NULL, notify_func, notify_arg, NULL);
     }
 
     int da_trunk_write_thread_push_cached_slice(DAContext *ctx,

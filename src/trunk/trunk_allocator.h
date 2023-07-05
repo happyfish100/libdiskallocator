@@ -62,7 +62,6 @@ typedef struct da_trunk_allocator {
         time_t last_trigger_time; //caller trigger create trunk
         int creating_trunks;  //counter for creating (prealloc or reclaim) trunk
         int waiting_callers;  //caller count for waiting available trunk
-        volatile int64_t current_version; //for trunk space alloc
     } allocate; //for allocate space
 
     struct {

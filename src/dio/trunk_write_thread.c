@@ -27,82 +27,6 @@
 #include "trunk_fd_cache.h"
 #include "trunk_write_thread.h"
 
-typedef struct write_file_handle {
-    int write_flags;
-    uint64_t trunk_id;
-    uint32_t offset;
-    int fd;
-} WriteFileHandle;
-
-typedef struct da_trunk_write_thread_context {
-    DAContext *ctx;
-    const DAStoragePathInfo *path_info;
-    struct {
-        short path;
-        short thread;
-    } indexes;
-    struct fc_queue queue;
-    struct fast_mblock_man mblock;
-    WriteFileHandle file_handle;
-
-    UniqSkiplistPair *sl_pair;
-
-    struct {
-        int count;
-        struct iovec *iovs;
-    };
-
-    int iovec_bytes;
-    iovec_array_t iovec_array;
-
-    struct {
-        struct {
-            char *buff;
-            char *last;
-            int alloc_size;
-        } buffer;
-
-        struct {
-            int read_flags;
-            uint64_t trunk_id;
-            uint32_t first_offset;
-            uint32_t last_offset;
-        } file;
-    } direct_io;
-
-    int write_bytes_max;
-
-    struct {
-        int alloc;
-        int count;
-        int success; //write success count
-        TrunkWriteIOBuffer **iobs;
-    } iob_array;
-
-    int64_t written_count;  //for fsync
-
-} TrunkWriteThreadContext;
-
-typedef struct da_trunk_write_thread_context_array {
-    int count;
-    TrunkWriteThreadContext *contexts;
-} TrunkWriteThreadContextArray;
-
-typedef struct trunk_write_path_context {
-    TrunkWriteThreadContextArray writes;
-} TrunkWritePathContext;
-
-typedef struct trunk_write_path_contexts_array {
-    int count;
-    TrunkWritePathContext *paths;
-} TrunkWritePathContextArray;
-
-typedef struct da_trunk_write_context {
-    TrunkWritePathContextArray path_ctx_array;
-    UniqSkiplistFactory factory;
-    volatile int running_threads;
-} TrunkWriteContext;
-
 static void *da_trunk_write_thread_func(void *arg);
 
 static int alloc_path_contexts(DAContext *ctx)
@@ -348,13 +272,9 @@ static inline TrunkWriteIOBuffer *alloc_init_buffer(DAContext *ctx,
         const int64_t version, const DATrunkSpaceInfo *space,
         void *data)
 {
-    TrunkWritePathContext *path_ctx;
     TrunkWriteIOBuffer *iob;
 
-    path_ctx = ctx->trunk_write_ctx->path_ctx_array.
-        paths + space->store->index;
-    *thread_ctx = path_ctx->writes.contexts + space->
-        id_info.id % path_ctx->writes.count;
+    *thread_ctx = da_trunk_write_thread_get(ctx, space);
     iob = fast_mblock_alloc_object(&(*thread_ctx)->mblock);
     if (iob == NULL) {
         return NULL;
@@ -418,7 +338,7 @@ int da_trunk_write_thread_push_cached_slice(DAContext *ctx,
 static inline void close_write_fd(TrunkWriteThreadContext *ctx)
 {
 #ifdef OS_LINUX
-    if (ctx->path_info->read_direct_io) {
+    if (ctx->path_info->read_direct_io && !ctx->path_info->write_direct_io) {
         posix_fadvise(ctx->file_handle.fd, 0, 0, POSIX_FADV_DONTNEED);
     }
 #endif

@@ -23,6 +23,7 @@
 #include "sf/sf_global.h"
 #include "../global.h"
 #include "../storage_allocator.h"
+#include "../dio/trunk_write_thread.h"
 #include "trunk_maker.h"
 #include "trunk_freelist.h"
 
@@ -66,9 +67,9 @@ static inline void push_trunk_util_event_force(DATrunkAllocator *allocator,
         space_info->ts.space.id_info = _trunk->id_info;   \
         space_info->ts.space.offset = _trunk->free_start; \
         space_info->ts.space.size = alloc_size;           \
-        space_info->version = __sync_add_and_fetch(&_trunk->  \
-                allocator->allocate.current_version, 1); \
-        _trunk->free_start += alloc_size;  \
+        space_info->version = da_trunk_write_thread_next_version(trunk_info-> \
+                allocator->path_info->ctx, &space_info->ts.space); \
+        _trunk->free_start += alloc_size;    \
         __sync_sub_and_fetch(&_trunk->allocator->path_info-> \
                 trunk_stat.avail, alloc_size);  \
         FC_ATOMIC_INC(_trunk->writing_count); \
