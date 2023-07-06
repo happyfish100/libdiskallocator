@@ -61,19 +61,45 @@ static TrunkWriteThreadContext *alloc_thread_contexts(const int count)
     return contexts;
 }
 
-static int compare_by_version(const void *p1, const void *p2)
+static int trunk_write_thread_push_compare(const TrunkWriteIOBuffer *iob1,
+        const TrunkWriteIOBuffer *iob2)
 {
-    return fc_compare_int64(((TrunkWriteIOBuffer *)p1)->version,
-            ((TrunkWriteIOBuffer *)p2)->version);
+    return fc_compare_int64(iob1->version, iob2->version);
+}
+
+static int trunk_write_thread_pop_compare(
+        const TrunkWriteIOBuffer *iob,
+        const TrunkWriteIOBuffer *less_equal,
+        TrunkWriteThreadContext *thread)
+{
+    int distance;
+    int log_level;
+
+    if (iob->version == thread->last_version + 1) {
+        thread->last_version = iob->version;
+        return -1;
+    } else {
+        distance = iob->version - thread->last_version;
+        if (distance < 0) {
+            log_level = LOG_ERR;
+        } else if (distance > 256) {
+            log_level = LOG_WARNING;
+        } else {
+            log_level = LOG_DEBUG;
+        }
+        log_it_ex(&g_log_context, log_level,
+                "file: "__FILE__", line: %d, %s, "
+                "path index: %d, thread index: %d, iob version: %"PRId64", "
+                "queue last version: %"PRId64", expect iob count: %d",
+                __LINE__, thread->ctx->module_name, thread->indexes.path,
+                thread->indexes.thread >= 0 ?  thread->indexes.thread : 0,
+                iob->version, thread->last_version, distance);
+        return 1;
+    }
 }
 
 static int init_write_context(TrunkWriteThreadContext *thread)
 {
-    const int init_level_count = 2;
-    const int max_level_count = 8;
-    const int min_alloc_elements_once = 8;
-    const int delay_free_seconds = 0;
-    char *buff;
     int result;
 
     if ((result=fc_check_realloc_iovec_array(&thread->
@@ -83,16 +109,10 @@ static int init_write_context(TrunkWriteThreadContext *thread)
     }
 
     thread->iob_array.alloc = IOV_MAX;
-    buff = (char *)fc_malloc( sizeof(UniqSkiplistPair) +
-            sizeof(TrunkWriteIOBuffer *) * thread->iob_array.alloc);
-    thread->sl_pair = (UniqSkiplistPair *)buff;
-    thread->iob_array.iobs = (TrunkWriteIOBuffer **)(thread->sl_pair + 1);
-
-    if ((result=uniq_skiplist_init_pair(thread->sl_pair, init_level_count,
-                    max_level_count, compare_by_version, NULL,
-                    min_alloc_elements_once, delay_free_seconds)) != 0)
-    {
-        return result;
+    thread->iob_array.iobs = fc_malloc(sizeof(TrunkWriteIOBuffer *) *
+            thread->iob_array.alloc);
+    if (thread->iob_array.iobs == NULL) {
+        return ENOMEM;
     }
 
     if (thread->path_info->write_direct_io) {
@@ -137,19 +157,24 @@ static int init_thread_context(TrunkWriteThreadContext *thread)
     int result;
     pthread_t tid;
 
-    if ((result=fast_mblock_init_ex1(&thread->mblock, "trunk_write_buffer",
+    if ((result=fast_mblock_init_ex1(&thread->mblock, "trunk-write-buffer",
                     sizeof(TrunkWriteIOBuffer), 4 * 1024, 0, NULL,
                     NULL, true)) != 0)
     {
         return result;
     }
 
-    if ((result=fc_queue_init(&thread->queue, (long)
-                    (&((TrunkWriteIOBuffer *)NULL)->next))) != 0)
+    if ((result=sorted_queue_init(&thread->queue, (long)
+                    (&((TrunkWriteIOBuffer *)NULL)->dlink),
+                    (int (*)(const void *, const void *))
+                    trunk_write_thread_push_compare,
+                    (int (*)(const void *, const void *, void *))
+                    trunk_write_thread_pop_compare, thread)) != 0)
     {
         return result;
     }
 
+    thread->less_than.version = INT64_MAX;
     thread->file_handle.trunk_id = 0;
     thread->file_handle.fd = -1;
     if ((result=init_write_context(thread)) != 0) {
@@ -166,7 +191,7 @@ static int init_thread_contexts(DAContext *ctx,
     int result;
     TrunkWriteThreadContext *thread;
     TrunkWriteThreadContext *end;
-    
+
     end = ctx_array->contexts + ctx_array->count;
     for (thread=ctx_array->contexts; thread<end; thread++) {
         thread->ctx = ctx;
@@ -259,7 +284,7 @@ void da_trunk_write_thread_terminate(DAContext *ctx)
                 iob->op_type = DA_IO_TYPE_QUIT;
                 iob->version = __sync_add_and_fetch(
                         &thread_ctx->current_version, 1);
-                fc_queue_push(&thread_ctx->queue, iob);
+                sorted_queue_push(&thread_ctx->queue, iob);
             }
         }
     }
@@ -312,7 +337,7 @@ int da_trunk_write_thread_push(DAContext *ctx, const int op_type,
     iob->notify.func = notify_func;
     iob->notify.arg1 = arg1;
     iob->notify.arg2 = arg2;
-    fc_queue_push(&thread_ctx->queue, iob);
+    sorted_queue_push(&thread_ctx->queue, iob);
     return 0;
 }
 
@@ -333,7 +358,7 @@ int da_trunk_write_thread_push_cached_slice(DAContext *ctx,
     iob->slice_type = DA_SLICE_TYPE_CACHE;
     iob->slice = *slice;
     iob->arg = arg;
-    fc_queue_push(&thread_ctx->queue, iob);
+    sorted_queue_push(&thread_ctx->queue, iob);
     return 0;
 }
 
@@ -643,6 +668,20 @@ static int do_write_slices(TrunkWriteThreadContext *thread)
     return 0;
 }
 
+static inline void add_to_batch_free_chain(TrunkWriteThreadContext *thread,
+        TrunkWriteIOBuffer *iob)
+{
+    struct fast_mblock_node *node;
+
+    node = fast_mblock_to_node_ptr(iob);
+    if (thread->batch_free_chain.head == NULL) {
+        thread->batch_free_chain.head = node;
+    } else {
+        thread->batch_free_chain.tail->next = node;
+    }
+    thread->batch_free_chain.tail = node;
+}
+
 static int batch_write(TrunkWriteThreadContext *thread)
 {
     int result;
@@ -661,7 +700,7 @@ static int batch_write(TrunkWriteThreadContext *thread)
                 (*iob)->notify.func(*iob, 0);
             }
 
-            fast_mblock_free_object(&thread->mblock, *iob);
+            add_to_batch_free_chain(thread, *iob);
         }
     }
 
@@ -674,7 +713,7 @@ static int batch_write(TrunkWriteThreadContext *thread)
                 (*iob)->notify.func(*iob, result);
             }
 
-            fast_mblock_free_object(&thread->mblock, *iob);
+            add_to_batch_free_chain(thread, *iob);
         }
 
         sf_terminate_myself();
@@ -693,38 +732,6 @@ static int batch_write(TrunkWriteThreadContext *thread)
     thread->iovec_array.count = 0;
     thread->iob_array.count = 0;
     return result;
-}
-
-static inline int pop_to_request_skiplist(TrunkWriteThreadContext *thread,
-        const bool blocked)
-{
-    TrunkWriteIOBuffer *head;
-    int count;
-    int result;
-
-    if ((head=(TrunkWriteIOBuffer *)fc_queue_pop_all_ex(
-                    &thread->queue, blocked)) == NULL)
-    {
-        return 0;
-    }
-
-    count = 0;
-    do {
-        ++count;
-        if ((result=uniq_skiplist_insert(thread->sl_pair->
-                        skiplist, head)) != 0)
-        {
-            logCrit("file: "__FILE__", line: %d, %s "
-                    "uniq_skiplist_insert fail, result: %d", __LINE__,
-                    thread->path_info->ctx->module_name, result);
-            sf_terminate_myself();
-            return -1;
-        }
-
-        head = head->next;
-    } while (head != NULL);
-
-    return count;
 }
 
 #define IOB_IS_SUCCESSIVE(last, current)  \
@@ -895,24 +902,27 @@ static void deal_write_request(TrunkWriteThreadContext *thread,
     thread->iovec_bytes += iob->space.size;
 }
 
-static void deal_request_skiplist(TrunkWriteThreadContext *thread)
+static inline void batch_free_mblock_chain(TrunkWriteThreadContext *thread)
+{
+    if (thread->batch_free_chain.head != NULL) {
+        thread->batch_free_chain.tail->next = NULL;
+        fast_mblock_batch_free(&thread->mblock, &thread->batch_free_chain);
+        thread->batch_free_chain.head = NULL;
+        thread->batch_free_chain.tail = NULL;
+    }
+}
+
+static void deal_requests(TrunkWriteThreadContext *thread,
+        struct fc_list_head *head)
 {
     TrunkWriteIOBuffer *iob;
     int result;
 
-    while (SF_G_CONTINUE_FLAG) {
-        iob = (TrunkWriteIOBuffer *)uniq_skiplist_get_first(
-                thread->sl_pair->skiplist);
-        if (iob == NULL) {
-            break;
-        }
-
+    fc_list_for_each_entry(iob, head, dlink) {
         switch (iob->op_type) {
             case DA_IO_TYPE_QUIT:
-                if (thread->iob_array.count > 0) {
-                    batch_write(thread);
-                }
-                break;
+                add_to_batch_free_chain(thread, iob);
+                return;
             case DA_IO_TYPE_CREATE_TRUNK:
             case DA_IO_TYPE_DELETE_TRUNK:
                 if (iob->op_type == DA_IO_TYPE_CREATE_TRUNK) {
@@ -929,6 +939,8 @@ static void deal_request_skiplist(TrunkWriteThreadContext *thread)
                     sf_terminate_myself();
                     return;
                 }
+
+                add_to_batch_free_chain(thread, iob);
                 break;
             case DA_IO_TYPE_WRITE_SLICE_BY_BUFF:
             case DA_IO_TYPE_WRITE_SLICE_BY_IOVEC:
@@ -942,20 +954,8 @@ static void deal_request_skiplist(TrunkWriteThreadContext *thread)
                 return;
         }
 
-        if ((result=uniq_skiplist_delete(thread->sl_pair->
-                        skiplist, iob)) != 0)
-        {
-            logCrit("file: "__FILE__", line: %d, %s "
-                    "uniq_skiplist_delete fail, result: %d", __LINE__,
-                    thread->path_info->ctx->module_name, result);
-            sf_terminate_myself();
-            return;
-        }
-
-        if (iob->op_type == DA_IO_TYPE_CREATE_TRUNK ||
-                iob->op_type == DA_IO_TYPE_DELETE_TRUNK)
-        {
-            fast_mblock_free_object(&thread->mblock, iob);
+        if (!SF_G_CONTINUE_FLAG) {
+            break;
         }
     }
 }
@@ -963,7 +963,7 @@ static void deal_request_skiplist(TrunkWriteThreadContext *thread)
 static void *da_trunk_write_thread_func(void *arg)
 {
     TrunkWriteThreadContext *thread;
-    int count;
+    struct fc_list_head head;
 
     thread = (TrunkWriteThreadContext *)arg;
 #ifdef OS_LINUX
@@ -990,20 +990,19 @@ static void *da_trunk_write_thread_func(void *arg)
 
     FC_ATOMIC_INC(thread->ctx->trunk_write_ctx->running_threads);
     while (SF_G_CONTINUE_FLAG) {
-        count = pop_to_request_skiplist(thread,
-                thread->iob_array.count == 0);
-        if (count < 0) {  //error
-            continue;
-        }
-
-        if (count == 0) {
+        sorted_queue_pop_to_chain_ex(&thread->queue, &thread->less_than,
+                &head, thread->iob_array.count == 0);
+        if (fc_list_empty(&head)) {
             if (thread->iob_array.count > 0) {
                 batch_write(thread);
+                batch_free_mblock_chain(thread);
             }
+            fc_sleep_ms(1);
             continue;
         }
 
-        deal_request_skiplist(thread);
+        deal_requests(thread, &head);
+        batch_free_mblock_chain(thread);
     }
 
     if (thread->iob_array.count > 0) {

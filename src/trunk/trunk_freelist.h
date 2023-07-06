@@ -45,7 +45,8 @@ extern "C" {
 
     int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
             DATrunkFreelist *freelist, const uint64_t blk_hc, const int size,
-            DATrunkSpaceWithVersion *spaces, int *count, const bool is_normal);
+            DATrunkSpaceWithVersion *spaces, int *count, const bool is_normal,
+            const DASliceType slice_type);
 
     void da_trunk_freelist_decrease_writing_count_ex(DATrunkFileInfo *trunk,
             const int dec_count);

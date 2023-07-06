@@ -60,15 +60,18 @@ static inline void push_trunk_util_event_force(DATrunkAllocator *allocator,
     }
 }
 
-#define TRUNK_ALLOC_SPACE(_trunk, space_info, alloc_size) \
+#define TRUNK_ALLOC_SPACE(_trunk, space_info, slice_type, alloc_size) \
     do { \
         space_info->ts.trunk = _trunk;  \
         space_info->ts.space.store = &_trunk->allocator->path_info->store; \
         space_info->ts.space.id_info = _trunk->id_info;   \
         space_info->ts.space.offset = _trunk->free_start; \
         space_info->ts.space.size = alloc_size;           \
-        space_info->version = da_trunk_write_thread_next_version(trunk_info-> \
-                allocator->path_info->ctx, &space_info->ts.space); \
+        if (slice_type == DA_SLICE_TYPE_FILE) { \
+            space_info->version = da_trunk_write_thread_next_version(  \
+                    trunk_info->allocator->path_info->ctx, \
+                    &space_info->ts.space); \
+        } \
         _trunk->free_start += alloc_size;    \
         __sync_sub_and_fetch(&_trunk->allocator->path_info-> \
                 trunk_stat.avail, alloc_size);  \
@@ -209,7 +212,8 @@ static int waiting_avail_trunk(struct da_trunk_allocator *allocator,
 
 int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
         DATrunkFreelist *freelist, const uint64_t blk_hc, const int size,
-        DATrunkSpaceWithVersion *spaces, int *count, const bool is_normal)
+        DATrunkSpaceWithVersion *spaces, int *count, const bool is_normal,
+        const DASliceType slice_type)
 {
     int result;
     uint32_t aligned_size;
@@ -252,7 +256,8 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
                 }
 
                 if (*count >= 2) {
-                    TRUNK_ALLOC_SPACE(trunk_info, space_info, remain_bytes);
+                    TRUNK_ALLOC_SPACE(trunk_info, space_info,
+                            slice_type, remain_bytes);
                     space_info++;
                     aligned_size -= remain_bytes;
                 }
@@ -292,7 +297,7 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
             break;
         }
 
-        TRUNK_ALLOC_SPACE(trunk_info, space_info, aligned_size);
+        TRUNK_ALLOC_SPACE(trunk_info, space_info, slice_type, aligned_size);
         space_info++;
         if (DA_TRUNK_AVAIL_SPACE(trunk_info) < trunk_info->allocator->
                 path_info->ctx->storage.cfg.discard_remain_space_size)

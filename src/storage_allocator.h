@@ -93,9 +93,9 @@ extern "C" {
     }
 
     static inline int da_storage_allocator_alloc_space(
-            DAContext *ctx, const uint64_t blk_hc,
-            const int size, DATrunkSpaceWithVersion *spaces,
-            int *count, const bool is_normal)
+            DAContext *ctx, const uint64_t blk_hc, const int size,
+            DATrunkSpaceWithVersion *spaces, int *count,
+            const bool is_normal, const DASliceType slice_type)
     {
         DATrunkAllocatorPtrArray *avail_array;
         DATrunkAllocator **allocator;
@@ -120,8 +120,8 @@ extern "C" {
                 allocator = avail_array->allocators +
                     blk_hc % avail_array->count;
                 if ((result=da_trunk_freelist_alloc_space(*allocator,
-                                &(*allocator)->freelist, blk_hc, size,
-                                spaces, count, is_normal)) == 0)
+                                &(*allocator)->freelist, blk_hc, size, spaces,
+                                count, is_normal, slice_type)) == 0)
                 {
                     return 0;
                 }
@@ -136,24 +136,31 @@ extern "C" {
 
     static inline int da_storage_allocator_reclaim_alloc(DAContext *ctx,
             const uint64_t blk_hc, const int size,
-            DATrunkSpaceWithVersion *spaces, int *count)
+            DATrunkSpaceWithVersion *spaces, int *count,
+            const DASliceType slice_type)
     {
         const bool is_normal = false;
         int result;
 
-        if ((result=da_storage_allocator_alloc_space(ctx, blk_hc,
-                        size, spaces, count, is_normal)) == 0)
+        if ((result=da_storage_allocator_alloc_space(ctx, blk_hc, size,
+                        spaces, count, is_normal, slice_type)) == 0)
         {
             return result;
         }
 
         return da_trunk_freelist_alloc_space(NULL, &ctx->
-                store_allocator_mgr->reclaim_freelist,
-                blk_hc, size, spaces, count, is_normal);
+                store_allocator_mgr->reclaim_freelist, blk_hc,
+                size, spaces, count, is_normal, slice_type);
     }
 
+#define da_storage_allocator_normal_alloc_ex(ctx, \
+        blk_hc, size, spaces, count, slice_type)  \
+    da_storage_allocator_alloc_space(ctx, blk_hc, \
+            size, spaces, count, true, slice_type)
+
 #define da_storage_allocator_normal_alloc(ctx, blk_hc, size, spaces, count) \
-    da_storage_allocator_alloc_space(ctx, blk_hc, size, spaces, count, true)
+    da_storage_allocator_normal_alloc_ex(ctx, blk_hc, \
+            size, spaces, count, DA_SLICE_TYPE_FILE)
 
     int da_move_allocator_ptr_array(DAContext *ctx, DATrunkAllocatorPtrArray
             **src_array, DATrunkAllocatorPtrArray **dest_array,

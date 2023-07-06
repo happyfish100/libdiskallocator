@@ -17,6 +17,7 @@
 #ifndef _DA_TRUNK_WRITE_THREAD_H
 #define _DA_TRUNK_WRITE_THREAD_H
 
+#include "fastcommon/sorted_queue.h"
 #include "../storage_config.h"
 #include "../storage_allocator.h"
 
@@ -65,7 +66,7 @@ typedef struct da_trunk_write_io_buffer {
         };  //for slice_type == DA_SLICE_TYPE_CACHE
     };
 
-    struct da_trunk_write_io_buffer *next;
+    struct fc_list_head dlink;
 } TrunkWriteIOBuffer;
 
 typedef struct da_trunk_write_thread_context {
@@ -76,8 +77,11 @@ typedef struct da_trunk_write_thread_context {
         short thread;
     } indexes;
     volatile int64_t current_version; //for write in order
-    struct fc_queue queue;
+    int64_t last_version;  //for consume queue
+    TrunkWriteIOBuffer less_than;
+    struct sorted_queue queue;
     struct fast_mblock_man mblock;
+    struct fast_mblock_chain batch_free_chain;
 
     struct {
         int write_flags;
@@ -85,8 +89,6 @@ typedef struct da_trunk_write_thread_context {
         uint32_t offset;
         int fd;
     } file_handle;
-
-    UniqSkiplistPair *sl_pair;
 
     struct {
         int count;

@@ -183,7 +183,7 @@ static int migrate_one_slice(DATrunkReclaimContext *rctx,
     count = 1;
     if ((result=da_storage_allocator_reclaim_alloc(rctx->ctx,
                     record->oid, record->storage.length,
-                    &space_info, &count)) != 0)
+                    &space_info, &count, record->slice_type)) != 0)
     {
         logError("file: "__FILE__", line: %d, %s "
                 "alloc disk space %d bytes fail, errno: %d, "
