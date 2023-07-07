@@ -101,6 +101,7 @@ typedef struct da_trunk_write_thread_context {
     struct {
         struct {
             char *buff;
+            char *end;
             char *last;
             int alloc_size;
         } buffer;

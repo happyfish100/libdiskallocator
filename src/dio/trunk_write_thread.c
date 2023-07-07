@@ -136,6 +136,8 @@ static int init_write_context(TrunkWriteThreadContext *thread)
                     block_size, result, STRERROR(result));
             return result;
         }
+        thread->direct_io.buffer.end = thread->direct_io.buffer.buff +
+            thread->direct_io.buffer.alloc_size;
 
 #ifdef OS_LINUX
         thread->file_handle.write_flags = O_WRONLY | O_DIRECT | O_CLOEXEC;
@@ -819,6 +821,15 @@ static void deal_write_request(TrunkWriteThreadContext *thread,
     }
 
     if (thread->path_info->write_direct_io) {
+        if (thread->iob_array.count > 0) {
+            if (thread->direct_io.buffer.last + MEM_ALIGN_CEIL(iob->
+                        space.size, thread->path_info->block_size) >
+                    thread->direct_io.buffer.end)
+            {
+                batch_write(thread);
+            }
+        }
+
         if (thread->iob_array.count == 0) {
             padding_bytes = (iob->space.offset & thread->
                     path_info->block_align_mask);
