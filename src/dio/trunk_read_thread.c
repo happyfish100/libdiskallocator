@@ -394,6 +394,7 @@ static int get_read_fd(TrunkReadThreadContext *thread,
 static inline int prepare_read_slice(TrunkReadThreadContext *thread,
         DATrunkReadIOBuffer *iob)
 {
+    const int align_block_count = 0;
     int64_t new_offset;
     int offset;
     int read_bytes;
@@ -425,8 +426,8 @@ static inline int prepare_read_slice(TrunkReadThreadContext *thread,
     }
 
     if (iob->rb->aio_buffer == NULL) {
-        iob->rb->aio_buffer = da_read_buffer_pool_alloc(thread->
-                path_info->ctx, thread->indexes.path, read_bytes);
+        iob->rb->aio_buffer = da_read_buffer_pool_alloc(thread->path_info->
+                ctx, thread->indexes.path, read_bytes, align_block_count);
         if (iob->rb->aio_buffer == NULL) {
             return ENOMEM;
         }
@@ -744,6 +745,7 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
         const DAStoragePathInfo *path_info)
 {
 #ifdef OS_LINUX
+    const int align_block_count = 0;
     int aligned_size;
 
     if (path_info->read_direct_io) {
@@ -755,8 +757,8 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
         {
             DAAlignedReadBuffer *new_buffer;
 
-            new_buffer = da_read_buffer_pool_alloc(path_info->ctx,
-                    path_info->store.index, aligned_size);
+            new_buffer = da_read_buffer_pool_alloc(path_info->ctx, path_info->
+                    store.index, aligned_size, align_block_count);
             if (new_buffer == NULL) {
                 return ENOMEM;
             }

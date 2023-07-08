@@ -302,7 +302,7 @@ static inline DAAlignedReadBuffer *do_aligned_alloc(ReadBufferPool *pool,
 }
 
 DAAlignedReadBuffer *da_read_buffer_pool_alloc(DAContext *ctx,
-        const short path_index, const int size)
+        const short path_index, const int size, const int align_block_count)
 {
     ReadBufferPool *pool;
     ReadBufferAllocator *allocator;
@@ -311,7 +311,14 @@ DAAlignedReadBuffer *da_read_buffer_pool_alloc(DAContext *ctx,
     int aligned_size;
     int reclaim_bytes;
 
-    aligned_size = MEM_ALIGN_CEIL(size, ctx->storage.cfg.max_align_size);
+    if (align_block_count == 0) {
+        aligned_size = size;
+    } else {
+        aligned_size = MEM_ALIGN_CEIL(size, ctx->storage.cfg.
+                paths_by_index.paths[path_index]->block_size) +
+            align_block_count * ctx->storage.cfg.paths_by_index.
+            paths[path_index]->block_size;
+    }
     pool = ctx->rbpool_ctx->array.pools + path_index;
     if ((allocator=get_allocator(pool, aligned_size)) == NULL) {
         return NULL;

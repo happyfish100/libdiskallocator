@@ -302,7 +302,6 @@ typedef struct da_storage_config {
     bool write_direct_io;
     bool read_direct_io;
     int write_align_size;
-    int max_align_size;
     int fsync_every_n_writes;
     double reserved_space_per_disk;
     int max_trunk_files_per_subdir;

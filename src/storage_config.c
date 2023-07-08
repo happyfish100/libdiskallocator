@@ -610,7 +610,6 @@ static int load_path_indexes(DAContext *ctx, DAStorageConfig *storage_cfg,
             {
                 return result;
             }
-            p->block_align_mask = p->block_size - 1;
 
             if (p->write_align_size == 0) {
                 if (p->write_direct_io) {
@@ -619,16 +618,16 @@ static int load_path_indexes(DAContext *ctx, DAStorageConfig *storage_cfg,
                     p->write_align_size = 8;
                 }
             }
+        } else {
+            p->block_size = 512;
         }
+        p->block_align_mask = p->block_size - 1;
 #endif
 
         if (p->write_align_size == 0) {
             p->write_align_size = 8;
         }
 
-        if (storage_cfg->max_align_size < p->write_align_size) {
-            storage_cfg->max_align_size = p->write_align_size;
-        }
         if (storage_cfg->discard_remain_space_size < p->write_align_size) {
             storage_cfg->discard_remain_space_size = p->write_align_size;
         }

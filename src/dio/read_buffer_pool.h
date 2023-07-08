@@ -50,7 +50,7 @@ extern "C" {
             const short path_index, const int block_size);
 
     DAAlignedReadBuffer *da_read_buffer_pool_alloc(struct da_context *ctx,
-            const short path_index, const int size);
+            const short path_index, const int size, const int align_block_count);
 
     void da_read_buffer_pool_free(struct da_context *ctx,
             DAAlignedReadBuffer *buffer);
