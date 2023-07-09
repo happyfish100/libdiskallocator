@@ -217,8 +217,8 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
     DATrunkFileInfo *trunk_info;
 
     if (allocator != NULL) {
-        aligned_size = MEM_ALIGN_CEIL(size, allocator->
-                path_info->write_align_size);
+        aligned_size = MEM_ALIGN_CEIL_BY_MASK(size,
+                allocator->path_info->write_align_mask);
     } else {
         aligned_size = 0;
     }
@@ -229,8 +229,8 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
         if (freelist->head != NULL) {
             trunk_info = freelist->head;
             if (aligned_size == 0) {
-                aligned_size = MEM_ALIGN_CEIL(size, trunk_info->
-                        allocator->path_info->write_align_size);
+                aligned_size = MEM_ALIGN_CEIL_BY_MASK(size, trunk_info->
+                        allocator->path_info->write_align_mask);
             }
             remain_bytes = DA_TRUNK_AVAIL_SPACE(trunk_info);
             if (remain_bytes < aligned_size) {
@@ -279,11 +279,11 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
         trunk_info = freelist->head;
         if (allocator == NULL) {
             if (aligned_size == 0) {
-                aligned_size = MEM_ALIGN_CEIL(size, trunk_info->
-                        allocator->path_info->write_align_size);
+                aligned_size = MEM_ALIGN_CEIL_BY_MASK(size, trunk_info->
+                        allocator->path_info->write_align_mask);
             } else {
-                aligned_size = MEM_ALIGN_CEIL(aligned_size, trunk_info->
-                        allocator->path_info->write_align_size);
+                aligned_size = MEM_ALIGN_CEIL_BY_MASK(aligned_size,
+                        trunk_info->allocator->path_info->write_align_mask);
             }
         }
         if (aligned_size > DA_TRUNK_AVAIL_SPACE(trunk_info)) {

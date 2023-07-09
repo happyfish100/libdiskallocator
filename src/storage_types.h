@@ -251,6 +251,7 @@ typedef struct {
     bool write_direct_io;
     bool read_direct_io;
     int write_align_size;
+    int write_align_mask;
     int fsync_every_n_writes;
     struct {
         int64_t value;

@@ -123,8 +123,9 @@ static int init_write_context(TrunkWriteThreadContext *thread)
         if (thread->direct_io.buffer.alloc_size < thread->write_bytes_max) {
             thread->direct_io.buffer.alloc_size = thread->write_bytes_max;
         }
-        thread->direct_io.buffer.alloc_size = MEM_ALIGN_CEIL(thread->
-                direct_io.buffer.alloc_size, thread->path_info->block_size);
+        thread->direct_io.buffer.alloc_size = MEM_ALIGN_CEIL_BY_MASK(
+                thread->direct_io.buffer.alloc_size,
+                thread->path_info->block_align_mask);
         if ((result=posix_memalign((void **)&thread->direct_io.buffer.buff,
                     thread->path_info->block_size, thread->direct_io.buffer.
                     alloc_size)) != 0)
@@ -822,8 +823,8 @@ static void deal_write_request(TrunkWriteThreadContext *thread,
 
     if (thread->path_info->write_direct_io) {
         if (thread->iob_array.count > 0) {
-            if (thread->direct_io.buffer.last + MEM_ALIGN_CEIL(iob->
-                        space.size, thread->path_info->block_size) >
+            if (thread->direct_io.buffer.last + MEM_ALIGN_CEIL_BY_MASK(iob->
+                        space.size, thread->path_info->block_align_mask) >
                     thread->direct_io.buffer.end)
             {
                 batch_write(thread);

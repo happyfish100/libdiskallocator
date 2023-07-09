@@ -66,12 +66,12 @@ extern "C" {
     static inline DAAlignedReadBuffer *da_aligned_buffer_new(
             DAContext *ctx, const short pindex, const int offset,
             const int length, const int read_bytes,
-            const int align_block_count)
+            const bool need_align)
     {
         DAAlignedReadBuffer *aligned_buffer;
 
-        aligned_buffer = da_read_buffer_pool_alloc(ctx, pindex,
-                read_bytes, align_block_count);
+        aligned_buffer = da_read_buffer_pool_alloc(ctx,
+                pindex, read_bytes, need_align);
         if (aligned_buffer == NULL) {
             return NULL;
         }

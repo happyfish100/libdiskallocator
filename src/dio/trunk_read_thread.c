@@ -40,7 +40,6 @@ typedef struct da_trunk_read_thread_context {
         short path;
         short thread;
     } indexes;
-    int block_size;
     struct fc_queue queue;
     struct fast_mblock_man mblock;
     DATrunkFDCacheContext fd_cache;
@@ -172,7 +171,6 @@ static int init_thread_context(DAContext *ctx,
 
 #ifdef OS_LINUX
     if (path_info->read_direct_io) {
-        thread->block_size = path_info->block_size;
         thread->iocbs.alloc = path_info->read_io_depth;
         thread->iocbs.pp = (struct iocb **)fc_malloc(sizeof(
                     struct iocb *) * thread->iocbs.alloc);
@@ -394,7 +392,7 @@ static int get_read_fd(TrunkReadThreadContext *thread,
 static inline int prepare_read_slice(TrunkReadThreadContext *thread,
         DATrunkReadIOBuffer *iob)
 {
-    const int align_block_count = 0;
+    const bool need_align = false;
     int64_t new_offset;
     int offset;
     int read_bytes;
@@ -402,14 +400,16 @@ static inline int prepare_read_slice(TrunkReadThreadContext *thread,
     int fd;
     bool new_alloced;
 
-    new_offset = MEM_ALIGN_FLOOR(iob->space.offset, thread->block_size);
-    read_bytes = MEM_ALIGN_CEIL(iob->read_bytes, thread->block_size);
+    new_offset = MEM_ALIGN_FLOOR_BY_MASK(iob->space.offset,
+            thread->path_info->block_align_mask);
+    read_bytes = MEM_ALIGN_CEIL_BY_MASK(iob->read_bytes,
+            thread->path_info->block_align_mask);
     offset = iob->space.offset - new_offset;
     if (offset > 0) {
         if (new_offset + read_bytes < iob->space.offset +
                 iob->read_bytes)
         {
-            read_bytes += thread->block_size;
+            read_bytes += thread->path_info->block_size;
         }
     }
 
@@ -427,7 +427,7 @@ static inline int prepare_read_slice(TrunkReadThreadContext *thread,
 
     if (iob->rb->aio_buffer == NULL) {
         iob->rb->aio_buffer = da_read_buffer_pool_alloc(thread->path_info->
-                ctx, thread->indexes.path, read_bytes, align_block_count);
+                ctx, thread->indexes.path, read_bytes, need_align);
         if (iob->rb->aio_buffer == NULL) {
             return ENOMEM;
         }
@@ -745,7 +745,7 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
         const DAStoragePathInfo *path_info)
 {
 #ifdef OS_LINUX
-    const int align_block_count = 0;
+    const bool need_align = false;
     int aligned_size;
 
     if (path_info->read_direct_io) {
@@ -757,8 +757,8 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
         {
             DAAlignedReadBuffer *new_buffer;
 
-            new_buffer = da_read_buffer_pool_alloc(path_info->ctx, path_info->
-                    store.index, aligned_size, align_block_count);
+            new_buffer = da_read_buffer_pool_alloc(path_info->ctx,
+                    path_info->store.index, aligned_size, need_align);
             if (new_buffer == NULL) {
                 return ENOMEM;
             }

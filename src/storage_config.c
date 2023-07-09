@@ -627,6 +627,7 @@ static int load_path_indexes(DAContext *ctx, DAStorageConfig *storage_cfg,
         if (p->write_align_size == 0) {
             p->write_align_size = 8;
         }
+        p->write_align_mask = p->write_align_size - 1;
 
         if (storage_cfg->discard_remain_space_size < p->write_align_size) {
             storage_cfg->discard_remain_space_size = p->write_align_size;

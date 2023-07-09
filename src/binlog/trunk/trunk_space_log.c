@@ -682,9 +682,9 @@ static int set_trunk_by_space_log(DAContext *ctx, DATrunkFileInfo *trunk)
     }
 
     if (last != NULL) {
-        trunk->free_start = MEM_ALIGN_CEIL(last->storage.offset +
+        trunk->free_start = MEM_ALIGN_CEIL_BY_MASK(last->storage.offset +
                 last->storage.size, trunk->allocator->path_info->
-                write_align_size);
+                write_align_mask);
     } else {
         trunk->free_start = 0;
     }
@@ -726,8 +726,8 @@ static int load_trunk_indexes(DAContext *ctx)
         if (index->version == version) {
             trunk->used.count = index->used_count;
             trunk->used.bytes = index->used_bytes;
-            trunk->free_start = MEM_ALIGN_CEIL(index->free_start,
-                    trunk->allocator->path_info->write_align_size);
+            trunk->free_start = MEM_ALIGN_CEIL_BY_MASK(index->free_start,
+                    trunk->allocator->path_info->write_align_mask);
         } else {
             if ((result=set_trunk_by_space_log(ctx, trunk)) != 0) {
                 return result;
