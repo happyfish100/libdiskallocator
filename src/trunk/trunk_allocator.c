@@ -41,7 +41,8 @@ static int compare_trunk_by_size_id(const DATrunkFileInfo *t1,
             last_used_bytes, t2->id_info.id);
 }
 
-static void trunk_free_func(void *ptr, const int delay_seconds)
+static void trunk_free_func(UniqSkiplist *sl,
+        void *ptr, const int delay_seconds)
 {
     DATrunkFileInfo *trunk_info;
     trunk_info = (DATrunkFileInfo *)ptr;

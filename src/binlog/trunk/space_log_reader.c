@@ -30,7 +30,8 @@ static int compare_by_trunk_offset(const DATrunkSpaceLogRecord *s1,
     return fc_compare_int64(s1->storage.offset, s2->storage.offset);
 }
 
-static void space_log_record_free_func(void *ptr, const int delay_seconds)
+static void space_log_record_free_func(UniqSkiplist *sl,
+        void *ptr, const int delay_seconds)
 {
     fast_mblock_free_object(((DATrunkSpaceLogRecord *)ptr)->allocator, ptr);
 }
@@ -64,7 +65,7 @@ int da_space_log_reader_init(DASpaceLogReader *reader, DAContext *ctx,
                     DA_SPACE_SKPLIST_MAX_LEVEL_COUNT, (skiplist_compare_func)
                     compare_by_trunk_offset, space_log_record_free_func,
                     alloc_skiplist_once, min_alloc_elements_once,
-                    delay_free_seconds, bidirection, use_lock)) != 0)
+                    delay_free_seconds, bidirection, use_lock, NULL)) != 0)
     {
         return result;
     }

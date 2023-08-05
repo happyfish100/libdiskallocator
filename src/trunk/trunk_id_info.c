@@ -155,7 +155,8 @@ static int compare_by_id(const void *p1, const void *p2)
         ((StoreSubdirInfo *)p2)->subdir;
 }
 
-static void id_info_free_func(void *ptr, const int delay_seconds)
+static void id_info_free_func(UniqSkiplist *sl,
+        void *ptr, const int delay_seconds)
 {
     if (delay_seconds > 0) {
         fast_mblock_delay_free_object(subdir_allocator, ptr, delay_seconds);
