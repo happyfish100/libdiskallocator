@@ -234,14 +234,15 @@ static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
         const bool required)
 {
     int result;
-    int count;
+    int section_count;
+    int item_count;
     int bytes;
-    int i;
+    int i, k;
     const char *old_section_name;
     char section_name[64];
 
-    count = iniGetIntValue(NULL, item_name, ini_ctx->context, 0);
-    if (count <= 0) {
+    section_count = iniGetIntValue(NULL, item_name, ini_ctx->context, 0);
+    if (section_count <= 0) {
         if (required) {
             logError("file: "__FILE__", line: %d, %s "
                     "config file: %s, item \"%s\" not exist "
@@ -254,7 +255,7 @@ static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
         }
     }
 
-    bytes = sizeof(DAStoragePathInfo) * count;
+    bytes = sizeof(DAStoragePathInfo) * section_count;
     parray->paths = (DAStoragePathInfo *)fc_malloc(bytes);
     if (parray->paths == NULL) {
         return ENOMEM;
@@ -263,8 +264,17 @@ static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
 
     old_section_name = ini_ctx->section_name;
     ini_ctx->section_name = section_name;
-    for (i=0; i<count; i++) {
+    for (i=0; i<section_count; i++) {
         sprintf(section_name, "%s-%d", section_name_prefix, i + 1);
+        if (i > 0 && iniGetSectionItems(section_name,
+                    ini_ctx->context, &item_count) == NULL)
+        {
+            logError("file: "__FILE__", line: %d, %s "
+                    "config file: %s, section [%s] not exist", __LINE__,
+                    ctx->module_name, ini_ctx->filename, section_name);
+            return ENOENT;
+        }
+
         parray->paths[i].ctx = ctx;
         if ((result=load_one_path(ctx, storage_cfg, ini_ctx,
                         &parray->paths[i].store.path)) != 0)
@@ -340,8 +350,23 @@ static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
         }
     }
 
+    for (i=0; i<section_count; i++) {
+        for (k=i+1; k<section_count; k++) {
+            if (fc_string_equal(&parray->paths[i].store.path,
+                        &parray->paths[k].store.path))
+            {
+                logError("file: "__FILE__", line: %d, %s "
+                        "config file: %s, store path #%d equals "
+                        "store path #%d, store path: %s", __LINE__,
+                        ctx->module_name, ini_ctx->filename, i + 1,
+                        k + 1, parray->paths[i].store.path.str);
+                return EEXIST;
+            }
+        }
+    }
+
     ini_ctx->section_name = old_section_name;
-    parray->count = count;
+    parray->count = section_count;
     return 0;
 }
 

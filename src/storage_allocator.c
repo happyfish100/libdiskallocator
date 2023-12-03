@@ -280,7 +280,7 @@ static inline int remove_from_aptr_array(DATrunkAllocatorPtrArray *aptr_array,
     return 0;
 }
 
-int init_allocator_ptr_array(DAContext *ctx,
+static int init_allocator_ptr_array(DAContext *ctx,
         DAStorageAllocatorContext *allocator_ctx)
 {
     DATrunkAllocator *allocator;
