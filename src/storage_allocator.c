@@ -116,8 +116,9 @@ int da_storage_allocator_init(DAContext *ctx)
             ctx->store_allocator_mgr->store_path.all.count);
     element_size = sizeof(DATrunkAllocatorPtrArray) +
         sizeof(DATrunkAllocator *) * count;
-    if ((result=fast_mblock_init_ex1(&ctx->store_allocator_mgr->aptr_array_allocator,
-                    "aptr_array", element_size, 64, 0, aptr_array_alloc_init,
+    if ((result=fast_mblock_init_ex1(&ctx->store_allocator_mgr->
+                    aptr_array_allocator, "aptr_array", element_size,
+                    64, 0, aptr_array_alloc_init,
                     (void *)(long)count, true)) != 0)
     {
         return result;
@@ -549,10 +550,14 @@ static int dump_to_array(DATrunkAllocator *allocator,
     UniqSkiplistIterator it;
     DATrunkFileInfo *trunk_info;
     DATrunkIndexRecord *record;
+    DATrunkIndexRecord *end;
+    int start_index;
     int64_t used_bytes;
     int result;
 
     result = 0;
+    start_index = array->count;
+
     PTHREAD_MUTEX_LOCK(&allocator->freelist.lcp.lock);
     uniq_skiplist_iterator(allocator->trunks.by_id.skiplist, &it);
     while ((trunk_info=(DATrunkFileInfo *)uniq_skiplist_next(&it)) != NULL) {
@@ -570,8 +575,6 @@ static int dump_to_array(DATrunkAllocator *allocator,
         }
 
         record = (DATrunkIndexRecord *)array->indexes + array->count++;
-        da_trunk_space_log_calc_version(allocator->path_info->ctx,
-                trunk_info->id_info.id, &record->version);
         record->trunk_id = trunk_info->id_info.id;
         record->used_count = trunk_info->used.count;
         record->used_bytes = used_bytes;
@@ -579,7 +582,19 @@ static int dump_to_array(DATrunkAllocator *allocator,
     }
     PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
 
-    return result;
+    if (result != 0) {
+        return result;
+    }
+
+    end = (DATrunkIndexRecord *)array->indexes + array->count;
+    for (record=(DATrunkIndexRecord *)array->indexes + start_index;
+            record<end; record++)
+    {
+        da_trunk_space_log_calc_version(allocator->path_info->ctx,
+                record->trunk_id, &record->version);
+    }
+
+    return 0;
 }
 
 int da_storage_allocator_trunks_to_array(DAContext *ctx,

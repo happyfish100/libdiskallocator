@@ -643,6 +643,7 @@ int da_trunk_space_log_redo_by_file(DAContext *ctx,
 static int dump_trunk_indexes(DAContext *ctx)
 {
     int result;
+
     if ((result=da_storage_allocator_trunks_to_array(ctx,
                     &ctx->trunk_index_ctx.index_array)) != 0)
     {
@@ -797,11 +798,31 @@ static void *trunk_space_log_func(void *arg)
 
 static int trunk_index_dump(void *args)
 {
-    if (dump_trunk_indexes(args) != 0) {
-        logCrit("file: "__FILE__", line: %d, %s "
-                "dump trunk index fail, program exit!", __LINE__,
-                ((DAContext *)args)->module_name);
-        sf_terminate_myself();
+    DAContext *ctx;
+    int64_t start_time_ms;
+    char time_buff[32];
+
+    ctx = (DAContext *)args;
+    if (__sync_bool_compare_and_swap(&ctx->space_log_ctx.
+                dumping_index, 0, 1))
+    {
+        start_time_ms = get_current_time_ms();
+        if (dump_trunk_indexes(ctx) == 0) {
+            long_to_comma_str(get_current_time_ms() -
+                    start_time_ms, time_buff);
+            logInfo("file: "__FILE__", line: %d, %s "
+                    "dump trunk index, trunk count: %d, time used: %s ms",
+                    __LINE__, ctx->module_name, ctx->trunk_index_ctx.
+                    index_array.count, time_buff);
+        } else {
+            logCrit("file: "__FILE__", line: %d, %s "
+                    "dump trunk index fail, program exit!",
+                    __LINE__, ctx->module_name);
+            sf_terminate_myself();
+        }
+
+        __sync_bool_compare_and_swap(&ctx->space_log_ctx.
+                dumping_index, 1, 0);
     }
 
     return 0;
@@ -844,6 +865,7 @@ int da_trunk_space_log_init(DAContext *ctx)
     RECORD_PTR_ARRAY.records = NULL;
     RECORD_PTR_ARRAY.count = 0;
     RECORD_PTR_ARRAY.alloc = 0;
+    ctx->space_log_ctx.dumping_index = 0;
     return 0;
 }
 
@@ -858,10 +880,10 @@ int da_trunk_space_log_start(DAContext *ctx)
         return result;
     }
 
-    INIT_SCHEDULE_ENTRY_EX(scheduleEntries[0], sched_generate_next_id(),
+    INIT_SCHEDULE_ENTRY_EX1(scheduleEntries[0], sched_generate_next_id(),
             ctx->data.trunk_index_dump_base_time,
             ctx->data.trunk_index_dump_interval,
-            trunk_index_dump, ctx);
+            trunk_index_dump, ctx, true);
     scheduleArray.entries = scheduleEntries;
     scheduleArray.count = 1;
     if ((result=sched_add_entries(&scheduleArray)) != 0) {

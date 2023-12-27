@@ -437,6 +437,7 @@ typedef struct da_trunk_space_log_context {
     DATrunkSpaceLogRecordArray record_array;
     DATrunkFDCacheContext fd_cache_ctx;
     FastBuffer buffer;
+    volatile char dumping_index;
 } DATrunkSpaceLogContext;
 
 typedef struct da_context {
