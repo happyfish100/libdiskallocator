@@ -212,7 +212,7 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
 {
     int result;
     uint32_t aligned_size;
-    uint32_t remain_bytes;
+    int64_t remain_bytes;
     DATrunkSpaceWithVersion *space_info;
     DATrunkFileInfo *trunk_info;
 
@@ -240,17 +240,21 @@ int da_trunk_freelist_alloc_space(struct da_trunk_allocator *allocator,
                 }
 
                 if (remain_bytes <= 0) {
-                    logError("%s allocator: %p, trunk_info: %p, "
+                    int log_level;
+                    log_level = (remain_bytes < 0 ? LOG_ERR : LOG_WARNING);
+                    log_it_ex(&g_log_context, log_level,
+                            "file: "__FILE__", line: %d, %s "
+                            "allocator: %p, trunk_info: %p, "
                             "trunk size: %u, free start: %u, "
-                            "remain_bytes: %u", trunk_info->allocator->
-                            path_info->ctx->module_name,
-                            trunk_info->allocator,
-                            trunk_info, trunk_info->size,
-                            trunk_info->free_start, remain_bytes);
-                    abort();
-                }
-
-                if (*count >= 2) {
+                            "remain_bytes: %"PRId64, __LINE__, trunk_info->
+                            allocator->path_info->ctx->module_name,
+                            trunk_info->allocator, trunk_info,
+                            trunk_info->size, trunk_info->free_start,
+                            remain_bytes);
+                    if (remain_bytes < 0) {
+                        abort();
+                    }
+                } else if (*count >= 2) {
                     TRUNK_ALLOC_SPACE(trunk_info, space_info, remain_bytes);
                     space_info++;
                     aligned_size -= remain_bytes;

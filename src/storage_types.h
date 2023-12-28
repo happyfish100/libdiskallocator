@@ -138,8 +138,10 @@ typedef struct da_trunk_file_info {
         int count;  //slice count
         volatile int64_t bytes;
     } used;
-    uint32_t size;        //file size
-    uint32_t free_start;  //free space offset
+    uint32_t size;         //file size
+    uint32_t free_start;   //free space offset
+    int64_t index_version; //for trunk index dump
+    time_t update_time;    //for trunk index dump
 
     struct {
         struct da_trunk_file_info *next;
@@ -151,6 +153,7 @@ typedef struct da_trunk_file_info {
 
     int64_t start_version;        //for space log record
     volatile int writing_count;   //for waiting slice write done
+
     struct {
         volatile char event;
         int64_t last_used_bytes;
@@ -208,6 +211,7 @@ typedef struct da_trunk_index_record {
     uint32_t free_start;
     int used_count;
     int64_t used_bytes;
+    DATrunkFileInfo *trunk;  //for update trunk's index_version
 } DATrunkIndexRecord;
 
 typedef struct da_trunk_read_buffer {
@@ -437,7 +441,8 @@ typedef struct da_trunk_space_log_context {
     DATrunkSpaceLogRecordArray record_array;
     DATrunkFDCacheContext fd_cache_ctx;
     FastBuffer buffer;
-    volatile char dumping_index;
+    volatile char dumping_index; //for trunk index dump cron task
+    time_t last_dump_time;       //for trunk index dump cron task
 } DATrunkSpaceLogContext;
 
 typedef struct da_context {

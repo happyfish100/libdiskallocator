@@ -381,6 +381,7 @@ static inline int unlink_space_log(DAContext *ctx,
     DATrunkFileInfo *trunk;
 
     trunk = record->trunk;
+    trunk->update_time = g_current_time;
     record->trunk = NULL;
     trunk->start_version = record->storage.version;
     da_trunk_fd_cache_delete(&FD_CACHE_CTX, trunk->id_info.id);
@@ -477,6 +478,40 @@ static int deal_all_records(DAContext *ctx, DATrunkSpaceLogRecord *head)
     return result;
 }
 
+static int set_free_start_by_redo(DAContext *ctx,
+        DATrunkSpaceLogRecord **start,
+        DATrunkSpaceLogRecord **end)
+{
+    DATrunkFileInfo *trunk;
+    DATrunkSpaceLogRecord **current;
+    uint32_t storage_end;
+
+    if ((trunk=da_trunk_hashtable_get(&ctx->trunk_htable_ctx,
+                    (*start)->storage.trunk_id)) == NULL)
+    {
+        return ENOENT;
+    }
+
+    for (current=start; current<end; current++) {
+        if ((*current)->op_type == da_binlog_op_type_consume_space) {
+            storage_end = (*current)->storage.offset +
+                (*current)->storage.size;
+            if (trunk->free_start < storage_end) {
+                logInfo("file: "__FILE__", line: %d, %s "
+                        "trunk id: %"PRId64", set free_start from %u "
+                        "to %u, space offset: %u, size: %u", __LINE__,
+                        ctx->module_name, trunk->id_info.id, trunk->free_start,
+                        storage_end, (*current)->storage.offset,
+                        (*current)->storage.size);
+                trunk->free_start = storage_end;
+                trunk->update_time = g_current_time;
+            }
+        }
+    }
+
+    return 0;
+}
+
 static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
         DATrunkSpaceLogRecord **end, int *redo_count)
 {
@@ -558,8 +593,12 @@ static int redo_by_trunk(DAContext *ctx, DATrunkSpaceLogRecord **start,
 
     if (array.count > 0) {
         *redo_count += array.count;
-        result = write_to_log_file(ctx, array.records,
-                array.records + array.count);
+        if ((result=write_to_log_file(ctx, array.records,
+                        array.records + array.count)) == 0)
+        {
+            result = set_free_start_by_redo(ctx, array.records,
+                    array.records + array.count);
+        }
     }
 
     if (array.records != fixed) {
@@ -640,17 +679,28 @@ int da_trunk_space_log_redo_by_file(DAContext *ctx,
     return da_trunk_space_log_redo_by_chain(ctx, &chain);
 }
 
-static int dump_trunk_indexes(DAContext *ctx)
+static int dump_trunk_indexes(DAContext *ctx, int *changed_count)
 {
     int result;
+    time_t current_time;
 
+    current_time = g_current_time;
     if ((result=da_storage_allocator_trunks_to_array(ctx,
-                    &ctx->trunk_index_ctx.index_array)) != 0)
+                    &ctx->trunk_index_ctx.index_array,
+                    changed_count)) != 0)
     {
         return result;
     }
 
-    return da_trunk_index_save(ctx);
+    if (*changed_count > 0) {
+        if ((result=da_trunk_index_save(ctx)) != 0) {
+            return result;
+        }
+
+        ctx->space_log_ctx.last_dump_time = current_time;
+    }
+
+    return 0;
 }
 
 static int set_trunk_by_space_log(DAContext *ctx, DATrunkFileInfo *trunk)
@@ -697,7 +747,6 @@ static int set_trunk_by_space_log(DAContext *ctx, DATrunkFileInfo *trunk)
 static int load_trunk_indexes(DAContext *ctx)
 {
     int result;
-    int64_t version;
     char filename[PATH_MAX];
     DATrunkFileInfo *trunk;
     DATrunkIndexRecord *index;
@@ -723,16 +772,19 @@ static int load_trunk_indexes(DAContext *ctx)
             return ENOENT;
         }
 
-        da_trunk_space_log_calc_version(ctx, index->trunk_id, &version);
-        if (index->version == version) {
+        da_trunk_space_log_calc_version(ctx, index->trunk_id,
+                &trunk->index_version);
+        if (index->version == trunk->index_version) {
             trunk->used.count = index->used_count;
             trunk->used.bytes = index->used_bytes;
             trunk->free_start = MEM_ALIGN_CEIL_BY_MASK(index->free_start,
                     trunk->allocator->path_info->write_align_mask);
+            trunk->update_time = 0;
         } else {
             if ((result=set_trunk_by_space_log(ctx, trunk)) != 0) {
                 return result;
             }
+            trunk->update_time = g_current_time;
         }
         trunk->status = DA_TRUNK_STATUS_LOADED;
 
@@ -740,8 +792,8 @@ static int load_trunk_indexes(DAContext *ctx)
         logInfo("%s trunk id: %"PRId64", path index: %d, version: %"PRId64", "
                 "calc: %d, used count: %u, used bytes: %"PRId64", "
                 "free start: %u", ctx->module_name, trunk->id_info.id,
-                trunk->allocator->path_info->store.index, version,
-                index->version != version, trunk->used.count,
+                trunk->allocator->path_info->store.index, trunk->index_version,
+                index->version != trunk->index_version, trunk->used.count,
                 trunk->used.bytes, trunk->free_start);
                 */
     }
@@ -752,13 +804,16 @@ static int load_trunk_indexes(DAContext *ctx)
             if ((result=set_trunk_by_space_log(ctx, trunk)) != 0) {
                 return result;
             }
+            da_trunk_space_log_calc_version(ctx, trunk->id_info.id,
+                    &trunk->index_version);
+            trunk->update_time = g_current_time;
 
             /*
-               logInfo("%s trunk id: %"PRId64", path index: %d, used_count: %u, "
-               "used_bytes: %u, free_start: %u", ctx->module_name,
-               trunk->id_info.id, trunk->allocator->path_info->store.index,
-               trunk->used.count, trunk->used.bytes, trunk->free_start);
-             */
+            logInfo("%s trunk id: %"PRId64", path index: %d, used_count: %u, "
+                    "used_bytes: %"PRId64", free_start: %u", ctx->module_name,
+                    trunk->id_info.id, trunk->allocator->path_info->store.index,
+                    trunk->used.count, trunk->used.bytes, trunk->free_start);
+                    */
         } else {
             trunk->status = DA_TRUNK_STATUS_NONE;
         }
@@ -795,11 +850,11 @@ static void *trunk_space_log_func(void *arg)
     return NULL;
 }
 
-
 static int trunk_index_dump(void *args)
 {
     DAContext *ctx;
     int64_t start_time_ms;
+    int changed_count;
     char time_buff[32];
 
     ctx = (DAContext *)args;
@@ -807,13 +862,16 @@ static int trunk_index_dump(void *args)
                 dumping_index, 0, 1))
     {
         start_time_ms = get_current_time_ms();
-        if (dump_trunk_indexes(ctx) == 0) {
-            long_to_comma_str(get_current_time_ms() -
-                    start_time_ms, time_buff);
-            logInfo("file: "__FILE__", line: %d, %s "
-                    "dump trunk index, trunk count: %d, time used: %s ms",
-                    __LINE__, ctx->module_name, ctx->trunk_index_ctx.
-                    index_array.count, time_buff);
+        if (dump_trunk_indexes(ctx, &changed_count) == 0) {
+            if (changed_count > 0) {
+                long_to_comma_str(get_current_time_ms() -
+                        start_time_ms, time_buff);
+                logInfo("file: "__FILE__", line: %d, %s "
+                        "dump trunk index, trunks {total: %d, changed: %d}, "
+                        "time used: %s ms", __LINE__, ctx->module_name,
+                        ctx->trunk_index_ctx.index_array.count,
+                        changed_count, time_buff);
+            }
         } else {
             logCrit("file: "__FILE__", line: %d, %s "
                     "dump trunk index fail, program exit!",
@@ -866,6 +924,7 @@ int da_trunk_space_log_init(DAContext *ctx)
     RECORD_PTR_ARRAY.count = 0;
     RECORD_PTR_ARRAY.alloc = 0;
     ctx->space_log_ctx.dumping_index = 0;
+    ctx->space_log_ctx.last_dump_time = 0;
     return 0;
 }
 

@@ -36,7 +36,8 @@
 #define DA_TRUNK_UTIL_EVENT_CREATE   'C'
 #define DA_TRUNK_UTIL_EVENT_UPDATE   'U'
 
-#define DA_TRUNK_AVAIL_SPACE(trunk) ((trunk)->size - (trunk)->free_start)
+#define DA_TRUNK_AVAIL_SPACE(trunk) ((int64_t)(trunk)->size - \
+        (int64_t)(trunk)->free_start)
 
 typedef enum {
     da_freelist_type_none,

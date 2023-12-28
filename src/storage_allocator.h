@@ -222,7 +222,7 @@ extern "C" {
     }
 
     int da_storage_allocator_trunks_to_array(DAContext *ctx,
-            SFBinlogIndexArray *array);
+            SFBinlogIndexArray *array, int *changed_count);
 
 #ifdef __cplusplus
 }

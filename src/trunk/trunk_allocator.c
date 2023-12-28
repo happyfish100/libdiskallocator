@@ -195,6 +195,7 @@ int da_trunk_allocator_deal_space_changes(DAContext *ctx,
             trunk->used.count--;
         }
     }
+    trunk->update_time = g_current_time;
     PTHREAD_MUTEX_UNLOCK(&trunk->allocator->freelist.lcp.lock);
 
     if (changed_bytes > 0) {
@@ -315,7 +316,7 @@ void da_trunk_allocator_log_trunk_info(DATrunkFileInfo *trunk_info)
 {
     logInfo("%s trunk id: %"PRId64", path index: %d, subdir: %u, "
             "status: %d, slice count: %d, used bytes: %"PRId64", "
-            "trunk size: %u, free start: %u, remain bytes: %u",
+            "trunk size: %u, free start: %u, remain bytes: %"PRId64,
             trunk_info->allocator->path_info->ctx->module_name,
             trunk_info->id_info.id, trunk_info->allocator->path_info->
             store.index, trunk_info->id_info.subdir, trunk_info->status,

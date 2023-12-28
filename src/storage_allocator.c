@@ -544,18 +544,20 @@ int da_move_allocator_ptr_array(DAContext *ctx, DATrunkAllocatorPtrArray
     return result;
 }
 
-static int dump_to_array(DATrunkAllocator *allocator,
-        SFBinlogIndexArray *array)
+static int dump_to_array(DAContext *ctx, DATrunkAllocator *allocator,
+        SFBinlogIndexArray *array, int *changed_count)
 {
     UniqSkiplistIterator it;
     DATrunkFileInfo *trunk_info;
     DATrunkIndexRecord *record;
     DATrunkIndexRecord *end;
-    int start_index;
     int64_t used_bytes;
+    int start_index;
+    int changes;
     int result;
 
     result = 0;
+    changes = 0;
     start_index = array->count;
 
     PTHREAD_MUTEX_LOCK(&allocator->freelist.lcp.lock);
@@ -575,10 +577,19 @@ static int dump_to_array(DATrunkAllocator *allocator,
         }
 
         record = (DATrunkIndexRecord *)array->indexes + array->count++;
+        record->trunk = trunk_info;
         record->trunk_id = trunk_info->id_info.id;
         record->used_count = trunk_info->used.count;
         record->used_bytes = used_bytes;
         record->free_start = trunk_info->free_start;
+        if (trunk_info->update_time > 0 && trunk_info->update_time >=
+                ctx->space_log_ctx.last_dump_time)
+        {
+            record->version = -1;
+            ++changes;
+        } else {
+            record->version = trunk_info->index_version;
+        }
     }
     PTHREAD_MUTEX_UNLOCK(&allocator->freelist.lcp.lock);
 
@@ -586,32 +597,43 @@ static int dump_to_array(DATrunkAllocator *allocator,
         return result;
     }
 
+    if (changes == 0) {
+        return 0;
+    }
+
     end = (DATrunkIndexRecord *)array->indexes + array->count;
     for (record=(DATrunkIndexRecord *)array->indexes + start_index;
             record<end; record++)
     {
-        da_trunk_space_log_calc_version(allocator->path_info->ctx,
-                record->trunk_id, &record->version);
+        if (record->version == -1) {
+            da_trunk_space_log_calc_version(allocator->path_info->ctx,
+                    record->trunk_id, &record->trunk->index_version);
+            record->version = record->trunk->index_version;
+        }
     }
 
+    *changed_count += changes;
     return 0;
 }
 
 int da_storage_allocator_trunks_to_array(DAContext *ctx,
-        SFBinlogIndexArray *array)
+        SFBinlogIndexArray *array, int *changed_count)
 {
     DATrunkAllocator **allocator;
     DATrunkAllocator **end;
     int result;
 
     array->count = 0;
+    *changed_count = 0;
     end = ctx->store_allocator_mgr->allocator_ptr_array.allocators +
         ctx->store_allocator_mgr->allocator_ptr_array.count;
     for (allocator=ctx->store_allocator_mgr->allocator_ptr_array.
             allocators; allocator<end; allocator++)
     {
         if (*allocator != NULL) {
-            if ((result=dump_to_array(*allocator, array)) != 0) {
+            if ((result=dump_to_array(ctx, *allocator,
+                            array, changed_count)) != 0)
+            {
                 return result;
             }
         }
