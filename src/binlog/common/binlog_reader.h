@@ -24,6 +24,9 @@
 extern "C" {
 #endif
 
+int da_binlog_reader_load_ex(const char *filename,
+        da_binlog_unpack_record_func unpack_func, void *args);
+
 int da_binlog_reader_load(const uint64_t id, void *args);
 
 #ifdef __cplusplus
