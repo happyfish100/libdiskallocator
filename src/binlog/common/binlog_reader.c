@@ -112,7 +112,7 @@ int da_binlog_reader_load_ex(const char *filename,
         buffer.alloc_size = 64 * 1024 * 1024;
     }
 
-    if ((buffer.buff=fc_malloc(buffer.alloc_size)) == NULL) {
+    if ((buffer.buff=fc_malloc(buffer.alloc_size + 8)) == NULL) {
         close(fd);
         return ENOMEM;
     }
@@ -131,6 +131,7 @@ int da_binlog_reader_load_ex(const char *filename,
             break;
         }
 
+        buffer.buff[buffer.length] = '\0';
         if ((result=parse_buffer(filename, &buffer, &line_count,
                         unpack_func, args)) != 0)
         {
