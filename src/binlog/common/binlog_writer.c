@@ -312,7 +312,7 @@ static void deal_shrink_queue()
             fast_mblock_free_object(&binlog_writer_ctx.
                     allocators.stask, stask);
         } else {
-            if (g_current_time - stask->last_shrink_time > 3) {
+            if (g_current_time - stask->last_shrink_time > 60) {
                 ++count;
                 da_write_fd_cache_remove(stask->id);
 
