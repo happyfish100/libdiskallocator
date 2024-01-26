@@ -110,6 +110,19 @@ int da_init_read_context(DASynchronizedReadContext *ctx)
     return 0;
 }
 
+void da_destroy_read_context(DAContext *ctx, DASynchronizedReadContext *rctx)
+{
+#ifdef OS_LINUX
+    if (rctx->op_ctx.rb.aio_buffer != NULL) {
+        da_read_buffer_pool_free(ctx, rctx->op_ctx.rb.aio_buffer);
+        rctx->op_ctx.rb.aio_buffer = NULL;
+    }
+#endif
+
+    fc_free_buffer(&rctx->op_ctx.rb.buffer);
+    sf_synchronize_ctx_destroy(&rctx->sctx);
+}
+
 static int alloc_path_contexts(DAContext *ctx)
 {
     int count;

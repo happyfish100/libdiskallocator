@@ -91,6 +91,9 @@ extern "C" {
 
     int da_init_read_context(DASynchronizedReadContext *rctx);
 
+    void da_destroy_read_context(DAContext *ctx,
+            DASynchronizedReadContext *rctx);
+
     int da_slice_read(DAContext *ctx, DASynchronizedReadContext *rctx);
 
 #ifdef __cplusplus
