@@ -29,7 +29,18 @@ extern "C" {
 
     int da_storage_config_calc_path_avail_space(DAStoragePathInfo *path_info);
 
-    void da_storage_config_stat_path_spaces(DAContext *ctx, SFSpaceStat *ss);
+    void da_storage_config_stat_path_spaces_ex(DAContext *ctx, DASpaceStat *ss);
+
+    static inline void da_storage_config_stat_path_spaces(
+            DAContext *ctx, SFSpaceStat *stat)
+    {
+        DASpaceStat ss;
+
+        da_storage_config_stat_path_spaces_ex(ctx, &ss);
+        stat->total = ss.trunk.total + ss.disk.avail;
+        stat->avail = ss.trunk.avail + ss.disk.avail;
+        stat->used = ss.trunk.used;
+    }
 
     void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg);
 

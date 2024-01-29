@@ -243,6 +243,11 @@ typedef struct {
     int64_t last_used;       //for avail allocator check
 } DATrunkSpaceStat;
 
+typedef struct {
+    SFSpaceStat disk;
+    SFSpaceStat trunk;
+} DASpaceStat;
+
 struct da_context;
 typedef struct {
     int block_size;
@@ -270,6 +275,7 @@ typedef struct {
 
     struct {
         int64_t total;
+        int64_t used;
         int64_t avail;  //current available space
         volatile time_t last_stat_time;
         double used_ratio;

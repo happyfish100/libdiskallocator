@@ -153,6 +153,9 @@ int da_storage_config_calc_path_avail_space(DAStoragePathInfo *path_info)
         return errno != 0 ? errno : EPERM;
     }
 
+    path_info->space_stat.total = (int64_t)(sbuf.f_blocks) * sbuf.f_frsize;
+    path_info->space_stat.used = (sbuf.f_blocks -
+            sbuf.f_bavail) * sbuf.f_frsize;
     path_info->space_stat.avail = (int64_t)(sbuf.f_bavail) * sbuf.f_frsize;
     if (sbuf.f_blocks > 0) {
         path_info->space_stat.used_ratio = (double)(sbuf.f_blocks -
@@ -162,14 +165,14 @@ int da_storage_config_calc_path_avail_space(DAStoragePathInfo *path_info)
     return 0;
 }
 
-void da_storage_config_stat_path_spaces(DAContext *ctx, SFSpaceStat *ss)
+void da_storage_config_stat_path_spaces_ex(DAContext *ctx, DASpaceStat *ss)
 {
     DAStoragePathInfo **pp;
     DAStoragePathInfo **end;
-    SFSpaceStat stat;
     int64_t disk_avail;
 
-    stat.total = stat.used = stat.avail = 0;
+    ss->disk.total = ss->disk.used = ss->disk.avail = 0;
+    ss->trunk.total = ss->trunk.used = ss->trunk.avail = 0;
     end = ctx->storage.cfg.paths_by_index.paths +
         ctx->storage.cfg.paths_by_index.count;
     for (pp=ctx->storage.cfg.paths_by_index.paths; pp<end; pp++) {
@@ -178,13 +181,17 @@ void da_storage_config_stat_path_spaces(DAContext *ctx, SFSpaceStat *ss)
         }
 
         da_storage_config_calc_path_avail_space(*pp);
-        disk_avail = (*pp)->space_stat.avail  - (*pp)->reserved_space.value;
+        disk_avail = (*pp)->space_stat.avail - (*pp)->reserved_space.value;
         if (disk_avail < 0) {
             disk_avail = 0;
         }
-        stat.total += (*pp)->trunk_stat.total + disk_avail;
-        stat.avail += (*pp)->trunk_stat.avail + disk_avail;
-        stat.used += (*pp)->trunk_stat.used;
+
+        ss->disk.total += (*pp)->space_stat.total;
+        ss->disk.used += (*pp)->space_stat.used;
+        ss->disk.avail += disk_avail;
+        ss->trunk.total += (*pp)->trunk_stat.total;
+        ss->trunk.used += (*pp)->trunk_stat.used;
+        ss->trunk.avail += (*pp)->trunk_stat.avail;
 
         /*
         logInfo("%s trunk {total: %"PRId64" MB, avail: %"PRId64" MB, "
@@ -195,12 +202,10 @@ void da_storage_config_stat_path_spaces(DAContext *ctx, SFSpaceStat *ss)
                 (*pp)->trunk_stat.avail / (1024 * 1024),
                 (*pp)->trunk_stat.used / (1024 * 1024),
                 (*pp)->reserved_space.value / (1024 * 1024),
-                disk_avail / (1024 * 1024), stat.total / (1024 * 1024),
-                stat.avail / (1024 * 1024), stat.used / (1024 * 1024));
+                disk_avail / (1024 * 1024), ss->trunk.total / (1024 * 1024),
+                ss->trunk.avail / (1024 * 1024), ss->trunk.used / (1024 * 1024));
                 */
     }
-
-    *ss = stat;
 }
 
 static int load_write_align_size_from_config(DAContext *ctx,
