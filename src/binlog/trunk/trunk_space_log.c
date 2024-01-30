@@ -68,7 +68,7 @@ int da_trunk_space_log_unpack(const string_t *line,
             have_slice_type = false;
             size_endchr = '\n';
         } else {
-            sprintf(error_info, "record count: %d != %d", count, expect);
+            sprintf(error_info, "field count: %d != %d", count, expect);
             return EINVAL;
         }
     }
