@@ -251,10 +251,10 @@ int da_trunk_hashtable_dump_to_file(DATrunkHTableContext *ctx,
                 }
             }
 
-            writer.buffer.current += da_trunk_binlog_log_to_buff(
+            writer.buffer.data_end += da_trunk_binlog_log_to_buff(
                     DA_IO_TYPE_CREATE_TRUNK, current->allocator->
                     path_info->store.index, &current->id_info,
-                    current->size, writer.buffer.current);
+                    current->size, writer.buffer.data_end);
             ++(*total_trunk_count);
         } while ((current=current->htable.next) != NULL);
     }
