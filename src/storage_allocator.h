@@ -38,6 +38,7 @@ typedef struct {
     DATrunkAllocatorArray all;
     volatile DATrunkAllocatorPtrArray *full;
     volatile DATrunkAllocatorPtrArray *avail;
+    time_t last_change_time;
 } DAStorageAllocatorContext;
 
 typedef struct da_storage_allocator_manager {
@@ -101,6 +102,7 @@ extern "C" {
         DATrunkAllocator **allocator;
         int result;
 
+        result = ENOSPC;
         do {
             while (1) {
                 avail_array = (DATrunkAllocatorPtrArray *)
@@ -109,6 +111,11 @@ extern "C" {
                     break;
                 }
 
+                if (g_current_time - ctx->store_allocator_mgr->
+                        store_path.last_change_time > 300)
+                {
+                    return ENOSPC;
+                }
                 if (is_normal && SF_G_CONTINUE_FLAG) {
                     fc_sleep_ms(1);
                 } else {
@@ -116,17 +123,12 @@ extern "C" {
                 }
             }
 
-            if (avail_array->count > 0) {
-                allocator = avail_array->allocators +
-                    blk_hc % avail_array->count;
-                if ((result=da_trunk_freelist_alloc_space(*allocator,
-                                &(*allocator)->freelist, blk_hc, size, spaces,
-                                count, is_normal, slice_type)) == 0)
-                {
-                    return 0;
-                }
-            } else {
-                result = ENOSPC;
+            allocator = avail_array->allocators + blk_hc % avail_array->count;
+            if ((result=da_trunk_freelist_alloc_space(*allocator,
+                            &(*allocator)->freelist, blk_hc, size,
+                            spaces, count, is_normal, slice_type)) == 0)
+            {
+                return 0;
             }
         } while ((result == ENOSPC || result == EAGAIN) &&
                 is_normal && SF_G_CONTINUE_FLAG);
@@ -176,6 +178,7 @@ extern "C" {
                         (DATrunkAllocatorPtrArray **)&allocator_ctx->avail,
                         allocator)) == 0)
         {
+            allocator_ctx->last_change_time = g_current_time;
             logInfo("file: "__FILE__", line: %d, %s "
                     "path: %s is available", __LINE__, ctx->module_name,
                     allocator->path_info->store.path.str);
@@ -200,6 +203,7 @@ extern "C" {
                         (DATrunkAllocatorPtrArray **)&allocator_ctx->full,
                         allocator)) == 0)
         {
+            allocator_ctx->last_change_time = g_current_time;
             allocator->path_info->trunk_stat.last_used =
                 FC_ATOMIC_GET(allocator->path_info->trunk_stat.used);
             logWarning("file: "__FILE__", line: %d, %s "
