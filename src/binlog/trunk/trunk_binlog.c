@@ -204,13 +204,14 @@ static int trunk_binlog_load(DAContext *ctx)
 
 int da_trunk_binlog_init(DAContext *ctx)
 {
+    const int write_interval_ms = 0;
     const int max_delay = 1;
     int result;
 
     if ((result=sf_binlog_writer_init(&ctx->trunk_binlog_writer,
                     ctx->data.path.str, DA_TRUNK_BINLOG_SUBDIR_NAME,
-                    ctx->data.binlog_buffer_size, max_delay,
-                    DA_TRUNK_BINLOG_MAX_RECORD_SIZE)) != 0)
+                    ctx->data.binlog_buffer_size, write_interval_ms,
+                    max_delay, DA_TRUNK_BINLOG_MAX_RECORD_SIZE)) != 0)
     {
         return result;
     }
