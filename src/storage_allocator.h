@@ -58,6 +58,7 @@ extern "C" {
     int da_storage_allocator_init(DAContext *ctx);
 
     int da_storage_allocator_prealloc_trunk_freelists(DAContext *ctx);
+    void da_storage_allocator_wait_available(DAContext *ctx);
 
     static inline int da_storage_allocator_add_trunk_ex(DAContext *ctx,
             const int path_index, const DATrunkIdInfo *id_info,

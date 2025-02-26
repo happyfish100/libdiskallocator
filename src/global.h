@@ -62,7 +62,7 @@ extern "C" {
                 destroy_store_path_index, migrate_path_mark_filename);
     }
 
-    int da_init_start_ex(DAContext *ctx, da_slice_load_done_callback
+    int da_init_ex(DAContext *ctx, da_slice_load_done_callback
             slice_load_done_callback, da_slice_migrate_done_callback
             slice_migrate_done_callback, da_trunk_migrate_done_callback
             trunk_migrate_done_callback, da_cached_slice_write_done_callback
@@ -70,14 +70,16 @@ extern "C" {
 
     void da_destroy(DAContext *context);
 
+    int da_start(DAContext *ctx);
+
     static inline void da_set_slice_migrate_done_callback(DAContext *ctx,
             da_slice_migrate_done_callback slice_migrate_done_callback)
     {
         ctx->slice_migrate_done_callback = slice_migrate_done_callback;
     }
 
-#define da_init_start(ctx, slice_migrate_done_callback) \
-    da_init_start_ex(ctx, NULL, slice_migrate_done_callback, NULL, NULL, -1)
+#define da_init(ctx, slice_migrate_done_callback) \
+    da_init_ex(ctx, NULL, slice_migrate_done_callback, NULL, NULL, -1)
 
 #ifdef __cplusplus
 }

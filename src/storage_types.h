@@ -180,7 +180,7 @@ typedef struct da_piece_field_info {
     uint64_t fid;  //field ID (key)
     unsigned char source;
     DABinlogOpType op_type;
-    int extra;     //such as slice offset
+    int extra;     //such as slice offset for faststore
     DAPieceFieldStorage storage;
 } DAPieceFieldInfo;
 

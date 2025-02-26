@@ -18,6 +18,7 @@
 #include "fastcommon/shared_func.h"
 #include "fastcommon/logger.h"
 #include "fastcommon/fc_memory.h"
+#include "fastcommon/sched_thread.h"
 #include "sf/sf_global.h"
 #include "binlog/trunk/trunk_space_log.h"
 #include "global.h"
@@ -170,7 +171,7 @@ static int prealloc_trunk_freelist(DAStorageAllocatorContext *allocator_ctx)
     return 0;
 }
 
-static void wait_allocator_available(DAContext *ctx)
+void da_storage_allocator_wait_available(DAContext *ctx)
 {
     DATrunkAllocatorPtrArray *avail_array;
     int count;
@@ -187,7 +188,7 @@ static void wait_allocator_available(DAContext *ctx)
 
     i = 0;
     while (ctx->store_allocator_mgr->store_path.
-            avail->count == 0 && i++ < 10)
+            avail->count == 0 && ++i < 30)
     {
         fc_sleep_ms(100);
     }
@@ -453,7 +454,6 @@ int da_storage_allocator_prealloc_trunk_freelists(DAContext *ctx)
     if ((result=setup_check_trunk_avail_schedule(ctx)) != 0) {
         return result;
     }
-    wait_allocator_available(ctx);
     return 0;
 }
 

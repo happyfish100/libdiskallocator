@@ -69,7 +69,7 @@ int da_load_config_ex(DAContext *context, const char *module_name,
     return result;
 }
 
-int da_init_start_ex(DAContext *ctx, da_slice_load_done_callback
+int da_init_ex(DAContext *ctx, da_slice_load_done_callback
         slice_load_done_callback, da_slice_migrate_done_callback
         slice_migrate_done_callback, da_trunk_migrate_done_callback
         trunk_migrate_done_callback, da_cached_slice_write_done_callback
@@ -122,6 +122,38 @@ int da_init_start_ex(DAContext *ctx, da_slice_load_done_callback
 
     if ((result=da_storage_allocator_prealloc_trunk_freelists(ctx)) != 0) {
         return result;
+    }
+
+    return 0;
+}
+
+int da_start(DAContext *ctx)
+{
+    int i;
+    int result;
+
+    if ((result=da_trunk_maker_start(ctx)) != 0) {
+        return result;
+    }
+
+    da_storage_allocator_wait_available(ctx);
+    if (da_storage_allocator_avail_count(ctx) == 0) {
+        logInfo("file: "__FILE__", line: %d, "
+                "waiting store path available ...", __LINE__);
+        for (i=0; i<100; i++) {
+            fc_sleep_ms(100);
+            if (da_storage_allocator_avail_count(ctx) > 0) {
+                break;
+            }
+        }
+
+        if (da_storage_allocator_avail_count(ctx) > 0) {
+            logInfo("file: "__FILE__", line: %d, "
+                    "wait store path available done.", __LINE__);
+        } else {
+            logWarning("file: "__FILE__", line: %d, "
+                    "no store path available!", __LINE__);
+        }
     }
 
     return 0;

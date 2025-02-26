@@ -31,6 +31,8 @@ extern "C" {
 
     int da_trunk_maker_init(DAContext *ctx);
 
+    int da_trunk_maker_start(DAContext *ctx);
+
     int da_trunk_maker_allocate_ex(DATrunkAllocator *allocator,
             const bool urgent, const bool need_lock,
             da_trunk_allocate_done_callback callback, void *arg);

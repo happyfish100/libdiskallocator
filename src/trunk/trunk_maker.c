@@ -526,7 +526,22 @@ int da_trunk_maker_init(DAContext *ctx)
         {
             return result;
         }
+    }
 
+    return 0;
+}
+
+int da_trunk_maker_start(DAContext *ctx)
+{
+    int result;
+    TrunkMakerThreadInfo *thread;
+    TrunkMakerThreadInfo *end;
+
+    end = ctx->trunk_maker_ctx->thread_array.threads +
+        ctx->trunk_maker_ctx->thread_array.count;
+    for (thread=ctx->trunk_maker_ctx->thread_array.threads;
+            thread<end; thread++)
+    {
         if ((result=fc_create_thread(&thread->tid, da_trunk_maker_thread_func,
                         thread, SF_G_THREAD_STACK_SIZE)) != 0)
         {
