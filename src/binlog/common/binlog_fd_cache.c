@@ -251,7 +251,6 @@ void da_binlog_fd_cache_clear(DABinlogFDCacheContext *cache_ctx)
     DABinlogFDCacheEntry **end;
     DABinlogFDCacheEntry *entry;
     DABinlogFDCacheEntry *deleted;
-    int count = 0;
 
     end = cache_ctx->htable.buckets + cache_ctx->htable.size;
     for (bucket=cache_ctx->htable.buckets; bucket<end; bucket++) {
@@ -264,7 +263,6 @@ void da_binlog_fd_cache_clear(DABinlogFDCacheContext *cache_ctx)
             deleted = entry;
             entry = entry->next;
             fd_cache_remove(cache_ctx, deleted);
-            ++count;
         } while (entry != NULL);
 
         *bucket = NULL;

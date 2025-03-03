@@ -237,7 +237,7 @@ static int get_write_fd(DAContext *ctx, const uint64_t trunk_id, int *fd)
     return 0;
 }
 
-static int do_write_to_file(DAContext *ctx, const uint64_t trunk_id,
+static inline int do_write_to_file(DAContext *ctx, const uint64_t trunk_id,
         int fd, char *buff, const int len)
 {
     int result;
@@ -832,6 +832,10 @@ static void *trunk_space_log_func(void *arg)
 #endif
 
     ctx = arg;
+    logInfo("file: "__FILE__", line: %d, "
+            "%s trunk space log thread start",
+            __LINE__, ctx->module_name);
+    ctx->space_log_ctx.running = true;
     while (SF_G_CONTINUE_FLAG) {
         if ((head=fc_queue_pop_all(&ctx->space_log_ctx.queue)) == NULL) {
             continue;
@@ -847,6 +851,12 @@ static void *trunk_space_log_func(void *arg)
 
     }
 
+    da_trunk_fd_cache_clear(&FD_CACHE_CTX);
+
+    logInfo("file: "__FILE__", line: %d, "
+            "%s trunk space log thread exit",
+            __LINE__, ctx->module_name);
+    ctx->space_log_ctx.running = false;
     return NULL;
 }
 
@@ -955,4 +965,23 @@ int da_trunk_space_log_start(DAContext *ctx)
 
 void da_trunk_space_log_destroy(DAContext *ctx)
 {
+#define LOOP_COUNT  100
+    int i;
+
+    if (ctx->space_log_ctx.running) {
+        logInfo("file: "__FILE__", line: %d, "
+                "wait %s trunk space log thread exit ...",
+                __LINE__, ctx->module_name);
+    }
+
+    for (i=0; i<LOOP_COUNT && ctx->space_log_ctx.running; i++) {
+        fc_queue_terminate(&ctx->space_log_ctx.queue);
+        fc_sleep_ms(10);
+    }
+
+    if (ctx->space_log_ctx.running) {
+        logWarning("file: "__FILE__", line: %d, "
+                "wait %s trunk space log thread finish timeout",
+                __LINE__, ctx->module_name);
+    }
 }

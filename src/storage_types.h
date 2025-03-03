@@ -448,6 +448,7 @@ typedef struct da_trunk_space_log_context {
     DATrunkFDCacheContext fd_cache_ctx;
     FastBuffer buffer;
     volatile char dumping_index; //for trunk index dump cron task
+    volatile bool running;
     time_t last_dump_time;       //for trunk index dump cron task
 } DATrunkSpaceLogContext;
 

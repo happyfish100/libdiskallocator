@@ -127,6 +127,17 @@ int da_trunk_fd_cache_add(DATrunkFDCacheContext *cache_ctx,
     return 0;
 }
 
+static inline void trunk_fd_cache_remove(DATrunkFDCacheContext *cache_ctx,
+        DATrunkFDCacheEntry *entry)
+{
+    close(entry->pair.fd);
+    entry->pair.fd = -1;
+
+    fc_list_del_init(&entry->dlink);
+    fast_mblock_free_object(&cache_ctx->allocator, entry);
+    cache_ctx->lru.count--;
+}
+
 int da_trunk_fd_cache_delete(DATrunkFDCacheContext *cache_ctx,
         const uint64_t trunk_id)
 {
@@ -159,11 +170,30 @@ int da_trunk_fd_cache_delete(DATrunkFDCacheContext *cache_ctx,
         previous->next = entry->next;
     }
 
-    close(entry->pair.fd);
-    entry->pair.fd = -1;
-
-    fc_list_del_init(&entry->dlink);
-    fast_mblock_free_object(&cache_ctx->allocator, entry);
-    cache_ctx->lru.count--;
+    trunk_fd_cache_remove(cache_ctx, entry);
     return 0;
+}
+
+void da_trunk_fd_cache_clear(DATrunkFDCacheContext *cache_ctx)
+{
+    DATrunkFDCacheEntry **bucket;
+    DATrunkFDCacheEntry **end;
+    DATrunkFDCacheEntry *entry;
+    DATrunkFDCacheEntry *deleted;
+
+    end = cache_ctx->htable.buckets + cache_ctx->htable.size;
+    for (bucket=cache_ctx->htable.buckets; bucket<end; bucket++) {
+        if (*bucket == NULL) {
+            continue;
+        }
+
+        entry = *bucket;
+        do {
+            deleted = entry;
+            entry = entry->next;
+            trunk_fd_cache_remove(cache_ctx, deleted);
+        } while (entry != NULL);
+
+        *bucket = NULL;
+    }
 }

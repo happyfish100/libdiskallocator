@@ -27,7 +27,6 @@
 #include <pthread.h>
 #include "fastcommon/logger.h"
 #include "fastcommon/pthread_func.h"
-#include "fastcommon/sched_thread.h"
 #include "sf/sf_global.h"
 #include "sf/sf_func.h"
 #include "../common/write_fd_cache.h"
@@ -365,6 +364,10 @@ static void *binlog_writer_func(void *arg)
     prctl(PR_SET_NAME, thread_name);
 #endif
 
+    logInfo("file: "__FILE__", line: %d, "
+            "%s binlog writer thread start",
+            __LINE__, (const char *)arg);
+
     binlog_writer_ctx.running = true;
     while (SF_G_CONTINUE_FLAG) {
         blocked = fc_queue_empty(&WRITER_SHRINK_QUEUE);
@@ -386,6 +389,12 @@ static void *binlog_writer_func(void *arg)
             deal_shrink_queue();
         }
     }
+
+    da_write_fd_cache_clear();
+
+    logInfo("file: "__FILE__", line: %d, "
+            "%s binlog writer thread exit",
+            __LINE__, (const char *)arg);
     binlog_writer_ctx.running = false;
     return NULL;
 }
@@ -549,4 +558,21 @@ int da_binlog_writer_clear_fd_cache()
 
 void da_binlog_writer_finish()
 {
+#define LOOP_COUNT  100
+    int i;
+
+    if (binlog_writer_ctx.running) {
+        logInfo("file: "__FILE__", line: %d, "
+                "wait binlog write thread exit ...", __LINE__);
+    }
+
+    for (i=0; i<LOOP_COUNT && binlog_writer_ctx.running; i++) {
+        fc_queue_terminate(&WRITER_NORMAL_QUEUE);
+        fc_sleep_ms(10);
+    }
+
+    if (binlog_writer_ctx.running) {
+        logWarning("file: "__FILE__", line: %d, "
+                "wait binlog write thread finish timeout", __LINE__);
+    }
 }

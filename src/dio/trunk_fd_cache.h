@@ -39,6 +39,8 @@ extern "C" {
     int da_trunk_fd_cache_delete(DATrunkFDCacheContext *cache_ctx,
             const uint64_t trunk_id);
 
+    void da_trunk_fd_cache_clear(DATrunkFDCacheContext *cache_ctx);
+
     static inline void dio_get_trunk_filename(DATrunkSpaceInfo *space,
             char *trunk_filename, const int size)
     {

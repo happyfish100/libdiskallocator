@@ -159,9 +159,10 @@ int da_start(DAContext *ctx)
     return 0;
 }
 
-void da_destroy(DAContext *context)
+void da_destroy(DAContext *ctx)
 {
-    da_trunk_write_thread_terminate(context);
-    da_trunk_binlog_destroy(context);
-    da_trunk_id_info_destroy(context);
+    da_trunk_write_thread_terminate(ctx);
+    da_trunk_binlog_destroy(ctx);
+    da_trunk_id_info_destroy(ctx);
+    da_trunk_space_log_destroy(ctx);
 }
