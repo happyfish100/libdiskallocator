@@ -272,6 +272,16 @@ void da_trunk_write_thread_terminate(DAContext *ctx)
     TrunkWriteThreadContext *thread_ctx;
     TrunkWriteThreadContext *thread_end;
     TrunkWriteIOBuffer *iob;
+    int running_threads;
+
+    running_threads = FC_ATOMIC_GET(ctx->trunk_write_ctx->running_threads);
+    if (running_threads == 0) {
+        return;
+    }
+
+    logInfo("file: "__FILE__", line: %d, %s "
+            "waiting trunk write threads exit, running threads: %d",
+            __LINE__, ctx->module_name, running_threads);
 
     path_end = ctx->trunk_write_ctx->path_ctx_array.paths +
         ctx->trunk_write_ctx->path_ctx_array.count;
@@ -293,8 +303,12 @@ void da_trunk_write_thread_terminate(DAContext *ctx)
     }
 
     while (FC_ATOMIC_GET(ctx->trunk_write_ctx->running_threads) > 0) {
-        fc_sleep_ms(1);
+        fc_sleep_ms(10);
     }
+
+    logInfo("file: "__FILE__", line: %d, %s "
+            "trunk write threads exit",
+            __LINE__, ctx->module_name);
 }
 
 static inline TrunkWriteIOBuffer *alloc_init_buffer(DAContext *ctx,
@@ -1020,6 +1034,7 @@ static void *da_trunk_write_thread_func(void *arg)
     if (thread->iob_array.count > 0) {
         batch_write(thread);
     }
+    clear_write_fd(thread);
     FC_ATOMIC_DEC(thread->ctx->trunk_write_ctx->running_threads);
 
     return NULL;
