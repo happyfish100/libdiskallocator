@@ -218,9 +218,15 @@ typedef struct da_trunk_read_buffer {
 #ifdef OS_LINUX
     DABufferType type;
     DAAlignedReadBuffer *aio_buffer;   //NULL for alloc from pool
-    BufferInfo buffer;
+    struct {
+        BufferInfo holder;
+        BufferInfo *ptr;
+    } buffer;
 #else
-    BufferInfo buffer;
+    struct {
+        BufferInfo holder;
+        BufferInfo *ptr;
+    } buffer;
 #endif
     void *arg;  //for read done callback
 } DATrunkReadBuffer;
@@ -461,6 +467,10 @@ typedef struct da_context {
         int file_block_size;
         int read_direct_io_paths;
         bool have_extra_field;
+        struct {
+            bool enabled;
+            bool value;
+        } merge_continuous_slices;    //for faststore
         bool migrate_path_mark_filename; //for faststore
         int skip_path_index;  //for faststore path rebuild
     } storage;
@@ -488,15 +498,17 @@ typedef struct da_context {
 } DAContext;
 
 #ifdef OS_LINUX
-#define DA_OP_CTX_BUFFER_PTR(op_ctx) ((op_ctx).rb.type == da_buffer_type_aio ? \
-        (op_ctx).rb.aio_buffer->buff + (op_ctx).rb.aio_buffer->offset : \
-        (op_ctx).rb.buffer.buff)
-#define DA_OP_CTX_BUFFER_LEN(op_ctx) ((op_ctx).rb.type == da_buffer_type_aio ? \
-        (op_ctx).rb.aio_buffer->length : (op_ctx).rb.buffer.length)
-#else
-#define DA_OP_CTX_BUFFER_PTR(op_ctx) (op_ctx).rb.buffer.buff
-#define DA_OP_CTX_BUFFER_LEN(op_ctx) (op_ctx).rb.buffer.length
-#endif
+#define DA_OP_CTX_AIO_BUFFER_PTR(op_ctx) ((op_ctx).rb.aio_buffer->buff + \
+        (op_ctx).rb.aio_buffer->offset)
+#define DA_OP_CTX_AIO_BUFFER_LEN(op_ctx) (op_ctx).rb.aio_buffer->length
 
+#define DA_OP_CTX_BUFFER_PTR(op_ctx) ((op_ctx).rb.type == da_buffer_type_aio ? \
+        DA_OP_CTX_AIO_BUFFER_PTR(op_ctx) : (op_ctx).rb.buffer.ptr->buff)
+#define DA_OP_CTX_BUFFER_LEN(op_ctx) ((op_ctx).rb.type == da_buffer_type_aio ? \
+        DA_OP_CTX_AIO_BUFFER_LEN(op_ctx) : (op_ctx).rb.buffer.ptr->length)
+#else
+#define DA_OP_CTX_BUFFER_PTR(op_ctx) (op_ctx).rb.buffer.ptr->buff
+#define DA_OP_CTX_BUFFER_LEN(op_ctx) (op_ctx).rb.buffer.ptr->length
+#endif
 
 #endif

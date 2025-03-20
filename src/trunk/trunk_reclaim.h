@@ -25,7 +25,10 @@
 
 typedef struct da_trunk_reclaim_block_info {
     DATrunkSpaceLogRecord *head;
-    int total_size;
+    union {
+        int total_size;
+        int total_length;
+    };
 } DATrunkReclaimBlockInfo;
 
 typedef struct da_trunk_reclaim_block_array {
@@ -33,6 +36,18 @@ typedef struct da_trunk_reclaim_block_array {
     int alloc;
     DATrunkReclaimBlockInfo *blocks;
 } DATrunkReclaimBlockArray;
+
+typedef struct da_trunk_reclaim_slice_array {
+    int count;
+    int alloc;
+    DATrunkSpaceLogRecord **records;
+} DATrunkReclaimSliceArray;
+
+typedef struct da_trunk_reclaim_storage_array {
+    int count;
+    int alloc;
+    DAPieceFieldStorage *storages;
+} DATrunkReclaimStorageArray;
 
 typedef struct da_trunk_reclaim_space_alloc_info {
     DATrunkFileInfo *trunk;
@@ -49,7 +64,13 @@ typedef struct da_trunk_reclaim_context {
     DASpaceLogReader reader;
     UniqSkiplist *skiplist;
     DATrunkReclaimBlockArray barray;
-    DATrunkReclaimSpaceAllocArray sarray;
+    struct {
+        DATrunkReclaimSliceArray sarray;
+        DATrunkReclaimStorageArray storage_array;
+        BufferInfo trunk_content;
+        iovec_array_t iovec_array;
+    };  //for merge continuous slices
+    DATrunkReclaimSpaceAllocArray space_array;
     DASynchronizedReadContext read_ctx;
     struct {
         int total;

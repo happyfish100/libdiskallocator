@@ -827,6 +827,14 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
 
 void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
 {
+    char merge_continuous_slices_buff[64];
+
+    if (ctx->storage.merge_continuous_slices.enabled) {
+        sprintf(merge_continuous_slices_buff, "merge_continuous_slices: %d, ",
+                ctx->storage.merge_continuous_slices.value);
+    } else {
+        *merge_continuous_slices_buff = '\0';
+    }
     logInfo("%s storage config, write_threads_per_path: %d, "
             "read_threads_per_path: %d, "
             "io_depth_per_read_thread: %d, "
@@ -836,7 +844,7 @@ void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
             "fd_cache_capacity_per_write_thread: %d, "
             "prealloc_space: {ratio_per_path: %.2f%%, "
             "start_time: %02d:%02d, end_time: %02d:%02d }, "
-            "trunk_prealloc_threads: %d, "
+            "trunk_prealloc_threads: %d, %s"
             "reserved_space_per_disk: %.2f%%, "
             "trunk_file_size: %u MB, "
             "max_trunk_files_per_subdir: %d, "
@@ -871,6 +879,7 @@ void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
             storage_cfg->prealloc_space.end_time.hour,
             storage_cfg->prealloc_space.end_time.minute,
             storage_cfg->trunk_prealloc_threads,
+            merge_continuous_slices_buff,
             storage_cfg->reserved_space_per_disk * 100.00,
             storage_cfg->trunk_file_size / (1024 * 1024),
             storage_cfg->max_trunk_files_per_subdir,

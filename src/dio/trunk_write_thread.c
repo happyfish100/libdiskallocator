@@ -1075,3 +1075,27 @@ int da_trunk_write_thread_by_buff_synchronize(DAContext *ctx,
 
     return sctx->result;
 }
+
+int da_trunk_write_thread_by_iovec_synchronize(DAContext *ctx,
+        DATrunkSpaceWithVersion *space_info, iovec_array_t *iovec_array,
+        SFSynchronizeContext *sctx)
+{
+    int result;
+
+    sctx->result = INT16_MIN;
+    if ((result=da_trunk_write_thread_push_slice_by_iovec(ctx, space_info->
+                    version, &space_info->ts.space, iovec_array,
+                    write_io_notify_callback, sctx, NULL)) != 0)
+    {
+        return result;
+    }
+
+    PTHREAD_MUTEX_LOCK(&sctx->lcp.lock);
+    while (sctx->result == INT16_MIN) {
+        pthread_cond_wait(&sctx->lcp.cond,
+                &sctx->lcp.lock);
+    }
+    PTHREAD_MUTEX_UNLOCK(&sctx->lcp.lock);
+
+    return sctx->result;
+}

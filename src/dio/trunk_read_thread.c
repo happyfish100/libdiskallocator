@@ -92,7 +92,8 @@ static inline int init_op_ctx(DASliceOpContext *op_ctx)
     op_ctx->rb.aio_buffer = NULL;
 #endif
 
-    return fc_init_buffer(&op_ctx->rb.buffer, alloc_size);
+    op_ctx->rb.buffer.ptr = &op_ctx->rb.buffer.holder;
+    return fc_init_buffer(op_ctx->rb.buffer.ptr, alloc_size);
 }
 
 int da_init_read_context(DASynchronizedReadContext *ctx)
@@ -119,7 +120,7 @@ void da_destroy_read_context(DAContext *ctx, DASynchronizedReadContext *rctx)
     }
 #endif
 
-    fc_free_buffer(&rctx->op_ctx.rb.buffer);
+    fc_free_buffer(&rctx->op_ctx.rb.buffer.holder);
     sf_synchronize_ctx_destroy(&rctx->sctx);
 }
 
@@ -643,11 +644,12 @@ static int do_read_slice(TrunkReadThreadContext *thread, DATrunkReadIOBuffer *io
         return result;
     }
 
-    iob->rb->buffer.length = 0;
+    iob->rb->buffer.ptr->length = 0;
     remain = iob->read_bytes;
     while (remain > 0) {
-        bytes = pread(fd, iob->rb->buffer.buff + iob->rb->buffer.length,
-                remain, iob->space.offset + iob->rb->buffer.length);
+        bytes = pread(fd, iob->rb->buffer.ptr->buff + iob->rb->
+                buffer.ptr->length, remain, iob->space.offset +
+                iob->rb->buffer.ptr->length);
         if (bytes <= 0) {
             char trunk_filename[PATH_MAX];
 
@@ -665,11 +667,11 @@ static int do_read_slice(TrunkReadThreadContext *thread, DATrunkReadIOBuffer *io
                     "read trunk file: %s fail, offset: %u, "
                     "errno: %d, error info: %s", __LINE__, thread->path_info->
                     ctx->module_name, trunk_filename, iob->space.offset +
-                    iob->rb->buffer.length, result, STRERROR(result));
+                    iob->rb->buffer.ptr->length, result, STRERROR(result));
             return result;
         }
 
-        iob->rb->buffer.length += bytes;
+        iob->rb->buffer.ptr->length += bytes;
         remain -= bytes;
     }
 
@@ -755,7 +757,7 @@ static void slice_read_done(struct da_trunk_read_io_buffer
 }
 
 static int check_alloc_buffer(DASliceOpContext *op_ctx,
-        const DAStoragePathInfo *path_info)
+        const DAStoragePathInfo *path_info, BufferInfo *buffer)
 {
 #ifdef OS_LINUX
     const bool need_align = false;
@@ -786,28 +788,34 @@ static int check_alloc_buffer(DASliceOpContext *op_ctx,
     }
 #endif
 
-    if (op_ctx->rb.buffer.alloc_size < op_ctx->storage->size) {
-        char *buff;
-        int buffer_size;
+    if (buffer == NULL) {
+        op_ctx->rb.buffer.ptr = &op_ctx->rb.buffer.holder;
+        if (op_ctx->rb.buffer.ptr->alloc_size < op_ctx->storage->size) {
+            char *buff;
+            int buffer_size;
 
-        buffer_size = op_ctx->rb.buffer.alloc_size * 2;
-        while (buffer_size < op_ctx->storage->size) {
-            buffer_size *= 2;
-        }
-        buff = (char *)fc_malloc(buffer_size);
-        if (buff == NULL) {
-            return ENOMEM;
-        }
+            buffer_size = op_ctx->rb.buffer.ptr->alloc_size * 2;
+            while (buffer_size < op_ctx->storage->size) {
+                buffer_size *= 2;
+            }
+            buff = (char *)fc_malloc(buffer_size);
+            if (buff == NULL) {
+                return ENOMEM;
+            }
 
-        free(op_ctx->rb.buffer.buff);
-        op_ctx->rb.buffer.buff = buff;
-        op_ctx->rb.buffer.alloc_size = buffer_size;
+            free(op_ctx->rb.buffer.ptr->buff);
+            op_ctx->rb.buffer.ptr->buff = buff;
+            op_ctx->rb.buffer.ptr->alloc_size = buffer_size;
+        }
+    } else {
+        op_ctx->rb.buffer.ptr = buffer;
     }
 
     return 0;
 }
 
-int da_slice_read(DAContext *ctx, DASynchronizedReadContext *rctx)
+int da_slice_read_ex(DAContext *ctx, DASynchronizedReadContext *rctx,
+        BufferInfo *buffer)
 {
     int result;
     DATrunkSpaceInfo space;
@@ -820,7 +828,7 @@ int da_slice_read(DAContext *ctx, DASynchronizedReadContext *rctx)
     }
 
     if ((result=check_alloc_buffer(&rctx->op_ctx, trunk->
-                    allocator->path_info)) != 0)
+                    allocator->path_info, buffer)) != 0)
     {
         return result;
     }
@@ -844,6 +852,14 @@ int da_slice_read(DAContext *ctx, DASynchronizedReadContext *rctx)
     }
     result = rctx->sctx.result == INT16_MIN ? EINTR : rctx->sctx.result;
     PTHREAD_MUTEX_UNLOCK(&rctx->sctx.lcp.lock);
+
+#ifdef OS_LINUX
+    if (buffer != NULL && rctx->op_ctx.rb.type == da_buffer_type_aio) {
+        buffer->length = DA_OP_CTX_AIO_BUFFER_LEN(rctx->op_ctx);
+        memcpy(buffer->buff, DA_OP_CTX_AIO_BUFFER_PTR(
+                    rctx->op_ctx), buffer->length);
+    }
+#endif
 
     return result;
 }

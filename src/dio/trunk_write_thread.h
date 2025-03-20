@@ -207,6 +207,10 @@ extern "C" {
             DATrunkSpaceWithVersion *space_info, char *buff,
             SFSynchronizeContext *sctx);
 
+    int da_trunk_write_thread_by_iovec_synchronize(DAContext *ctx,
+            DATrunkSpaceWithVersion *space_info, iovec_array_t *iovec_array,
+            SFSynchronizeContext *sctx);
+
     static inline int da_trunk_write_thread_push_slice_by_iovec(
             DAContext *ctx, const int64_t version, DATrunkSpaceInfo *space,
             iovec_array_t *iovec_array, da_trunk_write_io_notify_func notify_func,

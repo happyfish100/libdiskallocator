@@ -13,6 +13,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "fastcommon/system_info.h"
 #include "dio/trunk_read_thread.h"
 #include "dio/trunk_write_thread.h"
 #include "binlog/trunk/trunk_index.h"
@@ -50,19 +51,36 @@ int da_global_init(const int my_server_id)
 int da_load_config_ex(DAContext *context, const char *module_name,
         const int file_block_size, const DADataConfig *data_cfg,
         const char *storage_filename, const bool have_extra_field,
+        const bool merge_continuous_slices,
         const bool destroy_store_path_index,
         const bool migrate_path_mark_filename)
 {
     int result;
+    int64_t bytes;
+    int64_t mem_size;
 
     context->module_name = module_name;
     context->storage.file_block_size = file_block_size;
     context->data = *data_cfg;
     context->storage.have_extra_field = have_extra_field;
+    context->storage.merge_continuous_slices.enabled = merge_continuous_slices;
     context->storage.migrate_path_mark_filename = migrate_path_mark_filename;
     if ((result=da_storage_config_load(context, &context->storage.cfg,
                     storage_filename, destroy_store_path_index)) == 0)
     {
+        if (context->storage.merge_continuous_slices.enabled) {
+            if (get_sys_total_mem_size(&mem_size) == 0) {
+                bytes = context->storage.cfg.trunk_prealloc_threads *
+                    context->storage.cfg.trunk_file_size;
+                context->storage.merge_continuous_slices.value =
+                    (mem_size * 0.025) > bytes;
+            } else {
+                context->storage.merge_continuous_slices.value = false;
+            }
+        } else {
+            context->storage.merge_continuous_slices.value = false;
+        }
+
         da_storage_config_to_log(context, &context->storage.cfg);
     }
 
