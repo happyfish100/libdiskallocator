@@ -518,7 +518,7 @@ int da_trunk_maker_init(DAContext *ctx)
     TrunkMakerThreadInfo *thread;
     TrunkMakerThreadInfo *end;
 
-    count = ctx->storage.cfg.trunk_prealloc_threads;
+    count = ctx->storage.cfg.trunk_allocate_threads;
     bytes = sizeof(TrunkMakerContext) + sizeof(TrunkMakerThreadInfo) * count;
     ctx->trunk_maker_ctx = fc_malloc(bytes);
     if (ctx->trunk_maker_ctx == NULL) {

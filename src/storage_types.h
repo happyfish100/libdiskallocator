@@ -325,6 +325,7 @@ typedef struct da_storage_config {
     uint32_t trunk_file_size;
     int discard_remain_space_size;
     int trunk_prealloc_threads;
+    int trunk_allocate_threads;
     int fd_cache_capacity_per_read_thread;
     int fd_cache_capacity_per_write_thread;
     double reclaim_trunks_on_path_usage;

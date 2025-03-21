@@ -70,7 +70,7 @@ int da_load_config_ex(DAContext *context, const char *module_name,
     {
         if (context->storage.merge_continuous_slices.enabled) {
             if (get_sys_total_mem_size(&mem_size) == 0) {
-                bytes = context->storage.cfg.trunk_prealloc_threads *
+                bytes = context->storage.cfg.trunk_allocate_threads *
                     context->storage.cfg.trunk_file_size;
                 context->storage.merge_continuous_slices.value =
                     (mem_size * 0.025) > bytes;
