@@ -470,7 +470,7 @@ typedef struct da_context {
         bool have_extra_field;
         struct {
             bool enabled;
-            bool value;
+            bool combine_read;
         } merge_continuous_slices;    //for faststore
         bool migrate_path_mark_filename; //for faststore
         int skip_path_index;  //for faststore path rebuild

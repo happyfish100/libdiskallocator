@@ -67,7 +67,10 @@ typedef struct da_trunk_reclaim_context {
     struct {
         DATrunkReclaimSliceArray sarray;
         DATrunkReclaimStorageArray storage_array;
-        BufferInfo trunk_content;
+        union {
+            BufferInfo trunk_content;
+            BufferInfo block_content;
+        };
         iovec_array_t iovec_array;
     };  //for merge continuous slices
     DATrunkReclaimSpaceAllocArray space_array;
@@ -77,6 +80,7 @@ typedef struct da_trunk_reclaim_context {
         int skip;   //do NOT need migrate
         int ignore; //object/inode not exist
     } slice_counts;
+    int read_count;
     int64_t migrage_bytes;
     SFSynchronizeContext log_notify;  //for binlog
     DAContext *ctx;

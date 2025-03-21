@@ -56,7 +56,7 @@ int da_load_config_ex(DAContext *context, const char *module_name,
         const bool migrate_path_mark_filename)
 {
     int result;
-    int64_t bytes;
+    int64_t malloc_bytes;
     int64_t mem_size;
 
     context->module_name = module_name;
@@ -70,15 +70,15 @@ int da_load_config_ex(DAContext *context, const char *module_name,
     {
         if (context->storage.merge_continuous_slices.enabled) {
             if (get_sys_total_mem_size(&mem_size) == 0) {
-                bytes = context->storage.cfg.trunk_allocate_threads *
+                malloc_bytes = context->storage.cfg.trunk_allocate_threads *
                     context->storage.cfg.trunk_file_size;
-                context->storage.merge_continuous_slices.value =
-                    (mem_size * 0.025) > bytes;
+                context->storage.merge_continuous_slices.combine_read =
+                    (mem_size * 0.025) > malloc_bytes;
             } else {
-                context->storage.merge_continuous_slices.value = false;
+                context->storage.merge_continuous_slices.combine_read = false;
             }
         } else {
-            context->storage.merge_continuous_slices.value = false;
+            context->storage.merge_continuous_slices.combine_read = false;
         }
 
         da_storage_config_to_log(context, &context->storage.cfg);

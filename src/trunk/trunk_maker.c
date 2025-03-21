@@ -246,7 +246,6 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     double avg_slices_per_block;
     double avg_slices_per_read;
     int used_count;
-    int read_count;
     int result;
 
     if (task->urgent || g_current_time - task->allocator->
@@ -308,24 +307,19 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     }
     */
 
-    if (thread->reclaim_ctx.ctx->storage.merge_continuous_slices.value) {
-        read_count = thread->reclaim_ctx.storage_array.count;
-    } else {
-        read_count = thread->reclaim_ctx.barray.count;
-    }
     if (thread->reclaim_ctx.barray.count > 0) {
         avg_slices_per_block = (double)thread->reclaim_ctx.slice_counts.
             total / (double)thread->reclaim_ctx.barray.count;
     } else {
         avg_slices_per_block = 0.00;
     }
-    if (read_count > 0) {
+    if (thread->reclaim_ctx.read_count > 0) {
         avg_slices_per_read = (double)thread->reclaim_ctx.slice_counts.
-            total / (double)read_count;
+            total / (double)thread->reclaim_ctx.read_count;
     } else {
         avg_slices_per_read = 0.00;
     }
-    if (read_count == thread->reclaim_ctx.barray.count) {
+    if (thread->reclaim_ctx.read_count == thread->reclaim_ctx.barray.count) {
         sprintf(avg_slices_buff, "avg slice count per block/read: %.2f",
                 avg_slices_per_block);
     } else {
@@ -347,8 +341,8 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
             "last usage ratio: %.2f%%, result: %d, %s", __LINE__,
             task->allocator->path_info->ctx->module_name,
             task->allocator->path_info->store.index, trunk->id_info.id,
-            thread->reclaim_ctx.barray.count, read_count, migrage_bytes_buff,
-            thread->reclaim_ctx.slice_counts.total,
+            thread->reclaim_ctx.barray.count, thread->reclaim_ctx.read_count,
+            migrage_bytes_buff, thread->reclaim_ctx.slice_counts.total,
             thread->reclaim_ctx.slice_counts.skip,
             thread->reclaim_ctx.slice_counts.ignore,
             avg_slices_buff, used_count, trunk->used.count,

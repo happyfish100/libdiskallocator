@@ -51,11 +51,25 @@ int da_trunk_reclaim_init_ctx(DATrunkReclaimContext *rctx, DAContext *ctx)
         return result;
     }
 
-    if (ctx->storage.merge_continuous_slices.value) {
-        if ((result=fc_check_realloc_iovec_array(&rctx->
-                        iovec_array, IOV_MAX)) != 0)
-        {
-            return result;
+    if (ctx->storage.merge_continuous_slices.enabled) {
+        if (ctx->storage.merge_continuous_slices.combine_read) {
+            if ((result=fc_check_realloc_iovec_array(&rctx->
+                            iovec_array, IOV_MAX)) != 0)
+            {
+                return result;
+            }
+
+            if ((result=fc_init_buffer(&rctx->trunk_content, ctx->
+                            storage.cfg.trunk_file_size)) != 0)
+            {
+                return result;
+            }
+        } else {
+            if ((result=fc_init_buffer(&rctx->block_content, ctx->
+                            storage.file_block_size)) != 0)
+            {
+                return result;
+            }
         }
     }
 
@@ -264,7 +278,6 @@ static int combine_records_to_storage_array(DATrunkReclaimContext *rctx,
         DATrunkReclaimStorageArray *storage_array)
 {
     int result;
-    DASliceType slice_type;
     UniqSkiplistIterator it;
     DATrunkSpaceLogRecord *record;
     DAPieceFieldStorage *storage;
@@ -288,11 +301,10 @@ static int combine_records_to_storage_array(DATrunkReclaimContext *rctx,
             storage = storage_array->storages + storage_array->count;
         }
 
-        slice_type = record->slice_type;
         *storage = record->storage;
         while ((record=uniq_skiplist_next(&it)) != NULL &&
-                record->slice_type == slice_type && (storage->offset +
-                    storage->size == record->storage.offset) &&
+                record->slice_type == DA_SLICE_TYPE_FILE &&
+                storage->offset + storage->size == record->storage.offset &&
                 (storage->size + record->storage.size <=
                  rctx->ctx->storage.file_block_size))
         {
@@ -404,30 +416,69 @@ static int read_by_storage_array(DATrunkReclaimContext *rctx,
                         read_ctx, &buffer)) != 0)
         {
             log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
-                    result, ENOENT, "read");
-            return result == ENOENT ? 0 : result;
+                    result, 0, "read");
+            return result;
         }
     }
 
     return 0;
 }
 
-static int write_one_slice(DATrunkReclaimContext *rctx,
+static int read_block_slices(DATrunkReclaimContext *rctx,
+        DATrunkReclaimBlockInfo *block)
+{
+    int result;
+    BufferInfo buffer;
+    DAPieceFieldStorage storage;
+    DATrunkSpaceLogRecord *record;
+
+    buffer.buff = rctx->block_content.buff;
+    buffer.alloc_size = rctx->block_content.alloc_size;
+    rctx->read_ctx.op_ctx.storage = &storage;
+    record = block->head;
+    while (record != NULL) {
+        storage = record->storage;
+        while ((record=record->next) != NULL) {
+            if (storage.offset + storage.length != record->storage.offset) {
+                break;
+            }
+            storage.length += record->storage.length;
+            storage.size += record->storage.size;
+        }
+
+        rctx->read_count++;
+        if ((result=da_slice_read_ex(rctx->ctx, &rctx->
+                        read_ctx, &buffer)) != 0)
+        {
+            log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
+                    result, 0, "read");
+            return result;
+        }
+
+        buffer.buff += storage.length;
+        buffer.alloc_size -= storage.length;
+    }
+
+    return 0;
+}
+
+static int write_block_slices(DATrunkReclaimContext *rctx,
         DATrunkReclaimBlockInfo *block, DATrunkSpaceLogRecord *record,
         DATrunkSpaceWithVersion *space_info)
 {
     int result;
     struct iovec *iov;
     DATrunkSpaceLogRecord *r;
+    char *buff;
 
-    rctx->read_ctx.op_ctx.storage = &record->storage;
-    if (rctx->ctx->storage.merge_continuous_slices.value) {
+    if (rctx->ctx->storage.merge_continuous_slices.combine_read) {
         if (block->head->next == NULL) {  //only merged one slice
             if ((result=da_trunk_write_thread_by_buff_synchronize(rctx->
                             ctx, space_info, rctx->trunk_content.
                             buff + block->head->storage.offset,
                             &rctx->read_ctx.sctx)) != 0)
             {
+                rctx->read_ctx.op_ctx.storage = &record->storage;
                 log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
                         result, 0, "write");
             }
@@ -456,21 +507,32 @@ static int write_one_slice(DATrunkReclaimContext *rctx,
                             rctx->ctx, space_info, &rctx->iovec_array,
                             &rctx->read_ctx.sctx)) != 0)
             {
+                rctx->read_ctx.op_ctx.storage = &record->storage;
                 log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
                         result, 0, "write");
             }
         }
     } else {
-        if ((result=da_slice_read(rctx->ctx, &rctx->read_ctx)) != 0) {
-            log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
-                    result, ENOENT, "read");
-            return result == ENOENT ? 0 : result;
+        if (rctx->ctx->storage.merge_continuous_slices.enabled) {
+            if ((result=read_block_slices(rctx, block)) != 0) {
+                return result == ENOENT ? 0 : result;
+            }
+            rctx->read_ctx.op_ctx.storage = &record->storage;
+            buff = rctx->block_content.buff;
+        } else {
+            rctx->read_ctx.op_ctx.storage = &record->storage;
+            if ((result=da_slice_read(rctx->ctx, &rctx->read_ctx)) != 0) {
+                log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
+                        result, 0, "read");
+                return result;
+            }
+            buff = DA_OP_CTX_BUFFER_PTR(rctx->read_ctx.op_ctx);
         }
 
         if ((result=da_trunk_write_thread_by_buff_synchronize(rctx->ctx,
-                        space_info, DA_OP_CTX_BUFFER_PTR(rctx->read_ctx.
-                            op_ctx), &rctx->read_ctx.sctx)) != 0)
+                        space_info, buff, &rctx->read_ctx.sctx)) != 0)
         {
+            rctx->read_ctx.op_ctx.storage = &record->storage;
             log_rw_error(rctx->ctx, &rctx->read_ctx.op_ctx,
                     result, 0, "write");
         }
@@ -479,7 +541,7 @@ static int write_one_slice(DATrunkReclaimContext *rctx,
     return result;
 }
 
-static int migrate_one_slice(DATrunkReclaimContext *rctx,
+static int migrate_block_slices(DATrunkReclaimContext *rctx,
         DATrunkReclaimBlockInfo *block, DATrunkSpaceLogRecord *record,
         DATrunkFileInfo **trunk)
 {
@@ -500,7 +562,9 @@ static int migrate_one_slice(DATrunkReclaimContext *rctx,
     }
 
     if (record->slice_type == DA_SLICE_TYPE_FILE) {
-        if ((result=write_one_slice(rctx, block, record, &space_info)) != 0) {
+        if ((result=write_block_slices(rctx, block,
+                        record, &space_info)) != 0)
+        {
             return result;
         }
         rctx->migrage_bytes += record->storage.length;
@@ -546,7 +610,7 @@ static int migrate_merged_slice(DATrunkReclaimContext *rctx,
 
     holder = *(block->head);
     holder.storage.length = holder.storage.size = block->total_length;
-    if ((result=migrate_one_slice(rctx, block, &holder, &trunk)) != 0) {
+    if ((result=migrate_block_slices(rctx, block, &holder, &trunk)) != 0) {
         return result;
     }
 
@@ -634,7 +698,7 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
 
     holder = *(block->head);
     holder.storage.length = holder.storage.size = block->total_size;
-    if ((result=migrate_one_slice(rctx, block, &holder, &trunk)) != 0) {
+    if ((result=migrate_block_slices(rctx, block, &holder, &trunk)) != 0) {
         return result;
     }
 
@@ -711,11 +775,13 @@ static int migrate_blocks(DATrunkReclaimContext *rctx, DATrunkFileInfo *trunk)
         return 0;
     }
 
-    if (rctx->ctx->storage.merge_continuous_slices.value) {
-        if ((result=read_by_storage_array(rctx, &rctx->
-                        storage_array, trunk->size)) != 0)
-        {
-            return result;
+    if (rctx->ctx->storage.merge_continuous_slices.enabled) {
+        if (rctx->ctx->storage.merge_continuous_slices.combine_read) {
+            if ((result=read_by_storage_array(rctx, &rctx->
+                            storage_array, trunk->size)) != 0)
+            {
+                return result;
+            }
         }
 
         __sync_add_and_fetch(&rctx->log_notify.waiting_count,
@@ -728,7 +794,7 @@ static int migrate_blocks(DATrunkReclaimContext *rctx, DATrunkFileInfo *trunk)
     rctx->space_array.count = 0;
     bend = rctx->barray.blocks + rctx->barray.count;
     for (block=rctx->barray.blocks; block<bend; block++) {
-        if (rctx->ctx->storage.merge_continuous_slices.value) {
+        if (rctx->ctx->storage.merge_continuous_slices.enabled) {
             if ((result=migrate_merged_slice(rctx, block)) != 0) {
                 return result;
             }
@@ -775,17 +841,25 @@ int da_trunk_reclaim(DATrunkReclaimContext *rctx, DATrunkAllocator
     }
 
     if (!uniq_skiplist_empty(rctx->skiplist)) {
-        if (rctx->ctx->storage.merge_continuous_slices.value) {
+        if (rctx->ctx->storage.merge_continuous_slices.enabled) {
             if ((result=convert_to_rs_array(rctx, &rctx->sarray)) == 0) {
                 if ((result=combine_slices_to_rb_array(&rctx->
                                 sarray, &rctx->barray)) == 0)
                 {
-                    result = combine_records_to_storage_array(
-                            rctx, &rctx->storage_array);
+                    if (rctx->ctx->storage.merge_continuous_slices.
+                            combine_read)
+                    {
+                        result = combine_records_to_storage_array(
+                                rctx, &rctx->storage_array);
+                        rctx->read_count = rctx->storage_array.count;
+                    } else {
+                        rctx->read_count = 0;
+                    }
                 }
             }
         } else {
             result = combine_records_to_rb_array(rctx, &rctx->barray);
+            rctx->read_count = rctx->barray.count;
         }
 
         if (result == 0) {

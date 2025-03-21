@@ -836,8 +836,10 @@ void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
     char merge_continuous_slices_buff[64];
 
     if (ctx->storage.merge_continuous_slices.enabled) {
-        sprintf(merge_continuous_slices_buff, "merge_continuous_slices: %d, ",
-                ctx->storage.merge_continuous_slices.value);
+        sprintf(merge_continuous_slices_buff, "merge_continuous_slices: "
+                "{enabled: %d, combine read: %d}, ",
+                ctx->storage.merge_continuous_slices.enabled,
+                ctx->storage.merge_continuous_slices.combine_read);
     } else {
         *merge_continuous_slices_buff = '\0';
     }
