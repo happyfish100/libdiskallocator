@@ -567,6 +567,7 @@ static int migrate_block_slices(DATrunkReclaimContext *rctx,
         {
             return result;
         }
+        rctx->write_count++;
         rctx->migrage_bytes += record->storage.length;
     }
 
@@ -840,6 +841,7 @@ int da_trunk_reclaim(DATrunkReclaimContext *rctx, DATrunkAllocator
         return result;
     }
 
+    rctx->write_count = 0;
     if (!uniq_skiplist_empty(rctx->skiplist)) {
         if (rctx->ctx->storage.merge_continuous_slices.enabled) {
             if ((result=convert_to_rs_array(rctx, &rctx->sarray)) == 0) {

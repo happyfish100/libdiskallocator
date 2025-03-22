@@ -334,15 +334,16 @@ static int do_reclaim_trunk(TrunkMakerThreadInfo *thread,
     sprintf(time_prompt, "time used: %s ms", time_buff);
     logInfo("file: "__FILE__", line: %d, %s "
             "path index: %d, reclaimed trunk id: %"PRId64", "
-            "migrate {block count: %d, read/write count: %d, bytes: %s}, "
-            "slice counts {total: %d, skip: %d, ignore: %d}, %s, "
+            "migrate {block count: %d, read count: %d, write count: %d, "
+            "bytes: %s}, slice counts {total: %d, skip: %d, ignore: %d}, %s, "
             "trunk used count {last: %d, current: %d}, "
             "trunk used bytes {last: %s, current: %s}, "
             "last usage ratio: %.2f%%, result: %d, %s", __LINE__,
             task->allocator->path_info->ctx->module_name,
             task->allocator->path_info->store.index, trunk->id_info.id,
             thread->reclaim_ctx.barray.count, thread->reclaim_ctx.read_count,
-            migrage_bytes_buff, thread->reclaim_ctx.slice_counts.total,
+            thread->reclaim_ctx.write_count, migrage_bytes_buff,
+            thread->reclaim_ctx.slice_counts.total,
             thread->reclaim_ctx.slice_counts.skip,
             thread->reclaim_ctx.slice_counts.ignore,
             avg_slices_buff, used_count, trunk->used.count,

@@ -81,6 +81,7 @@ typedef struct da_trunk_reclaim_context {
         int ignore; //object/inode not exist
     } slice_counts;
     int read_count;
+    int write_count;
     int64_t migrage_bytes;
     SFSynchronizeContext log_notify;  //for binlog
     DAContext *ctx;
