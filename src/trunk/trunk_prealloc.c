@@ -195,7 +195,7 @@ static TrunkPreallocatorInfo *make_preallocator_chain(
     end = preallocator_array->preallocators + preallocator_array->count;
     for (p=preallocator_array->preallocators; p<end; p++) {
         if (da_trunk_allocator_get_freelist_count(p->allocator) <
-                p->allocator->path_info->prealloc_space.trunk_count)
+                p->allocator->path_info->prealloc_trunks.count)
         {
             p->stat.total = 0;
             p->stat.success = 0;
@@ -274,7 +274,7 @@ static TrunkPreallocatorInfo *prealloc_trunks(
     while (p != NULL && SF_G_CONTINUE_FLAG) {
         if (da_trunk_allocator_get_freelist_count(p->allocator) +
                 __sync_add_and_fetch(&p->stat.dealings, 0) <
-                p->allocator->path_info->prealloc_space.trunk_count)
+                p->allocator->path_info->prealloc_trunks.count)
         {
             if (prealloc_trunk(prealloc_ctx, p) != 0) {
                 break;
@@ -310,9 +310,9 @@ static int do_prealloc_trunks(DATrunkPreallocContext *prealloc_ctx)
     current_time = g_current_time;
     localtime_r(&current_time, &tm_end);
     tm_end.tm_hour = prealloc_ctx->ctx->storage.
-        cfg.prealloc_space.end_time.hour;
+        cfg.prealloc_trunks.end_time.hour;
     tm_end.tm_min = prealloc_ctx->ctx->storage.
-        cfg.prealloc_space.end_time.minute;
+        cfg.prealloc_trunks.end_time.minute;
     prealloc_ctx->prealloc_end_time = mktime(&tm_end);
     if (g_current_time > prealloc_ctx->prealloc_end_time) {
         logWarning("file: "__FILE__", line: %d, %s "
@@ -333,7 +333,7 @@ static int do_prealloc_trunks(DATrunkPreallocContext *prealloc_ctx)
     }
 
     thread_count = FC_MIN(count, prealloc_ctx->ctx->
-            storage.cfg.trunk_prealloc_threads);
+            storage.cfg.prealloc_trunks.threads);
     prealloc_ctx->finished = false;
     for (i=0; i<thread_count; i++) {
         fc_thread_pool_run(&prealloc_ctx->thread_pool,
@@ -390,7 +390,7 @@ static int trunk_prealloc_setup_schedule(DAContext *ctx)
     ScheduleEntry scheduleEntry;
 
     INIT_SCHEDULE_ENTRY_EX1(scheduleEntry, sched_generate_next_id(),
-            ctx->storage.cfg.prealloc_space.start_time, 86400,
+            ctx->storage.cfg.prealloc_trunks.start_time, 86400,
             prealloc_trunks_func, ctx->trunk_prealloc_ctx, true);
     scheduleArray.entries = &scheduleEntry;
     scheduleArray.count = 1;
@@ -405,7 +405,7 @@ static int init_thread_args(DAContext *ctx)
     TrunkPreallocThreadArg *end;
 
     bytes = sizeof(DATrunkPreallocContext) + sizeof(TrunkPreallocThreadArg) *
-        ctx->storage.cfg.trunk_prealloc_threads;
+        ctx->storage.cfg.prealloc_trunks.threads;
     ctx->trunk_prealloc_ctx = fc_malloc(bytes);
     if (ctx->trunk_prealloc_ctx == NULL) {
         return ENOMEM;
@@ -416,7 +416,7 @@ static int init_thread_args(DAContext *ctx)
     ctx->trunk_prealloc_ctx->ctx = ctx;
 
     end = ctx->trunk_prealloc_ctx->thread_args +
-        ctx->storage.cfg.trunk_prealloc_threads;
+        ctx->storage.cfg.prealloc_trunks.threads;
     for (p=ctx->trunk_prealloc_ctx->thread_args; p<end; p++) {
         p->prealloc_ctx = ctx->trunk_prealloc_ctx;
         p->result = -1;
@@ -437,11 +437,15 @@ int da_trunk_prealloc_init(DAContext *ctx)
     int alloc_elements_once;
     int alloc_elements_limit;
 
+    if (!ctx->storage.cfg.prealloc_trunks.enabled) {
+        return 0;
+    }
+
     if ((result=init_thread_args(ctx)) != 0) {
         return result;
     }
 
-    alloc_elements_once = ctx->storage.cfg.trunk_prealloc_threads * 2;
+    alloc_elements_once = ctx->storage.cfg.prealloc_trunks.threads * 2;
     alloc_elements_limit = alloc_elements_once;
     if ((result=fast_mblock_init_ex1(&ctx->trunk_prealloc_ctx->task_allocator,
                     "prealloc_task", sizeof(TrunkPreallocTask),
@@ -471,7 +475,7 @@ int da_trunk_prealloc_init(DAContext *ctx)
         return result;
     }
 
-    limit = ctx->storage.cfg.trunk_prealloc_threads;
+    limit = ctx->storage.cfg.prealloc_trunks.threads;
     if ((result=fc_thread_pool_init(&ctx->trunk_prealloc_ctx->thread_pool,
                     "prealloc", limit, SF_G_THREAD_STACK_SIZE,
                     max_idle_time, min_idle_count,

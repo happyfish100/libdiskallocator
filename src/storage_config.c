@@ -111,20 +111,23 @@ static int da_storage_config_calc_path_spaces(DAStoragePathInfo *path_info)
     path_info->space_stat.avail = (int64_t)(sbuf.f_bavail) * sbuf.f_frsize;
     path_info->reserved_space.value = path_info->space_stat.total *
         path_info->reserved_space.ratio;
-    path_info->prealloc_space.value = path_info->space_stat.total *
-        path_info->prealloc_space.ratio;
-    path_info->prealloc_space.trunk_count = (path_info->prealloc_space.
-            value + path_info->ctx->storage.cfg.trunk_file_size - 1) /
-        (int64_t)path_info->ctx->storage.cfg.trunk_file_size;
     if (sbuf.f_blocks > 0) {
         path_info->space_stat.used_ratio = (double)(sbuf.f_blocks -
                 sbuf.f_bavail) / (double)sbuf.f_blocks;
     }
 
+    if (path_info->ctx->storage.cfg.prealloc_trunks.enabled) {
+        path_info->prealloc_trunks.value = path_info->space_stat.total *
+            path_info->prealloc_trunks.ratio;
+        path_info->prealloc_trunks.count = (path_info->prealloc_trunks.
+                value + path_info->ctx->storage.cfg.trunk_file_size - 1) /
+            (int64_t)path_info->ctx->storage.cfg.trunk_file_size;
+    }
+
     /*
-    logInfo("%s used ratio: %.2f%%, prealloc_space.trunk_count: %d",
+    logInfo("%s used ratio: %.2f%%, prealloc_trunks.count: %d",
             path_info->ctx->module_name, 100 * path_info->space_stat.
-            used_ratio, path_info->prealloc_space.trunk_count);
+            used_ratio, path_info->prealloc_trunks.count);
             */
 
     __sync_bool_compare_and_swap(&path_info->space_stat.
@@ -330,13 +333,13 @@ static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
             return result;
         }
 
-        parray->paths[i].fsync_every_n_writes = iniGetIntValue(section_name,
-                "fsync_every_n_writes", ini_ctx->context,
+        parray->paths[i].fsync_every_n_writes = iniGetIntValue(
+                section_name, "fsync_every_n_writes", ini_ctx->context,
                 storage_cfg->fsync_every_n_writes);
 
-        if ((result=iniGetPercentValue(ini_ctx, "prealloc_space",
-                        &parray->paths[i].prealloc_space.ratio,
-                        storage_cfg->prealloc_space.ratio_per_path)) != 0)
+        if ((result=iniGetPercentValue(ini_ctx, "prealloc_trunks",
+                        &parray->paths[i].prealloc_trunks.ratio,
+                        storage_cfg->prealloc_trunks.ratio_per_path)) != 0)
         {
             return result;
         }
@@ -426,6 +429,46 @@ static int load_aio_read_buffer_params(DAStorageConfig *storage_cfg,
 }
 #endif
 
+static int load_prealloc_trunks_items(DAContext *ctx,
+        DAStorageConfig *storage_cfg,
+        IniFullContext *ini_ctx)
+{
+    int result;
+    const char *old_section_name;
+
+    old_section_name = ini_ctx->section_name;
+    ini_ctx->section_name = "prealloc-trunks";
+    storage_cfg->prealloc_trunks.enabled = iniGetBoolValue(ini_ctx->
+            section_name, "enabled", ini_ctx->context, false);
+    if ((result=iniGetPercentValue(ini_ctx, "ratio_per_path",
+                    &storage_cfg->prealloc_trunks.ratio_per_path, 0.05)) != 0)
+    {
+        return result;
+    }
+
+    if ((result=get_time_item_from_conf(ini_ctx->context,
+                    "start_time", &storage_cfg->
+                    prealloc_trunks.start_time, 1, 30)) != 0)
+    {
+        return result;
+    }
+    if ((result=get_time_item_from_conf(ini_ctx->context,
+                    "end_time", &storage_cfg->
+                    prealloc_trunks.end_time, 3, 30)) != 0)
+    {
+        return result;
+    }
+
+    storage_cfg->prealloc_trunks.threads = iniGetIntValue(ini_ctx->
+            section_name, "threads", ini_ctx->context, 1);
+    if (storage_cfg->prealloc_trunks.threads <= 0) {
+        storage_cfg->prealloc_trunks.threads = 1;
+    }
+
+    ini_ctx->section_name = old_section_name;
+    return 0;
+}
+
 static int load_global_items(DAContext *ctx,
         DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx)
@@ -480,31 +523,6 @@ static int load_global_items(DAContext *ctx,
 
     storage_cfg->fsync_every_n_writes = iniGetIntValue(NULL,
             "fsync_every_n_writes", ini_ctx->context, 0);
-
-    if ((result=iniGetPercentValue(ini_ctx, "prealloc_space_per_path",
-                    &storage_cfg->prealloc_space.ratio_per_path, 0.05)) != 0)
-    {
-        return result;
-    }
-
-    if ((result=get_time_item_from_conf(ini_ctx->context,
-                    "prealloc_space_start_time", &storage_cfg->
-                    prealloc_space.start_time, 0, 0)) != 0)
-    {
-        return result;
-    }
-    if ((result=get_time_item_from_conf(ini_ctx->context,
-                    "prealloc_space_end_time", &storage_cfg->
-                    prealloc_space.end_time, 0, 0)) != 0)
-    {
-        return result;
-    }
-
-    storage_cfg->trunk_prealloc_threads = iniGetIntValue(NULL,
-            "trunk_prealloc_threads", ini_ctx->context, 1);
-    if (storage_cfg->trunk_prealloc_threads <= 0) {
-        storage_cfg->trunk_prealloc_threads = 1;
-    }
 
     storage_cfg->trunk_allocate_threads = iniGetIntValue(NULL,
             "trunk_allocate_threads", ini_ctx->context, 1);
@@ -573,7 +591,7 @@ static int load_global_items(DAContext *ctx,
         return result;
     }
 
-    return 0;
+    return load_prealloc_trunks_items(ctx, storage_cfg, ini_ctx);
 }
 
 static int load_from_config_file(DAContext *ctx,
@@ -784,7 +802,7 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
     DAStoragePathInfo *end;
     char avail_space_buff[32];
     char reserved_space_buff[32];
-    char prealloc_space_buff[32];
+    char prealloc_trunks_buff[32];
     char block_size_buff[64];
 
     if (parray->count == 0) {
@@ -808,13 +826,13 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
                 (1024 * 1024), avail_space_buff);
         long_to_comma_str(p->reserved_space.value /
                 (1024 * 1024), reserved_space_buff);
-        long_to_comma_str(p->prealloc_space.value /
-                (1024 * 1024), prealloc_space_buff);
+        long_to_comma_str(p->prealloc_trunks.value /
+                (1024 * 1024), prealloc_trunks_buff);
         logInfo("  path %d: %s, index: %d, write_threads: %d, "
                 "read_threads: %d, read_io_depth: %d, "
                 "write_direct_io: %d, read_direct_io: %d, "
                 "write_align_size: %d, fsync_every_n_writes: %d, "
-                "prealloc_space ratio: %.2f%%, "
+                "prealloc_trunks ratio: %.2f%%, "
                 "reserved_space ratio: %.2f%%, "
                 "avail_space: %s MB, prealloc_space: %s MB, "
                 "reserved_space: %s MB%s",
@@ -823,9 +841,9 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
                 p->read_thread_count, p->read_io_depth,
                 p->write_direct_io, p->read_direct_io,
                 p->write_align_size, p->fsync_every_n_writes,
-                p->prealloc_space.ratio * 100.00,
+                p->prealloc_trunks.ratio * 100.00,
                 p->reserved_space.ratio * 100.00,
-                avail_space_buff, prealloc_space_buff,
+                avail_space_buff, prealloc_trunks_buff,
                 reserved_space_buff, block_size_buff
                 );
     }
@@ -833,7 +851,24 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
 
 void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
 {
+    char prealloc_trunks_buff[256];
     char merge_continuous_slices_buff[64];
+    int len;
+
+    len = sprintf(prealloc_trunks_buff, "prealloc-trunks: {enabled: %d",
+            storage_cfg->prealloc_trunks.enabled);
+    if (storage_cfg->prealloc_trunks.enabled) {
+        sprintf(prealloc_trunks_buff + len, ", ratio_per_path: %.2f%%, "
+                "start_time: %02d:%02d, end_time: %02d:%02d, threads: %d}",
+                storage_cfg->prealloc_trunks.ratio_per_path * 100.00,
+                storage_cfg->prealloc_trunks.start_time.hour,
+                storage_cfg->prealloc_trunks.start_time.minute,
+                storage_cfg->prealloc_trunks.end_time.hour,
+                storage_cfg->prealloc_trunks.end_time.minute,
+                storage_cfg->prealloc_trunks.threads);
+    } else {
+        sprintf(prealloc_trunks_buff + len, "}");
+    }
 
     if (ctx->storage.merge_continuous_slices.enabled) {
         sprintf(merge_continuous_slices_buff, "merge_continuous_slices: "
@@ -850,10 +885,7 @@ void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
             "write_align_size: %d, fsync_every_n_writes: %d, "
             "fd_cache_capacity_per_read_thread: %d, "
             "fd_cache_capacity_per_write_thread: %d, "
-            "prealloc_space: {ratio_per_path: %.2f%%, "
-            "start_time: %02d:%02d, end_time: %02d:%02d }, "
-            "trunk_prealloc_threads: %d, "
-            "trunk_allocate_threads: %d, %s"
+            "%s, trunk_allocate_threads: %d, %s"
             "reserved_space_per_disk: %.2f%%, "
             "trunk_file_size: %u MB, "
             "max_trunk_files_per_subdir: %d, "
@@ -882,13 +914,7 @@ void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
             storage_cfg->fsync_every_n_writes,
             storage_cfg->fd_cache_capacity_per_read_thread,
             storage_cfg->fd_cache_capacity_per_write_thread,
-            storage_cfg->prealloc_space.ratio_per_path * 100.00,
-            storage_cfg->prealloc_space.start_time.hour,
-            storage_cfg->prealloc_space.start_time.minute,
-            storage_cfg->prealloc_space.end_time.hour,
-            storage_cfg->prealloc_space.end_time.minute,
-            storage_cfg->trunk_prealloc_threads,
-            storage_cfg->trunk_allocate_threads,
+            prealloc_trunks_buff, storage_cfg->trunk_allocate_threads,
             merge_continuous_slices_buff,
             storage_cfg->reserved_space_per_disk * 100.00,
             storage_cfg->trunk_file_size / (1024 * 1024),

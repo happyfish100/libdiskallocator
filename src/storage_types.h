@@ -261,7 +261,6 @@ typedef struct {
     DAStorePath store;
     int write_thread_count;
     int read_thread_count;
-    int prealloc_trunks;
     int read_io_depth;
     bool write_direct_io;
     bool read_direct_io;
@@ -276,8 +275,8 @@ typedef struct {
     struct {
         int64_t value;
         double ratio;
-        int trunk_count;  //calculate by: value / trunk_file_size
-    } prealloc_space;
+        int count;  //calculate by: value / trunk_file_size
+    } prealloc_trunks;
 
     struct {
         int64_t total;
@@ -324,7 +323,6 @@ typedef struct da_storage_config {
     int max_trunk_files_per_subdir;
     uint32_t trunk_file_size;
     int discard_remain_space_size;
-    int trunk_prealloc_threads;
     int trunk_allocate_threads;
     int fd_cache_capacity_per_read_thread;
     int fd_cache_capacity_per_write_thread;
@@ -332,10 +330,12 @@ typedef struct da_storage_config {
     double never_reclaim_on_trunk_usage;
 
     struct {
+        bool enabled;
+        int threads;
         double ratio_per_path;
         TimeInfo start_time;
         TimeInfo end_time;
-    } prealloc_space;
+    } prealloc_trunks;
 
 #ifdef OS_LINUX
     struct {
