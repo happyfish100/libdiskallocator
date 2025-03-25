@@ -61,13 +61,24 @@ struct da_slice_entry;
 struct da_full_trunk_space;
 struct da_trunk_space_info;
 
+typedef enum da_slice_type {
+    DA_SLICE_TYPE_FILE  = 'F', /* in file slice */
+    DA_SLICE_TYPE_CACHE = 'C', /* in memory cache */
+    DA_SLICE_TYPE_ALLOC = 'A'  /* allocate slice (index and space allocate only) */
+} DASliceType;
+
+typedef union {
+    struct fc_queue_info space_chain;
+    DASliceType slice_type;
+} DASliceMigrateArgument;
+
 typedef void (*da_rw_done_callback_func)(
         struct da_slice_op_context *op_ctx, void *arg);
 
 typedef int (*da_slice_migrate_done_callback)(
         const struct da_trunk_file_info *trunk,
         const struct da_piece_field_info *field,
-        struct fc_queue_info *space_chain,
+        DASliceMigrateArgument *arg,
         SFSynchronizeContext *sctx, int *flags);
 
 typedef void (*da_trunk_migrate_done_callback)(
@@ -110,12 +121,6 @@ typedef struct da_full_trunk_id_info {
     DAStorePath *store;
     DATrunkIdInfo id_info;
 } DAFullTrunkIdInfo;
-
-typedef enum da_slice_type {
-    DA_SLICE_TYPE_FILE  = 'F', /* in file slice */
-    DA_SLICE_TYPE_CACHE = 'C', /* in memory cache */
-    DA_SLICE_TYPE_ALLOC = 'A'  /* allocate slice (index and space allocate only) */
-} DASliceType;
 
 #ifdef OS_LINUX
 typedef struct aio_buffer_ptr_array {

@@ -599,11 +599,9 @@ static int migrate_merged_slice(DATrunkReclaimContext *rctx,
 {
     DATrunkSpaceLogRecord holder;
     DATrunkSpaceLogRecord *record;
-    DATrunkSpaceLogRecord *old_record;
-    DATrunkSpaceLogRecord *new_record;
     DATrunkFileInfo *trunk = NULL;
     DAPieceFieldInfo field;
-    struct fc_queue_info space_chain;
+    DASliceMigrateArgument arg;
     int flags;
     int slice_count;
     int64_t max_version;
@@ -616,61 +614,28 @@ static int migrate_merged_slice(DATrunkReclaimContext *rctx,
     }
 
     slice_count = 0;
-    space_chain.head = space_chain.tail = NULL;
     record = block->head;
     max_version = record->storage.version;
     do {
         if (record->storage.version > max_version) {
             max_version = record->storage.version;
         }
-
-        old_record = da_trunk_space_log_alloc_record(rctx->ctx);
-        if (old_record == NULL) {
-            return ENOMEM;
-        }
-        old_record->oid = record->oid;
-        old_record->fid = record->fid;
-        old_record->extra = record->extra;
-        old_record->slice_type = record->slice_type;
-        old_record->storage = record->storage;
-        old_record->op_type = da_binlog_op_type_reclaim_space;
-
-        if (space_chain.head == NULL) {
-            space_chain.head = old_record;
-        } else {
-            ((DATrunkSpaceLogRecord *)space_chain.tail)->next = old_record;
-        }
-        space_chain.tail = old_record;
         ++slice_count;
     } while ((record=record->next) != NULL);
 
-    new_record = da_trunk_space_log_alloc_record(rctx->ctx);
-    if (new_record == NULL) {
-        return ENOMEM;
-    }
-    new_record->oid = holder.oid;
-    new_record->fid = holder.fid;
-    new_record->extra = holder.extra;
-    new_record->slice_type = holder.slice_type;
-    new_record->storage.version = max_version;
-    new_record->storage.trunk_id = holder.storage.trunk_id;
-    new_record->storage.offset = holder.storage.offset;
-    new_record->storage.length = holder.storage.length;
-    new_record->storage.size = holder.storage.size;
-    new_record->op_type = da_binlog_op_type_consume_space;
-
-    ((DATrunkSpaceLogRecord *)space_chain.tail)->next = new_record;
-    new_record->next = NULL;
-    space_chain.tail = new_record;
-
-    field.oid = new_record->oid;
-    field.fid = new_record->fid;
-    field.extra = new_record->extra;
+    field.oid = holder.oid;
+    field.fid = holder.fid;
+    field.extra = holder.extra;
     field.source = DA_FIELD_UPDATE_SOURCE_RECLAIM;
     field.op_type = da_binlog_op_type_update;
-    field.storage = new_record->storage;
+    field.storage.version = max_version;
+    field.storage.trunk_id = holder.storage.trunk_id;
+    field.storage.offset = holder.storage.offset;
+    field.storage.length = holder.storage.length;
+    field.storage.size = holder.storage.size;
+    arg.slice_type = holder.slice_type;
     if ((result=rctx->ctx->slice_migrate_done_callback(trunk, &field,
-                    &space_chain, &rctx->log_notify, &flags)) != 0)
+                    &arg, &rctx->log_notify, &flags)) != 0)
     {
         return result;
     }
@@ -692,7 +657,7 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
     DATrunkSpaceLogRecord *new_record;
     DATrunkFileInfo *trunk = NULL;
     DAPieceFieldInfo field;
-    struct fc_queue_info space_chain;
+    DASliceMigrateArgument arg;
     uint32_t offset;
     int flags;
     int result;
@@ -736,8 +701,8 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
 
         old_record->next = new_record;
         new_record->next = NULL;
-        space_chain.head = old_record;
-        space_chain.tail = new_record;
+        arg.space_chain.head = old_record;
+        arg.space_chain.tail = new_record;
 
         field.oid = record->oid;
         field.fid = record->fid;
@@ -746,7 +711,7 @@ static int migrate_one_block(DATrunkReclaimContext *rctx,
         field.op_type = da_binlog_op_type_update;
         field.storage = new_record->storage;
         if ((result=rctx->ctx->slice_migrate_done_callback(trunk, &field,
-                        &space_chain, &rctx->log_notify, &flags)) != 0)
+                        &arg, &rctx->log_notify, &flags)) != 0)
         {
             return result;
         }
