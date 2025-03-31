@@ -469,6 +469,32 @@ static int load_prealloc_trunks_items(DAContext *ctx,
     return 0;
 }
 
+static int load_merge_continuous_slices_items(DAContext *ctx,
+        DAStorageConfig *storage_cfg, IniFullContext *ini_ctx)
+{
+    const char *old_section_name;
+
+    if (ctx->storage.merge_continuous_slices.enabled) {
+        old_section_name = ini_ctx->section_name;
+        ini_ctx->section_name = "merge-continuous-slices";
+        storage_cfg->merge_continuous_slices.enabled = iniGetBoolValue(
+                ini_ctx->section_name, "enabled", ini_ctx->context, true);
+
+        storage_cfg->merge_continuous_slices.threads = iniGetIntValue(
+                ini_ctx->section_name, "threads", ini_ctx->context, 1);
+        if (storage_cfg->merge_continuous_slices.threads <= 0) {
+            storage_cfg->merge_continuous_slices.threads = 1;
+        }
+
+        ini_ctx->section_name = old_section_name;
+    } else {
+        storage_cfg->merge_continuous_slices.enabled = false;
+        storage_cfg->merge_continuous_slices.threads = 0;
+    }
+
+    return 0;
+}
+
 static int load_global_items(DAContext *ctx,
         DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx)
@@ -587,6 +613,12 @@ static int load_global_items(DAContext *ctx,
 
     if ((result=iniGetPercentValue(ini_ctx, "never_reclaim_on_trunk_usage",
                     &storage_cfg->never_reclaim_on_trunk_usage, 0.90)) != 0)
+    {
+        return result;
+    }
+
+    if ((result=load_merge_continuous_slices_items(ctx,
+                    storage_cfg, ini_ctx)) != 0)
     {
         return result;
     }
@@ -852,7 +884,8 @@ static void log_paths(DAContext *ctx, DAStoragePathArray *parray,
 void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
 {
     char prealloc_trunks_buff[256];
-    char merge_continuous_slices_buff[64];
+    char merge_continuous_slices_buff1[128];
+    char merge_continuous_slices_buff2[128];
     int len;
 
     len = sprintf(prealloc_trunks_buff, "prealloc-trunks: {enabled: %d",
@@ -871,13 +904,23 @@ void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
     }
 
     if (ctx->storage.merge_continuous_slices.enabled) {
-        sprintf(merge_continuous_slices_buff, "merge_continuous_slices: "
-                "{enabled: %d, combine read: %d}, ",
+        sprintf(merge_continuous_slices_buff1, "merge_continuous_slices_"
+                "on_trunk_reclaim: {enabled: %d, combine read: %d}, ",
                 ctx->storage.merge_continuous_slices.enabled,
                 ctx->storage.merge_continuous_slices.combine_read);
     } else {
-        *merge_continuous_slices_buff = '\0';
+        *merge_continuous_slices_buff1 = '\0';
     }
+
+    if (ctx->storage.cfg.merge_continuous_slices.enabled) {
+        sprintf(merge_continuous_slices_buff2, "merge_continuous_slices_"
+                "on_trunk_write_done: {enabled: %d, threads: %d}, ",
+                ctx->storage.cfg.merge_continuous_slices.enabled,
+                ctx->storage.cfg.merge_continuous_slices.threads);
+    } else {
+        *merge_continuous_slices_buff2 = '\0';
+    }
+
     logInfo("%s storage config, write_threads_per_path: %d, "
             "read_threads_per_path: %d, "
             "io_depth_per_read_thread: %d, "
@@ -885,7 +928,7 @@ void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
             "write_align_size: %d, fsync_every_n_writes: %d, "
             "fd_cache_capacity_per_read_thread: %d, "
             "fd_cache_capacity_per_write_thread: %d, "
-            "%s, trunk_allocate_threads: %d, %s"
+            "%s, trunk_allocate_threads: %d, %s%s"
             "reserved_space_per_disk: %.2f%%, "
             "trunk_file_size: %u MB, "
             "max_trunk_files_per_subdir: %d, "
@@ -915,7 +958,7 @@ void da_storage_config_to_log(DAContext *ctx, DAStorageConfig *storage_cfg)
             storage_cfg->fd_cache_capacity_per_read_thread,
             storage_cfg->fd_cache_capacity_per_write_thread,
             prealloc_trunks_buff, storage_cfg->trunk_allocate_threads,
-            merge_continuous_slices_buff,
+            merge_continuous_slices_buff1, merge_continuous_slices_buff2,
             storage_cfg->reserved_space_per_disk * 100.00,
             storage_cfg->trunk_file_size / (1024 * 1024),
             storage_cfg->max_trunk_files_per_subdir,

@@ -22,6 +22,7 @@
 #include "trunk/trunk_hashtable.h"
 #include "trunk/trunk_prealloc.h"
 #include "trunk/trunk_maker.h"
+#include "trunk/trunk_defrag.h"
 #include "storage_allocator.h"
 #include "global.h"
 
@@ -123,6 +124,10 @@ int da_init_ex(DAContext *ctx, da_slice_load_done_callback
     }
 
     if ((result=da_trunk_binlog_init(ctx)) != 0) {
+        return result;
+    }
+
+    if ((result=da_trunk_defrag_init(ctx)) != 0) {
         return result;
     }
 

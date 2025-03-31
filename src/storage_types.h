@@ -164,6 +164,11 @@ typedef struct da_trunk_file_info {
         int64_t last_used_bytes;
         struct da_trunk_file_info *next;
     } util;  //for util manager queue
+
+    struct {
+        struct da_trunk_file_info *next;
+    } merge_continuous_slices;  //for merge continuous slices queue
+
 } DATrunkFileInfo;
 
 #define DA_PIECE_FIELD_IS_EMPTY(field)  ((field)->trunk_id == 0)
@@ -342,6 +347,11 @@ typedef struct da_storage_config {
         TimeInfo end_time;
     } prealloc_trunks;
 
+    struct {
+        bool enabled;
+        int threads;
+    } merge_continuous_slices;  //for faststore when trunk write done
+
 #ifdef OS_LINUX
     struct {
         struct {
@@ -496,6 +506,7 @@ typedef struct da_context {
     struct da_storage_allocator_manager *store_allocator_mgr;
     struct da_trunk_prealloc_context *trunk_prealloc_ctx;
     struct da_trunk_maker_context *trunk_maker_ctx;
+    struct da_trunk_defrag_context *trunk_defrag_ctx;
 
     da_slice_load_done_callback slice_load_done_callback;
     volatile da_slice_migrate_done_callback slice_migrate_done_callback;

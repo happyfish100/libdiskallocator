@@ -18,13 +18,13 @@
 #include "fastcommon/shared_func.h"
 #include "fastcommon/logger.h"
 #include "fastcommon/fast_mblock.h"
-#include "fastcommon/sched_thread.h"
 #include "fastcommon/fc_atomic.h"
 #include "sf/sf_global.h"
 #include "../global.h"
 #include "../storage_allocator.h"
 #include "../dio/trunk_write_thread.h"
 #include "trunk_maker.h"
+#include "trunk_defrag.h"
 #include "trunk_freelist.h"
 
 int da_trunk_freelist_init(DATrunkFreelist *freelist)
@@ -36,28 +36,6 @@ int da_trunk_freelist_init(DATrunkFreelist *freelist)
 
     freelist->water_mark_trunks = 2;
     return 0;
-}
-
-static inline void push_trunk_util_event_force(DATrunkAllocator *allocator,
-        DATrunkFileInfo *trunk, const int event)
-{
-    int old_event;
-
-    while (1) {
-        old_event = __sync_add_and_fetch(&trunk->util.event, 0);
-        if (event == old_event) {
-            return;
-        }
-
-        if (__sync_bool_compare_and_swap(&trunk->util.event,
-                    old_event, event))
-        {
-            if (old_event == DA_TRUNK_UTIL_EVENT_NONE) {
-                fc_queue_push(&allocator->reclaim.queue, trunk);
-            }
-            return;
-        }
-    }
 }
 
 #define TRUNK_ALLOC_SPACE(_trunk, space_info, alloc_size) \
@@ -123,20 +101,12 @@ void da_trunk_freelist_add(DATrunkFreelist *freelist,
             trunk_stat.avail, avail_bytes);
 }
 
-#define PUSH_TRUNK_UTIL_EVEENT_QUEUE(trunk_info) \
-    do { \
-        da_set_trunk_status(trunk_info, DA_TRUNK_STATUS_REPUSH); \
-        push_trunk_util_event_force(trunk_info->allocator, \
-                trunk_info, DA_TRUNK_UTIL_EVENT_CREATE);   \
-        da_set_trunk_status(trunk_info, DA_TRUNK_STATUS_NONE); \
-    } while (0)
-
 void da_trunk_freelist_decrease_writing_count_ex(DATrunkFileInfo *trunk,
         const int dec_count)
 {
     if (__sync_sub_and_fetch(&trunk->writing_count, dec_count) == 0) {
         if (FC_ATOMIC_GET(trunk->status) == DA_TRUNK_STATUS_NONE) {
-            PUSH_TRUNK_UTIL_EVEENT_QUEUE(trunk);
+            da_trunk_defrag_check_push(trunk);
         }
     }
     /*
@@ -158,7 +128,7 @@ static void da_trunk_freelist_remove(DATrunkFreelist *freelist)
     freelist->count--;
 
     if (FC_ATOMIC_GET(trunk_info->writing_count) == 0) {
-        PUSH_TRUNK_UTIL_EVEENT_QUEUE(trunk_info);
+        da_trunk_defrag_check_push(trunk_info);
     } else {
         da_set_trunk_status(trunk_info, DA_TRUNK_STATUS_NONE);
     }
