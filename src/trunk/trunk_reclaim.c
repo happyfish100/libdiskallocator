@@ -243,7 +243,7 @@ static int combine_slices_to_rb_array(DATrunkReclaimSliceArray *sarray,
     DATrunkReclaimBlockInfo *block;
 
     barray->count = 0;
-    if (barray->alloc < sarray->count) {
+    while (barray->alloc < sarray->count) {
         if ((result=realloc_rb_array(barray)) != 0) {
             return result;
         }

@@ -248,8 +248,8 @@ static int merge_continuous_slices_do(
     long_to_comma_str(time_used, time_buff);
     sprintf(time_prompt, "time used: %s ms", time_buff);
     logInfo("file: "__FILE__", line: %d, %s "
-            "path index: %d, trunk id: %"PRId64", total slice count: %d, "
-            "merged stat {block count: %d, slice count {total: %d, "
+            "path index: %d, defrag trunk id: %"PRId64", total slice count: "
+            "%d, merged stat {block count: %d, slice count {total: %d, "
             "skip: %d, ignore: %d}, arg slices per block: %.2f}, %s",
             __LINE__, trunk->allocator->path_info->ctx->module_name,
             trunk->allocator->path_info->store.index, trunk->id_info.id,
@@ -381,7 +381,7 @@ int da_trunk_defrag_init(DAContext *ctx)
 
 void da_trunk_defrag_check_push(DATrunkFileInfo *trunk)
 {
-    DAContext *ctx; 
+    DAContext *ctx;
     DATrunkDefragThread *thread;
 
     ctx = trunk->allocator->path_info->ctx;
