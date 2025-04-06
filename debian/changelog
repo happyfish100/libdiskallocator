@@ -1,3 +1,9 @@
+libdiskallocator (1.1.11-1) unstable; urgency=medium
+
+  * upgrade to 1.1.11-1
+
+ -- YuQing <384681@qq.com>  Sun, 06 Apr 2025 16:57:12 +0000
+
 libdiskallocator (1.1.9-1) unstable; urgency=medium
 
   * upgrade to 1.1.9-1
