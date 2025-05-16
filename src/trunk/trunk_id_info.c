@@ -23,6 +23,7 @@
 #include "sf/sf_global.h"
 #include "../binlog/trunk/trunk_binlog.h"
 #include "../global.h"
+#include "../store_path_index.h"
 #include "trunk_id_info.h"
 
 #define TRUNK_ID_DATA_FILENAME  ".trunk_id.dat"
@@ -315,6 +316,23 @@ void da_trunk_id_info_destroy(DAContext *ctx)
     save_current_trunk_id_ex(ctx, current_trunk_id, current_subdir_id, true);
 }
 
+static void da_trunk_id_info_log_noent(DAContext *ctx, const int path_index)
+{
+    DAStorePathEntry *pentry;
+
+    if ((pentry=da_store_path_index_fetch(ctx, path_index)) == NULL) {
+        char path_name[PATH_MAX];
+        da_store_path_index_get_filename(ctx, path_name, sizeof(path_name));
+        logError("file: "__FILE__", line: %d, %s "
+                "store path index: %d not exist in file %s",
+                __LINE__, ctx->module_name, path_index, path_name);
+    } else {
+        logError("file: "__FILE__", line: %d, %s "
+                "path: %s, index: %d not in store path list!",
+                __LINE__, ctx->module_name, pentry->path, path_index);
+    }
+}
+
 int da_trunk_id_info_add(DAContext *ctx, const int path_index,
         const DATrunkIdInfo *id_info)
 {
@@ -328,6 +346,7 @@ int da_trunk_id_info_add(DAContext *ctx, const int path_index,
     result = 0;
     sorted_subdirs = ctx->trunk_id_info_ctx->subdir_array.subdirs + path_index;
     if (sorted_subdirs->all.skiplist == NULL) {
+        da_trunk_id_info_log_noent(ctx, path_index);
         return ENOENT;
     }
 
@@ -381,6 +400,7 @@ int da_trunk_id_info_delete(DAContext *ctx, const int path_index,
     result = 0;
     sorted_subdirs = ctx->trunk_id_info_ctx->subdir_array.subdirs + path_index;
     if (sorted_subdirs->all.skiplist == NULL) {
+        da_trunk_id_info_log_noent(ctx, path_index);
         return ENOENT;
     }
 
@@ -411,6 +431,7 @@ int da_trunk_id_info_generate(DAContext *ctx,
 
     sorted_subdirs = ctx->trunk_id_info_ctx->subdir_array.subdirs + path_index;
     if (sorted_subdirs->all.skiplist == NULL) {
+        da_trunk_id_info_log_noent(ctx, path_index);
         return ENOENT;
     }
 

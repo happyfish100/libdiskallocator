@@ -38,10 +38,16 @@ extern "C" {
     DAStorePathEntry *da_store_path_index_get(
             DAContext *ctx, const char *path);
 
+    DAStorePathEntry *da_store_path_index_fetch(
+            DAContext *ctx, const int index);
+
     int da_store_path_index_add(DAContext *ctx,
             const char *path, int *index);
 
     int da_store_path_index_save(DAContext *ctx);
+
+    const char *da_store_path_index_get_filename(DAContext *ctx,
+            char *full_filename, const int size);
 
 #ifdef __cplusplus
 }

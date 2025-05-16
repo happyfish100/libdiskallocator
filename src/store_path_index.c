@@ -214,7 +214,7 @@ int store_path_check_mark(DAContext *ctx, DAStorePathEntry *pentry,
     return EINVAL;
 }
 
-static char *get_da_store_path_index_filename(DAContext *ctx,
+const char *da_store_path_index_get_filename(DAContext *ctx,
         char *full_filename, const int size)
 {
     snprintf(full_filename, size, "%s/%s", ctx->data.path.str,
@@ -391,7 +391,7 @@ int da_store_path_index_init(DAContext *ctx)
     IniContext ini_ctx;
     char full_filename[PATH_MAX];
 
-    get_da_store_path_index_filename(ctx, full_filename, sizeof(full_filename));
+    da_store_path_index_get_filename(ctx, full_filename, sizeof(full_filename));
     if (access(full_filename, F_OK) != 0) {
         if (errno == ENOENT) {
             return 0;
@@ -444,6 +444,23 @@ DAStorePathEntry *da_store_path_index_get(
     }
 
     return NULL;
+}
+
+DAStorePathEntry *da_store_path_index_fetch(
+        DAContext *ctx, const int index)
+{
+    DAStorePathEntry target;
+
+    if (ctx->store_path_array.entries == NULL) {
+        if (da_store_path_index_init(ctx) != 0) {
+            return NULL;
+        }
+    }
+
+    target.index = index;
+    return bsearch(&target, ctx->store_path_array.entries,
+            ctx->store_path_array.count, sizeof(DAStorePathEntry),
+            compare_store_path_index);
 }
 
 int da_store_path_index_add(DAContext *ctx,
@@ -518,7 +535,7 @@ int da_store_path_index_save(DAContext *ctx)
         }
     }
 
-    get_da_store_path_index_filename(ctx, full_filename, sizeof(full_filename));
+    da_store_path_index_get_filename(ctx, full_filename, sizeof(full_filename));
     result = safeWriteToFile(full_filename, buffer.data, buffer.length);
 
     fast_buffer_destroy(&buffer);
