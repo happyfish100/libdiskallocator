@@ -900,6 +900,8 @@ int da_trunk_space_log_init(DAContext *ctx)
 {
     const int alloc_skiplist_once = 256;
     const bool allocator_use_lock = true;
+    const bool binary_mode = true;
+    const bool check_capacity = false;
     int result;
 
     if ((result=da_space_log_reader_init(&ctx->space_log_ctx.reader, ctx,
@@ -925,7 +927,8 @@ int da_trunk_space_log_init(DAContext *ctx)
     }
 
     if ((result=fast_buffer_init_ex(&ctx->space_log_ctx.buffer,
-                    ctx->data.binlog_buffer_size)) != 0)
+                    ctx->data.binlog_buffer_size, binary_mode,
+                    check_capacity)) != 0)
     {
         return result;
     }

@@ -515,7 +515,7 @@ int da_store_path_index_save(DAContext *ctx)
     DAStorePathEntry *end;
     char full_filename[PATH_MAX];
 
-    if ((result=fast_buffer_init_ex(&buffer, 128 * ctx->
+    if ((result=fast_buffer_init1(&buffer, 128 * ctx->
                     store_path_array.count)) != 0)
     {
         return result;

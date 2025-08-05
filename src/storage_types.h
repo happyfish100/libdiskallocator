@@ -190,7 +190,7 @@ typedef struct da_piece_field_info {
     uint64_t fid;  //field ID (key)
     unsigned char source;
     DABinlogOpType op_type;
-    int extra;     //such as slice offset for faststore
+    uint32_t extra;     //such as slice offset for faststore
     DAPieceFieldStorage storage;
 } DAPieceFieldInfo;
 
@@ -206,7 +206,7 @@ typedef struct da_trunk_space_log_record {
         SFSynchronizeContext *sctx;  //for unlink space log
     };
     uint64_t fid;    //field ID (key)
-    int extra;       //such as slice offset
+    uint32_t extra;  //such as slice offset
     char op_type;
     DASliceType slice_type;
     DAPieceFieldStorage storage;

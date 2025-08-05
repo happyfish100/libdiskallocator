@@ -26,10 +26,16 @@
 #include "../store_path_index.h"
 #include "trunk_id_info.h"
 
-#define TRUNK_ID_DATA_FILENAME  ".trunk_id.dat"
-#define ITEM_NAME_TRUNK_ID      "trunk_id"
-#define ITEM_NAME_SUBDIR_ID     "subdir_id"
-#define ITEM_NAME_NORMAL_EXIT   "normal_exit"
+#define TRUNK_ID_DATA_FILENAME     ".trunk_id.dat"
+
+#define ITEM_NAME_TRUNK_ID_STR     "trunk_id"
+#define ITEM_NAME_TRUNK_ID_LEN     (sizeof(ITEM_NAME_TRUNK_ID_STR) - 1)
+
+#define ITEM_NAME_SUBDIR_ID_STR    "subdir_id"
+#define ITEM_NAME_SUBDIR_ID_LEN    (sizeof(ITEM_NAME_SUBDIR_ID_STR) - 1)
+
+#define ITEM_NAME_NORMAL_EXIT_STR  "normal_exit"
+#define ITEM_NAME_NORMAL_EXIT_LEN  (sizeof(ITEM_NAME_NORMAL_EXIT_STR) - 1)
 
 typedef struct {
     int subdir;
@@ -73,18 +79,32 @@ static int save_current_trunk_id_ex(DAContext *ctx,
 {
     char full_filename[PATH_MAX];
     char buff[256];
+    char *p;
     int len;
     int result;
 
     get_trunk_id_dat_filename(ctx, full_filename, sizeof(full_filename));
-    len = sprintf(buff, "%s=%"PRId64"\n"
-            "%s=%"PRId64"\n",
-            ITEM_NAME_TRUNK_ID, current_trunk_id,
-            ITEM_NAME_SUBDIR_ID, current_subdir_id);
+    p = buff;
+    memcpy(p, ITEM_NAME_TRUNK_ID_STR, ITEM_NAME_TRUNK_ID_LEN);
+    p += ITEM_NAME_TRUNK_ID_LEN;
+    *p++ = '=';
+    p += fc_itoa(current_trunk_id, p);
+    *p++ = '\n';
+
+    memcpy(p, ITEM_NAME_SUBDIR_ID_STR, ITEM_NAME_SUBDIR_ID_LEN);
+    p += ITEM_NAME_SUBDIR_ID_LEN;
+    *p++ = '=';
+    p += fc_itoa(current_subdir_id, p);
+    *p++ = '\n';
+
     if (on_exit) {
-        len += sprintf(buff + len, "%s=1\n",
-                ITEM_NAME_NORMAL_EXIT);
+        memcpy(p, ITEM_NAME_NORMAL_EXIT_STR, ITEM_NAME_NORMAL_EXIT_LEN);
+        p += ITEM_NAME_NORMAL_EXIT_LEN;
+        *p++ = '=';
+        *p++ = '1';
+        *p++ = '\n';
     }
+    len = p - buff;
     if ((result=safeWriteToFile(full_filename, buff, len)) != 0) {
         logError("file: "__FILE__", line: %d, %s "
                 "write to file \"%s\" fail, errno: %d, error info: %s",
@@ -118,11 +138,11 @@ static int load_current_trunk_id(DAContext *ctx)
     }
 
     ctx->trunk_id_info_ctx->current_trunk_id = iniGetInt64Value(NULL,
-            ITEM_NAME_TRUNK_ID, &ini_context, 0);
+            ITEM_NAME_TRUNK_ID_STR, &ini_context, 0);
     ctx->trunk_id_info_ctx->current_subdir_id  = iniGetInt64Value(NULL,
-            ITEM_NAME_SUBDIR_ID, &ini_context, 0);
+            ITEM_NAME_SUBDIR_ID_STR, &ini_context, 0);
 
-    if (!iniGetBoolValue(NULL, ITEM_NAME_NORMAL_EXIT, &ini_context, false)) {
+    if (!iniGetBoolValue(NULL, ITEM_NAME_NORMAL_EXIT_STR, &ini_context, false)) {
         if ((result=da_trunk_binlog_get_last_id_info(ctx, &id_info)) != 0) {
             return result;
         }

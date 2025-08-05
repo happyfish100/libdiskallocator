@@ -158,18 +158,32 @@ extern "C" {
     static inline void da_trunk_space_log_pack(const DATrunkSpaceLogRecord
             *record, FastBuffer *buffer, const bool have_extra_field)
     {
-        buffer->length += sprintf(buffer->data + buffer->length,
-                "%u %"PRId64" %"PRId64" %"PRId64" %c %"PRId64" %u %u %u %c",
-                (uint32_t)g_current_time, record->storage.version,
-                record->oid, record->fid, record->op_type,
-                record->storage.trunk_id, record->storage.length,
-                record->storage.offset, record->storage.size,
-                record->slice_type);
+        fast_buffer_append_int64(buffer, (uint32_t)g_current_time);
+        fast_buffer_append_char(buffer, ' ');
+        fast_buffer_append_int64(buffer, record->storage.version);
+        fast_buffer_append_char(buffer, ' ');
+        fast_buffer_append_int64(buffer, record->oid);
+        fast_buffer_append_char(buffer, ' ');
+        fast_buffer_append_int64(buffer, record->fid);
+        fast_buffer_append_char(buffer, ' ');
+        fast_buffer_append_char(buffer, record->op_type);
+        fast_buffer_append_char(buffer, ' ');
+        fast_buffer_append_int64(buffer, record->storage.trunk_id);
+        fast_buffer_append_char(buffer, ' ');
+        fast_buffer_append_int64(buffer, record->storage.length);
+        fast_buffer_append_char(buffer, ' ');
+        fast_buffer_append_int64(buffer, record->storage.offset);
+        fast_buffer_append_char(buffer, ' ');
+        fast_buffer_append_int64(buffer, record->storage.size);
+        fast_buffer_append_char(buffer, ' ');
+        fast_buffer_append_char(buffer, record->slice_type);
+
         if (have_extra_field) {
-            buffer->length += sprintf(buffer->data + buffer->length,
-                    " %u\n", record->extra);
+            fast_buffer_append_char(buffer, ' ');
+            fast_buffer_append_int64(buffer, record->extra);
+            fast_buffer_append_char(buffer, '\n');
         } else {
-            *(buffer->data + buffer->length++) = '\n';
+            fast_buffer_append_char(buffer, '\n');
         }
     }
 
