@@ -32,15 +32,25 @@ typedef struct
     time_t create_time;
 } StorePathMarkInfo;
 
-#define STORE_PATH_INDEX_FILENAME        ".store_path_index.dat"
+#define STORE_PATH_INDEX_FILENAME_STR  ".store_path_index.dat"
+#define STORE_PATH_INDEX_FILENAME_LEN  \
+    (sizeof(STORE_PATH_INDEX_FILENAME_STR) - 1)
+
 #define STORE_PATH_INDEX_SECTION_PREFIX_STR  "path-"
 #define STORE_PATH_INDEX_SECTION_PREFIX_LEN  \
     ((int)sizeof(STORE_PATH_INDEX_SECTION_PREFIX_STR) - 1)
 
-#define STORE_PATH_INDEX_ITEM_PATH       "path"
-#define STORE_PATH_INDEX_ITEM_MARK       "mark"
+#define STORE_PATH_INDEX_ITEM_PATH_STR     "path"
+#define STORE_PATH_INDEX_ITEM_MARK_STR     "mark"
+#define STORE_PATH_INDEX_ITEM_MARK_LEN      \
+    (sizeof(STORE_PATH_INDEX_ITEM_MARK_STR) - 1)
 
-#define STORE_PATH_MARK_FILENAME    ".da_vars"
+#define STORE_PATH_MARK_FNAME_STR  ".da_vars"
+#define STORE_PATH_MARK_FNAME_LEN  (sizeof(STORE_PATH_MARK_FNAME_STR) - 1)
+
+#define GET_MARK_FULL_FILENAME(path, filename) \
+    fc_get_full_filename(path, strlen(path), STORE_PATH_MARK_FNAME_STR, \
+            STORE_PATH_MARK_FNAME_LEN, filename);
 
 static int store_path_generate_mark(const char *store_path,
         const int index, char *mark_str)
@@ -48,6 +58,7 @@ static int store_path_generate_mark(const char *store_path,
     StorePathMarkInfo mark_info;
     char filename[PATH_MAX];
     char buff[256];
+    char *p;
     int mark_len;
     int buff_len;
 
@@ -58,10 +69,15 @@ static int store_path_generate_mark(const char *store_path,
     base64_encode_ex(&DA_BASE64_CTX, (char *)&mark_info,
             sizeof(mark_info), mark_str, &mark_len, false);
 
-    snprintf(filename, sizeof(filename), "%s/%s",
-            store_path, STORE_PATH_MARK_FILENAME);
-    buff_len = sprintf(buff, "%s=%s\n",
-            STORE_PATH_INDEX_ITEM_MARK, mark_str);
+    GET_MARK_FULL_FILENAME(store_path, filename);
+    p = buff;
+    memcpy(p, STORE_PATH_INDEX_ITEM_MARK_STR, STORE_PATH_INDEX_ITEM_MARK_LEN);
+    p += STORE_PATH_INDEX_ITEM_MARK_LEN;
+    *p++ = '=';
+    memcpy(p, mark_str, mark_len);
+    p += mark_len;
+    *p++ = '\n';
+    buff_len = p - buff;
     return safeWriteToFile(filename, buff, buff_len);
 }
 
@@ -85,7 +101,7 @@ static int store_path_get_mark(DAContext *ctx, const char *filename,
         return result;
     }
 
-    value = iniGetStrValue(NULL, STORE_PATH_INDEX_ITEM_MARK, &ini_ctx);
+    value = iniGetStrValue(NULL, STORE_PATH_INDEX_ITEM_MARK_STR, &ini_ctx);
     if (value != NULL && *value != '\0') {
         len = strlen(value);
         if (len < size) {
@@ -117,15 +133,14 @@ int store_path_check_mark(DAContext *ctx, DAStorePathEntry *pentry,
     int result;
 
     *regenerated = false;
-    snprintf(filename, sizeof(filename), "%s/%s",
-            pentry->path, STORE_PATH_MARK_FILENAME);
+
+    GET_MARK_FULL_FILENAME(pentry->path, filename);
     if ((result=store_path_get_mark(ctx, filename,
                     mark, sizeof(mark))) != 0)
     {
         if (result == ENOENT) {
             if (ctx->storage.migrate_path_mark_filename) {
-                snprintf(fs_filename, sizeof(fs_filename),
-                        "%s/.fs_vars", pentry->path);
+                fc_combine_full_filename(pentry->path, ".fs_vars", fs_filename);
                 if (access(fs_filename, F_OK) == 0) {
                     if (rename(fs_filename, filename) != 0) {
                         result = errno != 0 ? errno : EPERM;
@@ -217,8 +232,9 @@ int store_path_check_mark(DAContext *ctx, DAStorePathEntry *pentry,
 const char *da_store_path_index_get_filename(DAContext *ctx,
         char *full_filename, const int size)
 {
-    snprintf(full_filename, size, "%s/%s", ctx->data.path.str,
-            STORE_PATH_INDEX_FILENAME);
+    fc_get_full_filename_ex(ctx->data.path.str, ctx->data.path.len,
+            STORE_PATH_INDEX_FILENAME_STR, STORE_PATH_INDEX_FILENAME_LEN,
+            full_filename, size);
     return full_filename;
 }
 
@@ -296,8 +312,8 @@ static int load_one_store_path_index(DAContext *ctx, IniContext *ini_ctx,
         return ENOENT;
     }
 
-    snprintf(pentry->path, sizeof(pentry->path), "%s", path);
-    snprintf(pentry->mark, sizeof(pentry->mark), "%s", mark);
+    fc_safe_strcpy(pentry->path, path);
+    fc_safe_strcpy(pentry->mark, mark);
     return 0;
 }
 
@@ -476,14 +492,14 @@ int da_store_path_index_add(DAContext *ctx,
     }
 
     if (ctx->store_path_array.count > 0) {
-        *index = ctx->store_path_array.entries[ctx->store_path_array.count - 1].index + 1;
+        *index = ctx->store_path_array.entries[ctx->
+            store_path_array.count - 1].index + 1;
     } else {
         *index = 0;
     }
 
     pentry = ctx->store_path_array.entries + ctx->store_path_array.count;
-    snprintf(filename, sizeof(filename), "%s/%s",
-            path, STORE_PATH_MARK_FILENAME);
+    GET_MARK_FULL_FILENAME(path, filename);
     result = store_path_get_mark(ctx, filename, mark, sizeof(mark));
     if (result != ENOENT) {
         if (result == 0) {
@@ -502,7 +518,7 @@ int da_store_path_index_add(DAContext *ctx,
     }
 
     pentry->index = *index;
-    snprintf(pentry->path, sizeof(pentry->path), "%s", path);
+    fc_safe_strcpy(pentry->path, path);
     ctx->store_path_array.count++;
     return 0;
 }
@@ -528,8 +544,8 @@ int da_store_path_index_save(DAContext *ctx)
                 "%s=%s\n"
                 "%s=%s\n\n",
                 STORE_PATH_INDEX_SECTION_PREFIX_STR, pentry->index,
-                STORE_PATH_INDEX_ITEM_PATH, pentry->path,
-                STORE_PATH_INDEX_ITEM_MARK, pentry->mark);
+                STORE_PATH_INDEX_ITEM_PATH_STR, pentry->path,
+                STORE_PATH_INDEX_ITEM_MARK_STR, pentry->mark);
         if (result != 0) {
             return result;
         }

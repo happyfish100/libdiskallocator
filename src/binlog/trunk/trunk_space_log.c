@@ -377,8 +377,10 @@ static inline int unlink_space_log(DAContext *ctx,
         DATrunkSpaceLogRecord *record)
 {
     int result;
+    int ext_len;
     int64_t used_bytes;
     DATrunkFileInfo *trunk;
+    char ext_name[32];
 
     trunk = record->trunk;
     trunk->update_time = g_current_time;
@@ -393,8 +395,10 @@ static inline int unlink_space_log(DAContext *ctx,
         if (used_bytes < 0) {
             dio_get_space_log_filename(ctx, trunk->id_info.id,
                     space_log_filename, sizeof(space_log_filename));
-            snprintf(bak_filename, sizeof(bak_filename), "%s.%ld",
-                    space_log_filename, (long)g_current_time);
+            ext_len = fc_ltostr(g_current_time, ext_name);
+            fc_combine_two_string_ex(space_log_filename,
+                    strlen(space_log_filename), ext_name, ext_len,
+                    '.', bak_filename, sizeof(bak_filename));
             result = fc_check_rename(space_log_filename, bak_filename);
             log_level = LOG_ERR;
         } else {

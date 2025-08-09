@@ -26,7 +26,8 @@
 #include "../store_path_index.h"
 #include "trunk_id_info.h"
 
-#define TRUNK_ID_DATA_FILENAME     ".trunk_id.dat"
+#define TRUNK_ID_DATA_FILENAME_STR ".trunk_id.dat"
+#define TRUNK_ID_DATA_FILENAME_LEN (sizeof(TRUNK_ID_DATA_FILENAME_STR) - 1)
 
 #define ITEM_NAME_TRUNK_ID_STR     "trunk_id"
 #define ITEM_NAME_TRUNK_ID_LEN     (sizeof(ITEM_NAME_TRUNK_ID_STR) - 1)
@@ -66,8 +67,9 @@ static struct fast_mblock_man *subdir_allocator = NULL;
 static inline void get_trunk_id_dat_filename(DAContext *ctx,
         char *full_filename, const int size)
 {
-    snprintf(full_filename, size, "%s/%s", ctx->data.path.str,
-            TRUNK_ID_DATA_FILENAME);
+    fc_get_full_filename_ex(ctx->data.path.str, ctx->data.path.len,
+            TRUNK_ID_DATA_FILENAME_STR, TRUNK_ID_DATA_FILENAME_LEN,
+            full_filename, size);
 }
 
 #define save_current_trunk_id(ctx, current_trunk_id, current_subdir_id) \

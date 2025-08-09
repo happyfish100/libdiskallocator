@@ -18,7 +18,8 @@
 #include "../../global.h"
 #include "trunk_index.h"
 
-#define TRUNK_INDEX_FILENAME   "trunk_index.dat"
+#define TRUNK_INDEX_FILENAME_STR   "trunk_index.dat"
+#define TRUNK_INDEX_FILENAME_LEN   (sizeof(TRUNK_INDEX_FILENAME_STR) - 1)
 #define TRUNK_INDEX_RECORD_MAX_SIZE   64
 
 #define TRUNK_RECORD_FIELD_COUNT   5
@@ -30,9 +31,21 @@
 
 static int pack_record(char *buff, DATrunkIndexRecord *record)
 {
-    return sprintf(buff, "%"PRId64" %"PRId64" %d %"PRId64" %u\n",
-            record->version, record->trunk_id, record->used_count,
-            record->used_bytes, record->free_start);
+    char *p;
+
+    p = buff;
+    p += fc_itoa(record->version, p);
+    *p++ = ' ';
+    p += fc_itoa(record->trunk_id, p);
+    *p++ = ' ';
+    p += fc_itoa(record->used_count, p);
+    *p++ = ' ';
+    p += fc_itoa(record->used_bytes, p);
+    *p++ = ' ';
+    p += fc_itoa(record->free_start, p);
+    *p++ = '\n';
+    *p = '\0';
+    return p - buff;
 }
 
 static int unpack_record(const string_t *line,
@@ -66,8 +79,9 @@ static int unpack_record(const string_t *line,
 const char *da_trunk_index_get_filename(DAContext *ctx,
         char *filename, const int size)
 {
-    snprintf(filename, size, "%s/%s", ctx->data.path.str,
-            TRUNK_INDEX_FILENAME);
+    fc_get_full_filename_ex(ctx->data.path.str, ctx->data.path.len,
+            TRUNK_INDEX_FILENAME_STR, TRUNK_INDEX_FILENAME_LEN,
+            filename, size);
     return filename;
 }
 

@@ -60,9 +60,23 @@ extern "C" {
             const int path_index, const DATrunkIdInfo *id_info,
             const uint32_t file_size, char *buff)
     {
-        return sprintf(buff, "%d %c %d %"PRId64" %u %u\n",
-                (int)g_current_time, op_type, path_index,
-                id_info->id, id_info->subdir, file_size);
+        char *p;
+
+        p = buff;
+        p += fc_itoa(g_current_time, p);
+        *p++ = ' ';
+        *p++ = op_type;
+        *p++ = ' ';
+        p += fc_itoa(path_index, p);
+        *p++ = ' ';
+        p += fc_itoa(id_info->id, p);
+        *p++ = ' ';
+        p += fc_itoa(id_info->subdir, p);
+        *p++ = ' ';
+        p += fc_itoa(file_size, p);
+        *p++ = '\n';
+        *p = '\0';
+        return p - buff;
     }
 
     int da_trunk_binlog_write(DAContext *ctx, const char op_type,

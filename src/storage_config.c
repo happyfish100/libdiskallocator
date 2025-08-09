@@ -29,6 +29,9 @@
 static int load_one_path(DAContext *ctx, DAStorageConfig *storage_cfg,
         IniFullContext *ini_ctx, string_t *path)
 {
+#define DUMMY_TMP_FILENAME_STR  "dummy.tmp"
+#define DUMMY_TMP_FILENAME_LEN  (sizeof(DUMMY_TMP_FILENAME_STR) - 1)
+
     int result;
     char tmp_filename[PATH_MAX];
     char full_path[PATH_MAX];
@@ -46,8 +49,9 @@ static int load_one_path(DAContext *ctx, DAStorageConfig *storage_cfg,
         return ENOENT;
     } else {
         if (*path_str != '/') {
-            snprintf(tmp_filename, sizeof(tmp_filename),
-                    "%s/dummy.tmp", ctx->data.path.str);
+            fc_get_full_filename(ctx->data.path.str, ctx->data.path.len,
+                    DUMMY_TMP_FILENAME_STR, DUMMY_TMP_FILENAME_LEN,
+                    tmp_filename);
             resolve_path(tmp_filename, path_str,
                     full_path, sizeof(full_path));
             path_str = full_path;
@@ -245,9 +249,11 @@ static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
     int section_count;
     int item_count;
     int bytes;
+    int prefix_len;
     int i, k;
     const char *old_section_name;
     char section_name[64];
+    char *num_start;
 
     section_count = iniGetIntValue(NULL, item_name, ini_ctx->context, 0);
     if (section_count <= 0) {
@@ -270,10 +276,14 @@ static int load_paths(DAContext *ctx, DAStorageConfig *storage_cfg,
     }
     memset(parray->paths, 0, bytes);
 
+    prefix_len = strlen(section_name_prefix);
+    memcpy(section_name, section_name_prefix, prefix_len);
+    *(section_name + prefix_len) = '-';
+    num_start = section_name + prefix_len + 1;
     old_section_name = ini_ctx->section_name;
     ini_ctx->section_name = section_name;
     for (i=0; i<section_count; i++) {
-        sprintf(section_name, "%s-%d", section_name_prefix, i + 1);
+        fc_ltostr(i + 1, num_start);
         if (i > 0 && iniGetSectionItems(section_name,
                     ini_ctx->context, &item_count) == NULL)
         {

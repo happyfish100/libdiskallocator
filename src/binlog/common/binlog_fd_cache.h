@@ -86,11 +86,44 @@ extern "C" {
             const uint32_t subdirs, const uint64_t id,
             char *full_filename, const int size)
     {
+#define BINLOG_FILENAME_PREFIX_STR  "binlog."
+#define BINLOG_FILENAME_PREFIX_LEN  (sizeof(BINLOG_FILENAME_PREFIX_STR) - 1)
+
         int path_index;
+        int path_len;
+        int subdir_len;
+        char *p;
 
         path_index = id % subdirs;
-        snprintf(full_filename, size, "%s/%s/%02X/%02X/binlog.%08"PRIX64,
-                data_path, subdir_name, path_index, path_index, id);
+        path_len = strlen(data_path);
+        subdir_len = strlen(subdir_name);
+        if (path_len + subdir_len + 32 > size) {
+            snprintf(full_filename, size, "%s/%s/%02X/%02X/%s%08"PRIX64,
+                    data_path, subdir_name, path_index, path_index,
+                    BINLOG_FILENAME_PREFIX_STR, id);
+        } else {
+            p = full_filename;
+            memcpy(p, data_path, path_len);
+            p += path_len;
+            *p++ = '/';
+            memcpy(p, subdir_name, subdir_len);
+            p += subdir_len;
+            *p++ = '/';
+            *p++ = g_upper_hex_chars[(path_index >> 4) & 0x0F];
+            *p++ = g_upper_hex_chars[path_index & 0x0F];
+            *p++ = '/';
+            *p++ = g_upper_hex_chars[(path_index >> 4) & 0x0F];
+            *p++ = g_upper_hex_chars[path_index & 0x0F];
+            *p++ = '/';
+            memcpy(p, BINLOG_FILENAME_PREFIX_STR, BINLOG_FILENAME_PREFIX_LEN);
+            p += BINLOG_FILENAME_PREFIX_LEN;
+            if (id <= UINT32_MAX) {
+                int2HEX(id, p, 8);
+            } else {
+                long2HEX(id, p, 8);
+            }
+        }
+
         return full_filename;
     }
 
@@ -102,12 +135,43 @@ extern "C" {
         int subdir1;
         int subdir2;
         int file_id;
+        int path_len;
+        int subdir_len;
+        char *p;
 
         subdir1 = ((id >> (2 * subdir_bits)) & subdir_mask);
         subdir2 = ((id >> subdir_bits) & subdir_mask);
         file_id = (id & subdir_mask);
-        snprintf(full_filename, size, "%s/%s/%02X/%02X/%02X",
-                data_path, subdir_name, subdir1, subdir2, file_id);
+        path_len = strlen(data_path);
+        subdir_len = strlen(subdir_name);
+        if (path_len + subdir_len + 32 > size) {
+            snprintf(full_filename, size, "%s/%s/%02X/%02X/%02X",
+                    data_path, subdir_name, subdir1, subdir2, file_id);
+        } else {
+            p = full_filename;
+            memcpy(p, data_path, path_len);
+            p += path_len;
+            *p++ = '/';
+            memcpy(p, subdir_name, subdir_len);
+            p += subdir_len;
+            *p++ = '/';
+            *p++ = g_upper_hex_chars[(subdir1 >> 4) & 0x0F];
+            *p++ = g_upper_hex_chars[subdir1 & 0x0F];
+            *p++ = '/';
+            *p++ = g_upper_hex_chars[(subdir2 >> 4) & 0x0F];
+            *p++ = g_upper_hex_chars[subdir2 & 0x0F];
+            *p++ = '/';
+            if (file_id <= UINT8_MAX) {
+                *p++ = g_upper_hex_chars[(file_id >> 4) & 0x0F];
+                *p++ = g_upper_hex_chars[file_id & 0x0F];
+                *p++ = '\0';
+            } else if (file_id <= UINT16_MAX) {
+                short2HEX(file_id, p, 2);
+            } else {
+                int2HEX(file_id, p, 2);
+            }
+        }
+
         return full_filename;
     }
 
