@@ -38,30 +38,6 @@ const char *da_binlog_fd_cache_hash_filename(
             cache_ctx->subdir_mask, id, full_filename, size);
 }
 
-static inline int combine_subdir_filepath(const char *base_path,
-        const int base_len, const int subdir_index, char *file_path)
-{
-    const int padding_len = 2;
-    char *p;
-
-    memcpy(file_path, base_path, base_len);
-    p = file_path + base_len;
-    *p++ = '/';
-    if (subdir_index <= UINT8_MAX) {
-        *p++ = g_upper_hex_chars[(subdir_index >> 4) & 0x0F];
-        *p++ = g_upper_hex_chars[subdir_index & 0x0F];
-        *p = '\0';
-    } else {
-        if (subdir_index <= UINT16_MAX) {
-            p += short2HEX(subdir_index, p, padding_len);
-        } else {
-            p += int2HEX(subdir_index, p, padding_len);
-        }
-    }
-
-    return p - file_path;
-}
-
 static inline bool subdir_exists(const char *base_path,
         const int base_len, const int subdir_index)
 {
@@ -69,9 +45,9 @@ static inline bool subdir_exists(const char *base_path,
     char filepath2[PATH_MAX];
     int path_len1;
 
-    path_len1 = combine_subdir_filepath(base_path,
+    path_len1 = fc_get_hex_subdir_filepath(base_path,
             base_len, subdir_index, filepath1);
-    combine_subdir_filepath(filepath1, path_len1,
+    fc_get_hex_subdir_filepath(filepath1, path_len1,
             subdir_index, filepath2);
     return isDir(filepath2);
 }
@@ -99,14 +75,14 @@ static int check_make_subdirs(const DABinlogFDCacheContext *cache_ctx)
     }
 
     for (i=0; i<cache_ctx->subdirs; i++) {
-        path_len1 = combine_subdir_filepath(base_path,
+        path_len1 = fc_get_hex_subdir_filepath(base_path,
                 base_len, i, filepath1);
         if ((result=fc_check_mkdir(filepath1, 0755)) != 0) {
             return result;
         }
 
         for (k=0; k<cache_ctx->subdirs; k++) {
-            combine_subdir_filepath(filepath1, path_len1, k, filepath2);
+            fc_get_hex_subdir_filepath(filepath1, path_len1, k, filepath2);
             if ((result=fc_check_mkdir(filepath2, 0755)) != 0) {
                 return result;
             }
