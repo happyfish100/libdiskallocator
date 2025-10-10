@@ -616,7 +616,7 @@ static int do_write_slices(TrunkWriteThreadContext *thread)
             thread->iovec_bytes += padding_bytes;
         }
 
-        if ((write_bytes=write(fd, thread->direct_io.buffer.buff,
+        if ((write_bytes=fc_safe_write(fd, thread->direct_io.buffer.buff,
                         thread->iovec_bytes)) == thread->iovec_bytes)
         {
             result = 0;
