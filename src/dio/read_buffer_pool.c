@@ -66,7 +66,53 @@ typedef struct da_read_buffer_pool_context {
     int max_idle_time;
     int sleep_ms;
     SFMemoryWatermark watermark;
+
+#if IOEVENT_USE_URING
+    struct {
+        struct io_uring **rings;
+        int alloc;
+        int count;
+    } uring_ptr_array;  //for io_uring register buffers
+    volatile int current_uring_index;  //for set buffer's uring_index
+#endif
+
 } ReadBufferPoolContext;
+
+#if IOEVENT_USE_URING
+int da_read_buffer_pool_add_uring(struct da_context *ctx,
+        struct io_uring *ring)
+{
+    if (ctx->rbpool_ctx->uring_ptr_array.alloc <=
+            ctx->rbpool_ctx->uring_ptr_array.count)
+    {
+        if (ctx->rbpool_ctx->uring_ptr_array.alloc == 0) {
+            /*
+            ctx->rbpool_ctx->uring_ptr_array.alloc = 2;
+            while (ctx->rbpool_ctx->uring_ptr_array.alloc <
+                    ctx->storage.read_direct_io_paths)
+            {
+                ctx->rbpool_ctx->uring_ptr_array.alloc *= 2;
+            }
+            */
+            ctx->rbpool_ctx->uring_ptr_array.alloc = 1;
+        } else {
+            ctx->rbpool_ctx->uring_ptr_array.alloc *= 2;
+        }
+
+        ctx->rbpool_ctx->uring_ptr_array.rings = fc_realloc(
+                ctx->rbpool_ctx->uring_ptr_array.rings,
+                sizeof(struct io_uring *) * ctx->
+                rbpool_ctx->uring_ptr_array.alloc);
+        if (ctx->rbpool_ctx->uring_ptr_array.rings == NULL) {
+            return ENOMEM;
+        }
+    }
+
+    ctx->rbpool_ctx->uring_ptr_array.rings[ctx->rbpool_ctx->
+        uring_ptr_array.count++] = ring;
+    return 0;
+}
+#endif
 
 int da_read_buffer_pool_init(DAContext *ctx, const int path_count,
         const SFMemoryWatermark *watermark)
@@ -98,6 +144,15 @@ static int aligned_buffer_alloc_init(DAAlignedReadBuffer *buffer,
 {
     buffer->indexes.path = pool->path_index;
     FC_INIT_LIST_HEAD(&buffer->dlink);
+
+#if IOEVENT_USE_URING
+    buffer->uring_index = __sync_fetch_and_add(&pool->ctx->
+            rbpool_ctx->current_uring_index, 1);
+    if (buffer->uring_index >= DA_IO_URING_MAX_BUFFERS) {
+        buffer->uring_index = -1;
+    }
+#endif
+
     return 0;
 }
 
@@ -310,6 +365,7 @@ DAAlignedReadBuffer *da_read_buffer_pool_alloc(DAContext *ctx,
     int64_t total_alloc;
     int aligned_size;
     int reclaim_bytes;
+    int result;
 
     if (need_align) {
         aligned_size = MEM_ALIGN_CEIL_BY_MASK(size, ctx->storage.cfg.
@@ -352,6 +408,37 @@ DAAlignedReadBuffer *da_read_buffer_pool_alloc(DAContext *ctx,
         if ((buffer=do_aligned_alloc(pool, allocator)) == NULL) {
             return NULL;
         }
+
+#if IOEVENT_USE_URING
+        if (ctx->rbpool_ctx->uring_ptr_array.count > 0 &&
+                buffer->uring_index >= 0)
+        {
+            struct io_uring **ring;
+            struct io_uring **end;
+            struct iovec iovec;
+            __u64 tag;
+
+            iovec.iov_base = buffer->buff;
+            iovec.iov_len = buffer->size;
+            tag = 0;
+            end = ctx->rbpool_ctx->uring_ptr_array.rings +
+                ctx->rbpool_ctx->uring_ptr_array.count;
+            for (ring=ctx->rbpool_ctx->uring_ptr_array.rings;
+                    ring<end; ring++)
+            {
+                if ((result=io_uring_register_buffers_update_tag(*ring,
+                                buffer->uring_index, &iovec, &tag, 1)) < 0)
+                {
+                    result *= -1;
+                    logError("file: "__FILE__", line: %d, %s "
+                            "io_uring_register_buffers_update_tag fail, "
+                            "errno: %d, error info: %s", __LINE__,
+                            ctx->module_name, result, strerror(result));
+                    return NULL;
+                }
+            }
+        }
+#endif
     }
 
     FC_ATOMIC_INC_EX(pool->memory.used, buffer->size);

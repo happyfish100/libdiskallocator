@@ -52,6 +52,10 @@
 #define DA_SPACE_SKPLIST_INIT_LEVEL_COUNT  4
 #define DA_SPACE_SKPLIST_MAX_LEVEL_COUNT  12
 
+#if IOEVENT_USE_URING
+#define DA_IO_URING_MAX_BUFFERS   (16 * 1024)
+#endif
+
 struct da_slice_op_context;
 struct da_trunk_allocator;
 struct da_piece_field_info;

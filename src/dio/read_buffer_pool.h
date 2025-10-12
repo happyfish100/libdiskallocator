@@ -28,6 +28,9 @@ typedef struct da_aligned_read_buffer {
     int length;  //data length
     int read_bytes;
     int size;
+#if IOEVENT_USE_URING
+    int uring_index;
+#endif
     struct {
         short path;
         short allocator;
@@ -54,6 +57,11 @@ extern "C" {
 
     void da_read_buffer_pool_free(struct da_context *ctx,
             DAAlignedReadBuffer *buffer);
+
+#if IOEVENT_USE_URING
+    int da_read_buffer_pool_add_uring(struct da_context *ctx,
+            struct io_uring *ring);
+#endif
 
 #ifdef __cplusplus
 }

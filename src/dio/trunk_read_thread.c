@@ -200,13 +200,34 @@ static int init_thread_context(DAContext *ctx,
     {
         result *= -1;
         logError("file: "__FILE__", line: %d, %s "
-                "io_uring_queue_init fail, errno: %d, error info: %s",
-                __LINE__, ctx->module_name, result, STRERROR(result));
+                "io_uring_queue_init fail, errno: %d, error info: %s. "
+                "make sure kernel.io_uring_disabled set to 0", __LINE__,
+                ctx->module_name, result, STRERROR(result));
         return result;
     }
     thread->io_uring.timeout.tv_sec = 0;
     thread->io_uring.timeout.tv_nsec = 10 * 1000 * 1000;  //10 ms
     thread->io_uring.doing_count = 0;
+
+    if (path_info->read_direct_io) {
+        if ((result=io_uring_register_buffers_sparse(&thread->
+                        io_uring.ring, DA_IO_URING_MAX_BUFFERS)) < 0)
+        {
+            result *= -1;
+            logError("file: "__FILE__", line: %d, %s "
+                    "io_uring_register_buffers_sparse %d buffers "
+                    "fail, errno: %d, error info: %s", __LINE__,
+                    ctx->module_name, DA_IO_URING_MAX_BUFFERS,
+                    result, STRERROR(result));
+            return result;
+        }
+
+        if ((result=da_read_buffer_pool_add_uring(ctx,
+                        &thread->io_uring.ring)) != 0)
+        {
+            return result;
+        }
+    }
 #else
     if (path_info->read_direct_io) {
         thread->iocbs.alloc = path_info->read_io_depth;
@@ -516,7 +537,14 @@ static inline int uring_prepare_read_slice(TrunkReadThreadContext *thread,
         return ENOSPC;
     }
 
-    io_uring_prep_read(sqe, fd, buff, read_bytes, new_offset);
+    if (iob->rb->type == da_buffer_type_aio &&
+            iob->rb->aio_buffer->uring_index >= 0)
+    {
+        io_uring_prep_read_fixed(sqe, fd, buff, read_bytes,
+                new_offset, iob->rb->aio_buffer->uring_index);
+    } else {
+        io_uring_prep_read(sqe, fd, buff, read_bytes, new_offset);
+    }
     sqe->user_data = (long)iob;
     return 0;
 }
@@ -612,6 +640,10 @@ static int process_uring_events(TrunkReadThreadContext *thread)
     io_uring_for_each_cqe(&thread->io_uring.ring, head, cqe) {
         count++;
         iob = (DATrunkReadIOBuffer *)cqe->user_data;
+        if (iob == NULL) {
+            continue;
+        }
+
         if (cqe->res == iob->read_bytes) {
             result = 0;
         } else {
