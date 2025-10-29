@@ -459,6 +459,7 @@ static int read_block_slices(DATrunkReclaimContext *rctx,
         buffer.alloc_size -= storage.length;
     }
 
+    rctx->read_ctx.op_ctx.storage = NULL; //reset for safety
     return 0;
 }
 
