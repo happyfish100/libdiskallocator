@@ -365,7 +365,6 @@ DAAlignedReadBuffer *da_read_buffer_pool_alloc(DAContext *ctx,
     int64_t total_alloc;
     int aligned_size;
     int reclaim_bytes;
-    int result;
 
     if (need_align) {
         aligned_size = MEM_ALIGN_CEIL_BY_MASK(size, ctx->storage.cfg.
@@ -413,6 +412,7 @@ DAAlignedReadBuffer *da_read_buffer_pool_alloc(DAContext *ctx,
         if (ctx->rbpool_ctx->uring_ptr_array.count > 0 &&
                 buffer->uring_index >= 0)
         {
+            int result;
             struct io_uring **ring;
             struct io_uring **end;
             struct iovec iovec;
